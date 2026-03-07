@@ -16,8 +16,6 @@ dist-ssr
 .env
 .env.local
 .env.production
-.cursor
-./cursor
 
 # Editor directories and files
 .vscode/*

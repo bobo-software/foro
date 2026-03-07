@@ -1,17 +1,18 @@
 // src/config/skaftin.config.ts
+import { env } from './env';
 
 export const SKAFTIN_CONFIG = {
   // API URL - your Skaftin backend instance
-  apiUrl: import.meta.env.VITE_SKAFTIN_API_URL || 'http://localhost:4006',
+  apiUrl: env.VITE_SKAFTIN_API_URL,
   
   // API Key - identifies your project (get from Skaftin dashboard)
-  apiKey: import.meta.env.VITE_SKAFTIN_API_KEY || import.meta.env.VITE_SKAFTIN_API || '',
+  apiKey: env.VITE_SKAFTIN_API_KEY || env.VITE_SKAFTIN_API || '',
   
   // Access token (alternative to API key)
-  accessToken: import.meta.env.VITE_SKAFTIN_ACCESS_TOKEN || '',
+  accessToken: env.VITE_SKAFTIN_ACCESS_TOKEN || '',
   
   // Project ID
-  projectId: import.meta.env.VITE_SKAFTIN_PROJECT_ID || null,
+  projectId: env.VITE_SKAFTIN_PROJECT_ID || null,
   
   // Token storage key
   tokenStorageKey: 'skaftin_access_token',

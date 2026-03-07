@@ -25,7 +25,7 @@ export function AppLayout() {
       <AppSidebar />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <AppNavbar />
-        <main className="flex-1 min-h-0 p-6 overflow-auto bg-slate-50 dark:bg-slate-900">
+        <main id="main-content" className="flex-1 min-h-0 p-6 overflow-auto bg-slate-50 dark:bg-slate-900">
           <Outlet />
         </main>
       </div>
