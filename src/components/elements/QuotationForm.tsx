@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { CreateQuotationDto, QuotationStatus, QuotationLine } from '../../types/quotation';
 import type { Company } from '../../types/company';
 import type { Item } from '../../types/item';
+import type { Project } from '../../types/project';
 import QuotationService from '../../services/quotationService';
 import QuotationLineService from '../../services/quotationLineService';
 import CompanyService from '../../services/companyService';
 import ItemService from '../../services/itemService';
+import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
@@ -13,6 +15,7 @@ import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
 interface QuotationFormProps {
   quotationId?: number;
   initialCompanyId?: number;
+  initialProjectId?: number;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -32,17 +35,21 @@ function lineTotal(row: LineRow): number {
   return beforeDiscount * (1 - row.discountPercent / 100);
 }
 
-export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCancel }: QuotationFormProps) {
+export function QuotationForm({ quotationId, initialCompanyId, initialProjectId, onSuccess, onCancel }: QuotationFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stockItems, setStockItems] = useState<Item[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
 
   const [formData, setFormData] = useState<CreateQuotationDto>({
+    company_id: undefined,
+    project_id: undefined,
     quotation_number: '',
     customer_name: '',
     customer_email: '',
@@ -72,6 +79,20 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
     );
   }, []);
 
+  const loadProjectsForCompany = useCallback(async (companyId: number) => {
+    const businessId = useBusinessStore.getState().currentBusiness?.id;
+    const where: Record<string, unknown> = { company_id: companyId };
+    if (businessId != null) where.business_id = businessId;
+    const projectList = await ProjectService.findAll({
+      where,
+      orderBy: 'name',
+      orderDirection: 'ASC',
+      limit: 500,
+    });
+    setProjects(projectList);
+    return projectList;
+  }, []);
+
   // Pre-select company if initialCompanyId is provided
   useEffect(() => {
     if (initialCompanyId && companies.length > 0 && !initialCompanyApplied && !quotationId) {
@@ -80,15 +101,29 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
         setSelectedCompany(company);
         setFormData((prev) => ({
           ...prev,
+          company_id: company.id,
+          project_id: undefined,
           customer_name: company.name,
           customer_email: company.email ?? '',
           customer_address: company.address ?? '',
           customer_vat_number: company.vat_number ?? '',
         }));
+        setSelectedProject(null);
+        loadProjectsForCompany(company.id!);
         setInitialCompanyApplied(true);
       }
     }
-  }, [initialCompanyId, companies, initialCompanyApplied, quotationId]);
+  }, [initialCompanyId, companies, initialCompanyApplied, quotationId, loadProjectsForCompany]);
+
+  useEffect(() => {
+    if (!quotationId && initialProjectId && projects.length > 0 && formData.project_id == null) {
+      const project = projects.find((p) => p.id === initialProjectId);
+      if (project) {
+        setSelectedProject(project);
+        setFormData((prev) => ({ ...prev, project_id: project.id }));
+      }
+    }
+  }, [quotationId, initialProjectId, projects, formData.project_id]);
 
   useEffect(() => {
     if (!quotationId) {
@@ -107,6 +142,18 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
     if (quotationId) loadQuotation();
   }, [quotationId]);
 
+  useEffect(() => {
+    if (!quotationId || !formData.company_id || companies.length === 0 || selectedCompany) return;
+    const matchedCompany = companies.find((c) => c.id === formData.company_id) ?? null;
+    if (!matchedCompany) return;
+    setSelectedCompany(matchedCompany);
+    loadProjectsForCompany(matchedCompany.id!).then((projectList) => {
+      if (formData.project_id == null) return;
+      const matchedProject = projectList.find((p) => p.id === formData.project_id) ?? null;
+      setSelectedProject(matchedProject);
+    }).catch(() => {});
+  }, [quotationId, formData.company_id, formData.project_id, companies, selectedCompany, loadProjectsForCompany]);
+
   const loadQuotation = async () => {
     if (!quotationId) return;
     try {
@@ -117,6 +164,8 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
       ]);
       if (quotation) {
         setFormData({
+          company_id: quotation.company_id,
+          project_id: quotation.project_id,
           quotation_number: quotation.quotation_number,
           customer_name: quotation.customer_name,
           customer_email: quotation.customer_email || '',
@@ -136,7 +185,24 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
           currency: quotation.currency || 'ZAR',
           notes: quotation.notes || '',
         });
-        setSelectedCompany(null);
+        const matchedCompany = quotation.company_id != null
+          ? companies.find((c) => c.id === quotation.company_id) ?? null
+          : null;
+        setSelectedCompany(matchedCompany);
+        if (matchedCompany?.id) {
+          const projectList = await loadProjectsForCompany(matchedCompany.id);
+          if (quotation.project_id != null) {
+            const matchedProject = projectList.find((p) => p.id === quotation.project_id) ?? null;
+            setSelectedProject(matchedProject);
+          } else {
+            setSelectedProject(null);
+          }
+        } else if (quotation.project_id != null) {
+          const project = await ProjectService.findById(quotation.project_id);
+          setSelectedProject(project);
+        } else {
+          setSelectedProject(null);
+        }
         const rows: LineRow[] = (items || []).map((item) => {
           const qty = item.quantity || 1;
           const up = Number(item.unit_price) || 0;
@@ -196,22 +262,45 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
     setSelectedCompany(company);
     setFormData((prev) => ({
       ...prev,
+      company_id: company.id,
+      project_id: undefined,
       customer_name: company.name,
       customer_email: company.email || '',
       customer_address: company.address || '',
       customer_vat_number: company.vat_number || '',
     }));
-  }, []);
+    setSelectedProject(null);
+    if (company.id != null) {
+      loadProjectsForCompany(company.id).catch(() => setProjects([]));
+    }
+  }, [loadProjectsForCompany]);
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
+    setSelectedProject(null);
+    setProjects([]);
     setFormData((prev) => ({
       ...prev,
+      company_id: undefined,
+      project_id: undefined,
       customer_name: '',
       customer_email: '',
       customer_address: '',
       customer_vat_number: '',
     }));
+  }, []);
+
+  const handleProjectSelect = useCallback((project: Project) => {
+    setSelectedProject(project);
+    setFormData((prev) => ({
+      ...prev,
+      project_id: project.id,
+    }));
+  }, []);
+
+  const handleProjectClear = useCallback(() => {
+    setSelectedProject(null);
+    setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
 
   const addLine = useCallback(() => {
@@ -254,6 +343,10 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
     setError(null);
     if (!formData.quotation_number || !formData.customer_name) {
       setError('Quotation number and company are required');
+      return;
+    }
+    if (!quotationId && !formData.project_id) {
+      setError('Project is required for new quotations');
       return;
     }
     const items: (Omit<QuotationLine, 'id' | 'quotation_id'> & { item_id?: number })[] = lineRows
@@ -466,6 +559,21 @@ export function QuotationForm({ quotationId, initialCompanyId, onSuccess, onCanc
                   {formData.customer_address && <div>{formData.customer_address}</div>}
                 </div>
               )}
+              <div className={`${groupClass} mt-2`}>
+                <AppLabledAutocomplete
+                  label="Project *"
+                  options={projects}
+                  value={selectedProject?.id != null ? String(selectedProject.id) : ''}
+                  displayValue={selectedProject?.name ?? ''}
+                  accessor="name"
+                  valueAccessor="id"
+                  onSelect={handleProjectSelect}
+                  onClear={handleProjectClear}
+                  required={!quotationId}
+                  disabled={!selectedCompany}
+                  placeholder={selectedCompany ? 'Search project...' : 'Select company first'}
+                />
+              </div>
               <div className={`${groupClass} mt-2`}>
                 <label htmlFor="customer_vat_number" className={labelClass}>
                   Company VAT #

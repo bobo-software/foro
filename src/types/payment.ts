@@ -22,6 +22,8 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
 export interface Payment {
   id?: number;
   business_id?: number | null;
+  company_id?: number | null;
+  project_id?: number | null;
   customer_name: string;
   amount: number;
   currency: string;
@@ -35,6 +37,8 @@ export interface Payment {
 
 export interface CreatePaymentDto {
   business_id?: number | null;
+  company_id?: number | null;
+  project_id?: number | null;
   customer_name: string;
   amount: number;
   currency: string;

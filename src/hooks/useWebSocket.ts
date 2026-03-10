@@ -23,11 +23,16 @@ export function useWebSocket() {
   }, []);
 
   const reconnect = useCallback(() => webSocketService.reconnect(), []);
+  const reconnectWithDebug = useCallback(
+    () => webSocketService.reconnectWithDebug('status-button-click'),
+    []
+  );
   const disconnect = useCallback(() => webSocketService.disconnect(), []);
 
   return {
     ...status,
     reconnect,
+    reconnectWithDebug,
     disconnect,
   };
 }

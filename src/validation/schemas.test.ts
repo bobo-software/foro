@@ -5,6 +5,7 @@ import {
   companySchema,
   itemSchema,
   paymentSchema,
+  projectSchema,
   lineItemSchema,
   loginSchema,
   registerSchema,
@@ -157,6 +158,28 @@ describe('paymentSchema', () => {
     for (const method of ['cash', 'eft', 'card', 'cheque', 'bank_transfer', 'other']) {
       expect(paymentSchema.safeParse({ ...valid, payment_method: method }).success).toBe(true);
     }
+  });
+});
+
+describe('projectSchema', () => {
+  const valid = {
+    company_id: 10,
+    name: 'Phase 1',
+    status: 'active',
+  };
+
+  it('accepts a valid project', () => {
+    expect(projectSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects missing company_id', () => {
+    const result = projectSchema.safeParse({ ...valid, company_id: undefined });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty project name', () => {
+    const result = projectSchema.safeParse({ ...valid, name: '' });
+    expect(result.success).toBe(false);
   });
 });
 

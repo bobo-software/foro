@@ -2,24 +2,32 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CreatePaymentDto } from '../../types/payment';
 import { PAYMENT_METHODS } from '../../types/payment';
 import type { Company } from '../../types/company';
+import type { Project } from '../../types/project';
 import PaymentService from '../../services/paymentService';
 import CompanyService from '../../services/companyService';
+import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { SUPPORTED_CURRENCIES } from '../../utils/currency';
 
 interface PaymentFormProps {
+  initialCompanyId?: number;
+  initialProjectId?: number;
   initialCompanyName?: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function PaymentForm({ initialCompanyName, onSuccess, onCancel }: PaymentFormProps) {
+export function PaymentForm({ initialCompanyId, initialProjectId, initialCompanyName, onSuccess, onCancel }: PaymentFormProps) {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreatePaymentDto>({
+    company_id: initialCompanyId,
+    project_id: initialProjectId,
     customer_name: initialCompanyName ?? '',
     amount: 0,
     currency: 'ZAR',
@@ -32,19 +40,58 @@ export function PaymentForm({ initialCompanyName, onSuccess, onCancel }: Payment
     CompanyService.findAll().then(setCompanies);
   }, []);
 
+  const loadProjectsForCompany = useCallback(async (companyId: number) => {
+    const businessId = useBusinessStore.getState().currentBusiness?.id;
+    const where: Record<string, unknown> = { company_id: companyId };
+    if (businessId != null) where.business_id = businessId;
+    const data = await ProjectService.findAll({
+      where,
+      orderBy: 'name',
+      orderDirection: 'ASC',
+      limit: 500,
+    });
+    setProjects(data);
+    return data;
+  }, []);
+
   useEffect(() => {
-    if (initialCompanyName && companies.length > 0 && !selectedCompany) {
+    if (companies.length === 0 || selectedCompany) return;
+    if (initialCompanyId) {
+      const match = companies.find((c) => c.id === initialCompanyId);
+      if (match) {
+        setSelectedCompany(match);
+        setFormData((prev) => ({
+          ...prev,
+          company_id: match.id,
+          customer_name: match.name,
+        }));
+        loadProjectsForCompany(match.id!).then((projectList) => {
+          if (!initialProjectId) return;
+          const project = projectList.find((p) => p.id === initialProjectId) ?? null;
+          setSelectedProject(project);
+          setFormData((prev) => ({ ...prev, project_id: project?.id }));
+        }).catch(() => {});
+        return;
+      }
+    }
+    if (initialCompanyName) {
       const match = companies.find(
         (c) => c.name.toLowerCase() === initialCompanyName.toLowerCase()
       );
       if (match) {
         setSelectedCompany(match);
-        setFormData((prev) => ({ ...prev, customer_name: match.name }));
+        setFormData((prev) => ({ ...prev, customer_name: match.name, company_id: match.id }));
+        loadProjectsForCompany(match.id!).then((projectList) => {
+          if (!initialProjectId) return;
+          const project = projectList.find((p) => p.id === initialProjectId) ?? null;
+          setSelectedProject(project);
+          setFormData((prev) => ({ ...prev, project_id: project?.id }));
+        }).catch(() => {});
       } else {
         setFormData((prev) => ({ ...prev, customer_name: initialCompanyName }));
       }
     }
-  }, [initialCompanyName, companies, selectedCompany]);
+  }, [initialCompanyId, initialCompanyName, initialProjectId, companies, selectedCompany, loadProjectsForCompany]);
 
   const handleChange = useCallback((field: keyof CreatePaymentDto, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -52,12 +99,33 @@ export function PaymentForm({ initialCompanyName, onSuccess, onCancel }: Payment
 
   const handleCompanySelect = useCallback((company: Company) => {
     setSelectedCompany(company);
-    setFormData((prev) => ({ ...prev, customer_name: company.name }));
-  }, []);
+    setSelectedProject(null);
+    setFormData((prev) => ({
+      ...prev,
+      company_id: company.id,
+      project_id: undefined,
+      customer_name: company.name,
+    }));
+    if (company.id != null) {
+      loadProjectsForCompany(company.id).catch(() => setProjects([]));
+    }
+  }, [loadProjectsForCompany]);
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
-    setFormData((prev) => ({ ...prev, customer_name: '' }));
+    setSelectedProject(null);
+    setProjects([]);
+    setFormData((prev) => ({ ...prev, company_id: undefined, project_id: undefined, customer_name: '' }));
+  }, []);
+
+  const handleProjectSelect = useCallback((project: Project) => {
+    setSelectedProject(project);
+    setFormData((prev) => ({ ...prev, project_id: project.id }));
+  }, []);
+
+  const handleProjectClear = useCallback(() => {
+    setSelectedProject(null);
+    setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,6 +136,10 @@ export function PaymentForm({ initialCompanyName, onSuccess, onCancel }: Payment
     }
     if (Number(formData.amount) <= 0) {
       setError('Amount must be greater than 0');
+      return;
+    }
+    if (!formData.project_id) {
+      setError('Project is required for new payments');
       return;
     }
     try {
@@ -116,6 +188,21 @@ export function PaymentForm({ initialCompanyName, onSuccess, onCancel }: Payment
             onClear={handleCompanyClear}
             required
             placeholder="Search company..."
+          />
+        </div>
+        <div className="pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
+          <AppLabledAutocomplete
+            label="Project *"
+            options={projects}
+            value={selectedProject?.id != null ? String(selectedProject.id) : ''}
+            displayValue={selectedProject?.name ?? ''}
+            accessor="name"
+            valueAccessor="id"
+            onSelect={handleProjectSelect}
+            onClear={handleProjectClear}
+            required
+            disabled={!selectedCompany}
+            placeholder={selectedCompany ? 'Search project...' : 'Select company first'}
           />
         </div>
         <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">

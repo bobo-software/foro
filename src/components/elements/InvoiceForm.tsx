@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { CreateInvoiceDto, InvoiceStatus, InvoiceItem } from '../../types/invoice';
 import type { Company } from '../../types/company';
 import type { Item } from '../../types/item';
+import type { Project } from '../../types/project';
 import InvoiceService from '../../services/invoiceService';
 import InvoiceItemService from '../../services/invoiceItemService';
 import CompanyService from '../../services/companyService';
 import ItemService from '../../services/itemService';
+import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
@@ -13,6 +15,7 @@ import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
 interface InvoiceFormProps {
   invoiceId?: number;
   initialCompanyId?: number;
+  initialProjectId?: number;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -32,17 +35,21 @@ function lineTotal(row: LineRow): number {
   return beforeDiscount * (1 - row.discountPercent / 100);
 }
 
-export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }: InvoiceFormProps) {
+export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onSuccess, onCancel }: InvoiceFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stockItems, setStockItems] = useState<Item[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
 
   const [formData, setFormData] = useState<CreateInvoiceDto>({
+    company_id: undefined,
+    project_id: undefined,
     invoice_number: '',
     customer_name: '',
     customer_email: '',
@@ -73,6 +80,20 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
     );
   }, []);
 
+  const loadProjectsForCompany = useCallback(async (companyId: number) => {
+    const businessId = useBusinessStore.getState().currentBusiness?.id;
+    const where: Record<string, unknown> = { company_id: companyId };
+    if (businessId != null) where.business_id = businessId;
+    const projectList = await ProjectService.findAll({
+      where,
+      orderBy: 'name',
+      orderDirection: 'ASC',
+      limit: 500,
+    });
+    setProjects(projectList);
+    return projectList;
+  }, []);
+
   // Pre-select company if initialCompanyId is provided
   useEffect(() => {
     if (initialCompanyId && companies.length > 0 && !initialCompanyApplied && !invoiceId) {
@@ -81,15 +102,29 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
         setSelectedCompany(company);
         setFormData((prev) => ({
           ...prev,
+          company_id: company.id,
+          project_id: undefined,
           customer_name: company.name,
           customer_email: company.email ?? '',
           customer_address: company.address ?? '',
           customer_vat_number: company.vat_number ?? '',
         }));
+        setSelectedProject(null);
+        loadProjectsForCompany(company.id!);
         setInitialCompanyApplied(true);
       }
     }
-  }, [initialCompanyId, companies, initialCompanyApplied, invoiceId]);
+  }, [initialCompanyId, companies, initialCompanyApplied, invoiceId, loadProjectsForCompany]);
+
+  useEffect(() => {
+    if (!invoiceId && initialProjectId && projects.length > 0 && formData.project_id == null) {
+      const project = projects.find((p) => p.id === initialProjectId);
+      if (project) {
+        setSelectedProject(project);
+        setFormData((prev) => ({ ...prev, project_id: project.id }));
+      }
+    }
+  }, [invoiceId, initialProjectId, projects, formData.project_id]);
 
   // Auto-generate invoice number for new invoices (0001, 0002, ...)
   useEffect(() => {
@@ -109,6 +144,18 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
     if (invoiceId) loadInvoice();
   }, [invoiceId]);
 
+  useEffect(() => {
+    if (!invoiceId || !formData.company_id || companies.length === 0 || selectedCompany) return;
+    const matchedCompany = companies.find((c) => c.id === formData.company_id) ?? null;
+    if (!matchedCompany) return;
+    setSelectedCompany(matchedCompany);
+    loadProjectsForCompany(matchedCompany.id!).then((projectList) => {
+      if (formData.project_id == null) return;
+      const matchedProject = projectList.find((p) => p.id === formData.project_id) ?? null;
+      setSelectedProject(matchedProject);
+    }).catch(() => {});
+  }, [invoiceId, formData.company_id, formData.project_id, companies, selectedCompany, loadProjectsForCompany]);
+
   const loadInvoice = async () => {
     if (!invoiceId) return;
     try {
@@ -119,6 +166,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
       ]);
       if (invoice) {
         setFormData({
+          company_id: invoice.company_id,
+          project_id: invoice.project_id,
           invoice_number: invoice.invoice_number,
           customer_name: invoice.customer_name,
           customer_email: invoice.customer_email || '',
@@ -138,7 +187,24 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
           currency: invoice.currency || 'ZAR',
           notes: invoice.notes || '',
         });
-        setSelectedCompany(null);
+        const matchedCompany = invoice.company_id != null
+          ? companies.find((c) => c.id === invoice.company_id) ?? null
+          : null;
+        setSelectedCompany(matchedCompany);
+        if (matchedCompany?.id) {
+          const projectList = await loadProjectsForCompany(matchedCompany.id);
+          if (invoice.project_id != null) {
+            const matchedProject = projectList.find((p) => p.id === invoice.project_id) ?? null;
+            setSelectedProject(matchedProject);
+          } else {
+            setSelectedProject(null);
+          }
+        } else if (invoice.project_id != null) {
+          const project = await ProjectService.findById(invoice.project_id);
+          setSelectedProject(project);
+        } else {
+          setSelectedProject(null);
+        }
         const rows: LineRow[] = (items || []).map((item) => {
           const qty = item.quantity || 1;
           const up = Number(item.unit_price) || 0;
@@ -200,22 +266,45 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
     setSelectedCompany(company);
     setFormData((prev) => ({
       ...prev,
+      company_id: company.id,
+      project_id: undefined,
       customer_name: company.name,
       customer_email: company.email || '',
       customer_address: company.address || '',
       customer_vat_number: company.vat_number || '',
     }));
-  }, []);
+    setSelectedProject(null);
+    if (company.id != null) {
+      loadProjectsForCompany(company.id).catch(() => setProjects([]));
+    }
+  }, [loadProjectsForCompany]);
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
+    setSelectedProject(null);
+    setProjects([]);
     setFormData((prev) => ({
       ...prev,
+      company_id: undefined,
+      project_id: undefined,
       customer_name: '',
       customer_email: '',
       customer_address: '',
       customer_vat_number: '',
     }));
+  }, []);
+
+  const handleProjectSelect = useCallback((project: Project) => {
+    setSelectedProject(project);
+    setFormData((prev) => ({
+      ...prev,
+      project_id: project.id,
+    }));
+  }, []);
+
+  const handleProjectClear = useCallback(() => {
+    setSelectedProject(null);
+    setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
 
   const addLine = useCallback(() => {
@@ -258,6 +347,10 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
     setError(null);
     if (!formData.invoice_number || !formData.customer_name) {
       setError('Invoice number and company are required');
+      return;
+    }
+    if (!invoiceId && !formData.project_id) {
+      setError('Project is required for new invoices');
       return;
     }
     const items = lineRows
@@ -470,6 +563,21 @@ export function InvoiceForm({ invoiceId, initialCompanyId, onSuccess, onCancel }
                   {formData.customer_address && <div>{formData.customer_address}</div>}
                 </div>
               )}
+              <div className={`${groupClass} mt-2`}>
+                <AppLabledAutocomplete
+                  label="Project *"
+                  options={projects}
+                  value={selectedProject?.id != null ? String(selectedProject.id) : ''}
+                  displayValue={selectedProject?.name ?? ''}
+                  accessor="name"
+                  valueAccessor="id"
+                  onSelect={handleProjectSelect}
+                  onClear={handleProjectClear}
+                  required={!invoiceId}
+                  disabled={!selectedCompany}
+                  placeholder={selectedCompany ? 'Search project...' : 'Select company first'}
+                />
+              </div>
               <div className={`${groupClass} mt-2`}>
                 <label htmlFor="customer_vat_number" className={labelClass}>
                   Company VAT #

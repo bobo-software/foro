@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import InvoiceService from '@/services/invoiceService';
 import PaymentService from '@/services/paymentService';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '@/utils/currency';
@@ -20,7 +20,7 @@ function lastDayOfCurrentMonth(): string {
   return d.toISOString().split('T')[0];
 }
 
-export function CompanyStatementsTab({ company }: CompanyTabProps) {
+export function CompanyStatementsTab({ company, projects = [], selectedProjectId = 'all' }: CompanyTabProps) {
   const business = useBusinessStore((s) => s.currentBusiness);
   const [stmtFromDate, setStmtFromDate] = useState<string>(() => firstDayOfCurrentMonth());
   const [stmtToDate, setStmtToDate] = useState<string>(() => lastDayOfCurrentMonth());
@@ -28,6 +28,30 @@ export function CompanyStatementsTab({ company }: CompanyTabProps) {
   const [stmtRows, setStmtRows] = useState<StatementRow[]>([]);
   const [stmtLoading, setStmtLoading] = useState(false);
   const [stmtGenerated, setStmtGenerated] = useState(false);
+  const [stmtScope, setStmtScope] = useState<'company' | 'project'>('company');
+  const [stmtProjectId, setStmtProjectId] = useState<number | null>(null);
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === stmtProjectId) ?? null,
+    [projects, stmtProjectId]
+  );
+
+  const scopeLabel = stmtScope === 'project'
+    ? selectedProject?.name ?? 'Project'
+    : 'All projects';
+
+  const ensureProjectScopeSelection = useCallback(() => {
+    if (stmtScope !== 'project') return true;
+    if (stmtProjectId != null) return true;
+    return false;
+  }, [stmtScope, stmtProjectId]);
+
+  useEffect(() => {
+    if (selectedProjectId !== 'all') {
+      setStmtScope('project');
+      setStmtProjectId(selectedProjectId);
+    }
+  }, [selectedProjectId]);
 
   const generateStatement = useCallback(async () => {
     if (!company?.name) return;
@@ -36,12 +60,18 @@ export function CompanyStatementsTab({ company }: CompanyTabProps) {
     try {
       const [invList, payList] = await Promise.all([
         InvoiceService.findAll({
-          where: { customer_name: company.name },
+          where: {
+            customer_name: company.name,
+            ...(stmtScope === 'project' && stmtProjectId != null ? { project_id: stmtProjectId } : {}),
+          },
           orderBy: 'issue_date',
           orderDirection: 'ASC',
           limit: 1000,
         }),
-        PaymentService.findByCompany(company.name),
+        PaymentService.findByCompany(
+          company.name,
+          stmtScope === 'project' && stmtProjectId != null ? { projectId: stmtProjectId } : undefined
+        ),
       ]);
 
       const from = stmtFromDate || '1970-01-01';
@@ -104,14 +134,14 @@ export function CompanyStatementsTab({ company }: CompanyTabProps) {
     } finally {
       setStmtLoading(false);
     }
-  }, [company?.name, stmtFromDate, stmtToDate]);
+  }, [company?.name, stmtFromDate, stmtToDate, stmtScope, stmtProjectId]);
 
   const handleDownloadStatementPdf = useCallback(async () => {
     if (!company?.name || stmtRows.length === 0) return;
     const from = (stmtFromDate || stmtRows[0]?.date) ?? '';
     const to = (stmtToDate || stmtRows[stmtRows.length - 1]?.date) ?? '';
-    await generateStatementPdf(company.name, from, to, stmtRows, stmtCurrency, business);
-  }, [company?.name, stmtFromDate, stmtToDate, stmtRows, stmtCurrency, business]);
+    await generateStatementPdf(company.name, from, to, stmtRows, stmtCurrency, business, scopeLabel);
+  }, [company?.name, stmtFromDate, stmtToDate, stmtRows, stmtCurrency, business, scopeLabel]);
 
   const stmtFilteredRows = useMemo(
     () => stmtRows.filter((r) => r.currency === stmtCurrency),
@@ -124,6 +154,39 @@ export function CompanyStatementsTab({ company }: CompanyTabProps) {
         Generate a statement for {company.name} with date range and running balance. Dates default to the current month.
       </p>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+        <div className="flex flex-col">
+          <label htmlFor="stmt-scope" className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+            Scope
+          </label>
+          <select
+            id="stmt-scope"
+            value={stmtScope}
+            onChange={(e) => setStmtScope(e.target.value as 'company' | 'project')}
+            className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100"
+          >
+            <option value="company">Company (all projects)</option>
+            <option value="project">Specific project</option>
+          </select>
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="stmt-project" className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+            Project
+          </label>
+          <select
+            id="stmt-project"
+            value={stmtProjectId ?? ''}
+            onChange={(e) => setStmtProjectId(e.target.value ? Number(e.target.value) : null)}
+            disabled={stmtScope !== 'project'}
+            className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 disabled:opacity-50"
+          >
+            <option value="">Select project...</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex flex-col">
           <label htmlFor="stmt-from" className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
             From date
@@ -169,7 +232,7 @@ export function CompanyStatementsTab({ company }: CompanyTabProps) {
           <button
             type="button"
             onClick={generateStatement}
-            disabled={stmtLoading}
+            disabled={stmtLoading || !ensureProjectScopeSelection()}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {stmtLoading ? 'Generating…' : 'Generate'}
@@ -207,6 +270,10 @@ export function CompanyStatementsTab({ company }: CompanyTabProps) {
               <div>
                 <dt className="inline font-medium text-slate-500 dark:text-slate-400">Currency </dt>
                 <dd className="inline text-slate-800 dark:text-slate-200">{stmtCurrency}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium text-slate-500 dark:text-slate-400">Scope </dt>
+                <dd className="inline text-slate-800 dark:text-slate-200">{scopeLabel}</dd>
               </div>
               <div>
                 <dt className="inline font-medium text-slate-500 dark:text-slate-400">Generated </dt>

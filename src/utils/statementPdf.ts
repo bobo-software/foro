@@ -26,6 +26,7 @@ export async function generateStatementPdf(
   rows: StatementRow[],
   currency: string = 'ZAR',
   business?: Business | null,
+  scopeLabel?: string,
 ): Promise<void> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF();
@@ -75,6 +76,10 @@ export async function generateStatementPdf(
   doc.text(`From: ${fromDate}  To: ${toDate}`, margin, y);
   doc.text(`Currency: ${currency}`, margin + 100, y);
   y += lh + 6;
+  if (scopeLabel) {
+    doc.text(`Scope: ${scopeLabel}`, margin, y);
+    y += lh + 4;
+  }
 
   // Separator
   doc.setDrawColor(...config.primaryColor);

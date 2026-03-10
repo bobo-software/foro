@@ -80,14 +80,21 @@ export function ConnectionStatus({
  * A minimal indicator showing only the connection status dot.
  */
 export function ConnectionDot({ className = '' }: { className?: string }) {
-  const { isConnected } = useWebSocket();
+  const { isConnected, reconnectWithDebug } = useWebSocket();
 
   return (
-    <span
-      className={`inline-block w-2 h-2 rounded-full ${
-        isConnected ? 'bg-green-500' : 'bg-red-500'
-      } ${className}`}
-      title={isConnected ? 'Connected to server' : 'Disconnected from server'}
-    />
+    <button
+      type="button"
+      onClick={reconnectWithDebug}
+      className={`inline-flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 ${className}`}
+      title="Connection status (click to attempt reconnect and log WebSocket events)"
+    >
+      <span
+        className={`inline-block w-2 h-2 rounded-full ${
+          isConnected ? 'bg-green-500' : 'bg-red-500'
+        }`}
+      />
+      Status
+    </button>
   );
 }

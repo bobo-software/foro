@@ -1,4 +1,3 @@
-import { io, Socket } from 'socket.io-client';
 import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
 
 /**
@@ -40,7 +39,7 @@ export interface DatabaseEvent {
 export interface ProjectEvent {
   type: string;
   projectId: string;
-  data: any;
+  data: unknown;
   timestamp: string;
 }
 
@@ -62,14 +61,28 @@ type ConnectionListener = (status: ConnectionStatus) => void;
  * Project ID is automatically extracted from API key/token.
  */
 class WebSocketService {
-  private socket: Socket | null = null;
+  private socket: WebSocket | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
-  private currentProjectId: string | null = null;
+  private reconnectDelayMs = 1000;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private shouldReconnect = true;
+  private explicitlyDisconnected = false;
+  private currentProjectId: string | null = null; // Backward-compatible getter
+  private subscribedProjects: Set<string> = new Set();
   private connectionListeners: Set<ConnectionListener> = new Set();
+  private databaseListeners: Set<(event: DatabaseEvent) => void> = new Set();
+  private projectListeners: Set<(event: ProjectEvent) => void> = new Set();
   private initialized = false;
+
+  private debugLog(message: string, payload?: unknown) {
+    const ts = new Date().toISOString();
+    if (payload === undefined) {
+      console.log(`[WebSocket][${ts}] ${message}`);
+      return;
+    }
+    console.log(`[WebSocket][${ts}] ${message}`, payload);
+  }
 
   /**
    * Initialize and connect to WebSocket server
@@ -78,6 +91,7 @@ class WebSocketService {
   init() {
     if (this.initialized) return;
     this.initialized = true;
+    this.debugLog('init() called');
     this.connect();
   }
 
@@ -85,60 +99,134 @@ class WebSocketService {
    * Connect to WebSocket server
    */
   private connect() {
-    const apiUrl = SKAFTIN_CONFIG.apiUrl;
+    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+      this.debugLog('connect() skipped, socket already active', {
+        readyState: this.socket.readyState,
+      });
+      return;
+    }
 
-    this.socket = io(apiUrl, {
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: this.maxReconnectAttempts,
-      reconnectionDelay: this.reconnectDelay,
-      reconnectionDelayMax: 5000,
+    const apiUrl = SKAFTIN_CONFIG.apiUrl.replace(/\/+$/, '');
+    const wsBase = apiUrl.replace(/^http/, 'ws');
+    const apiKey = SKAFTIN_CONFIG.apiKey;
+    const socketUrl = `${wsBase}/app-api/ws${apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : ''}`;
+    this.debugLog('Attempting WebSocket connection', {
+      apiUrl,
+      wsBase,
+      hasApiKey: Boolean(apiKey),
+      socketUrl,
+      reconnectAttempts: this.reconnectAttempts,
     });
 
-    this.socket.on('connect', () => {
-      console.log('🔌 Connected to Skaftin WebSocket server');
+    this.socket = new WebSocket(socketUrl);
+
+    this.socket.addEventListener('open', () => {
       this.isConnected = true;
       this.reconnectAttempts = 0;
+      this.reconnectDelayMs = 1000;
+      this.debugLog('WebSocket connection opened', {
+        subscribedProjects: Array.from(this.subscribedProjects),
+      });
       this.notifyConnectionListeners();
 
-      // Rejoin project room if we were in one
-      if (this.currentProjectId) {
-        this.joinProject(this.currentProjectId);
-      }
+      // Re-subscribe to all project channels after reconnect.
+      this.subscribedProjects.forEach((projectId) => {
+        this.debugLog('Re-subscribing project after connect', { projectId });
+        this.send({ type: 'subscribe', projectId });
+      });
     });
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('🔌 Disconnected from WebSocket server:', reason);
+    this.socket.addEventListener('message', (event) => {
+      this.debugLog('WebSocket message received (raw)', event.data);
+      this.handleMessage(event.data);
+    });
+
+    this.socket.addEventListener('close', (event) => {
       this.isConnected = false;
+      this.debugLog('WebSocket closed', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
+      this.notifyConnectionListeners();
+      this.scheduleReconnect();
+    });
+
+    this.socket.addEventListener('error', (event) => {
+      this.reconnectAttempts += 1;
+      this.debugLog('WebSocket error event', event);
       this.notifyConnectionListeners();
     });
+  }
 
-    this.socket.on('connect_error', (error) => {
-      console.error('🔌 WebSocket connection error:', error.message);
-      this.reconnectAttempts++;
+  private send(payload: Record<string, unknown>) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      this.debugLog('send() skipped, socket not open', {
+        payload,
+        hasSocket: Boolean(this.socket),
+        readyState: this.socket?.readyState ?? null,
+      });
+      return;
+    }
+    this.debugLog('Sending WebSocket payload', payload);
+    this.socket.send(JSON.stringify(payload));
+  }
+
+  private handleMessage(raw: unknown) {
+    if (typeof raw !== 'string') return;
+    let msg: any;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      this.debugLog('Failed to parse incoming message as JSON');
+      return;
+    }
+    this.debugLog('Parsed incoming message', msg);
+
+    if (msg?.type === 'database-change' && msg.payload) {
+      this.databaseListeners.forEach((listener) => listener(msg.payload as DatabaseEvent));
+      return;
+    }
+
+    if (msg?.type === 'project-event' && msg.payload) {
+      this.projectListeners.forEach((listener) => listener(msg.payload as ProjectEvent));
+      return;
+    }
+
+    if (msg?.type === 'subscribed' && typeof msg.projectId === 'string') {
+      this.currentProjectId = msg.projectId;
+      return;
+    }
+
+    if (msg?.type === 'unsubscribed' && typeof msg.projectId === 'string') {
+      if (this.currentProjectId === msg.projectId) {
+        this.currentProjectId = null;
+      }
+      return;
+    }
+
+    if (msg?.type === 'error') {
+      this.debugLog('Server reported WebSocket error', msg);
+      console.error('WebSocket error:', msg?.message || 'Unknown error');
+    }
+  }
+
+  private scheduleReconnect() {
+    if (!this.shouldReconnect || this.explicitlyDisconnected) return;
+    if (this.reconnectTimer) return;
+
+    const delay = Math.min(this.reconnectDelayMs, 10000);
+    this.debugLog('Scheduling reconnect', { delayMs: delay });
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnectAttempts += 1;
+      this.debugLog('Reconnect timer fired', {
+        reconnectAttempts: this.reconnectAttempts,
+      });
       this.notifyConnectionListeners();
-    });
-
-    this.socket.on('reconnect', (attemptNumber) => {
-      console.log('🔌 Reconnected after', attemptNumber, 'attempts');
-      this.isConnected = true;
-      this.notifyConnectionListeners();
-    });
-
-    this.socket.on('reconnect_failed', () => {
-      console.error('🔌 Failed to reconnect to WebSocket server');
-    });
-
-    // Handle project room join confirmation
-    this.socket.on('joined-project', ({ projectId, room }) => {
-      console.log(`📁 Joined project room: ${room}`);
-    });
-
-    // Handle project room leave confirmation
-    this.socket.on('left-project', ({ projectId, room }) => {
-      console.log(`📁 Left project room: ${room}`);
-    });
+      this.connect();
+      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 10000);
+    }, delay);
   }
 
   /**
@@ -163,26 +251,21 @@ class WebSocketService {
    * Project ID is automatically extracted from your API key/token
    */
   joinProject(projectId: string) {
-    if (this.socket && this.isConnected) {
-      this.currentProjectId = projectId;
-      this.socket.emit('join-project', projectId);
-      console.log(`📁 Joining project room: ${projectId}`);
-    } else {
-      // Store project ID to join when connected
-      this.currentProjectId = projectId;
-    }
+    this.debugLog('joinProject() called', { projectId });
+    this.currentProjectId = projectId;
+    this.subscribedProjects.add(projectId);
+    this.send({ type: 'subscribe', projectId });
   }
 
   /**
    * Leave a project room
    */
   leaveProject(projectId: string) {
-    if (this.socket && this.isConnected) {
-      this.socket.emit('leave-project', projectId);
-      if (this.currentProjectId === projectId) {
-        this.currentProjectId = null;
-      }
-      console.log(`📁 Leaving project room: ${projectId}`);
+    this.debugLog('leaveProject() called', { projectId });
+    this.subscribedProjects.delete(projectId);
+    this.send({ type: 'unsubscribe', projectId });
+    if (this.currentProjectId === projectId) {
+      this.currentProjectId = null;
     }
   }
 
@@ -190,36 +273,28 @@ class WebSocketService {
    * Listen for database change events
    */
   onDatabaseChange(callback: (event: DatabaseEvent) => void) {
-    if (this.socket) {
-      this.socket.on('database-change', callback);
-    }
+    this.databaseListeners.add(callback);
   }
 
   /**
    * Remove database change listener
    */
   offDatabaseChange(callback: (event: DatabaseEvent) => void) {
-    if (this.socket) {
-      this.socket.off('database-change', callback);
-    }
+    this.databaseListeners.delete(callback);
   }
 
   /**
    * Listen for project events
    */
   onProjectEvent(callback: (event: ProjectEvent) => void) {
-    if (this.socket) {
-      this.socket.on('project-event', callback);
-    }
+    this.projectListeners.add(callback);
   }
 
   /**
    * Remove project event listener
    */
   offProjectEvent(callback: (event: ProjectEvent) => void) {
-    if (this.socket) {
-      this.socket.off('project-event', callback);
-    }
+    this.projectListeners.delete(callback);
   }
 
   /**
@@ -229,7 +304,7 @@ class WebSocketService {
     return {
       isConnected: this.isConnected,
       reconnectAttempts: this.reconnectAttempts,
-      socketId: this.socket?.id || null,
+      socketId: null,
     };
   }
 
@@ -244,8 +319,15 @@ class WebSocketService {
    * Disconnect from server
    */
   disconnect() {
+    this.debugLog('disconnect() called');
+    this.shouldReconnect = false;
+    this.explicitlyDisconnected = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.socket) {
-      this.socket.disconnect();
+      this.socket.close();
       this.socket = null;
       this.isConnected = false;
       this.currentProjectId = null;
@@ -257,11 +339,28 @@ class WebSocketService {
    * Reconnect to server
    */
   reconnect() {
-    if (this.socket) {
-      this.socket.connect();
-    } else {
-      this.connect();
+    this.debugLog('reconnect() called');
+    this.shouldReconnect = true;
+    this.explicitlyDisconnected = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
+    this.connect();
+  }
+
+  /**
+   * Manual debug reconnect for status button clicks.
+   * Keeps existing subscriptions and forces a fresh connect attempt.
+   */
+  reconnectWithDebug(reason: string = 'manual-status-button') {
+    this.debugLog('reconnectWithDebug() called', {
+      reason,
+      status: this.getConnectionStatus(),
+      currentProjectId: this.currentProjectId,
+      subscribedProjects: Array.from(this.subscribedProjects),
+    });
+    this.reconnect();
   }
 }
 

@@ -11,6 +11,8 @@ const dateString = (field: string) =>
 
 // ── Invoice ────────────────────────────────────────────────────────
 export const invoiceSchema = z.object({
+  company_id: z.number().int().positive().nullable().optional(),
+  project_id: z.number().int().positive().nullable().optional(),
   invoice_number: nonEmptyString('Invoice number'),
   customer_name: nonEmptyString('Company name'),
   customer_email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -35,6 +37,8 @@ export type InvoiceInput = z.infer<typeof invoiceSchema>;
 
 // ── Quotation ──────────────────────────────────────────────────────
 export const quotationSchema = z.object({
+  company_id: z.number().int().positive().nullable().optional(),
+  project_id: z.number().int().positive().nullable().optional(),
   quotation_number: nonEmptyString('Quotation number'),
   customer_name: nonEmptyString('Company name'),
   customer_email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -90,6 +94,8 @@ export type ItemInput = z.infer<typeof itemSchema>;
 
 // ── Payment ────────────────────────────────────────────────────────
 export const paymentSchema = z.object({
+  company_id: z.number().int().positive().nullable().optional(),
+  project_id: z.number().int().positive().nullable().optional(),
   customer_name: nonEmptyString('Company name'),
   amount: z.number({ message: 'Amount is required' }).positive('Amount must be > 0'),
   currency: nonEmptyString('Currency'),
@@ -100,6 +106,20 @@ export const paymentSchema = z.object({
 });
 
 export type PaymentInput = z.infer<typeof paymentSchema>;
+
+// ── Project ────────────────────────────────────────────────────────
+export const projectSchema = z.object({
+  business_id: z.number().int().positive().nullable().optional(),
+  company_id: z.number({ message: 'Company is required' }).int().positive('Company is required'),
+  name: nonEmptyString('Project name'),
+  code: z.string().max(100, 'Code must be ≤ 100 characters').optional(),
+  description: z.string().max(2000, 'Description must be ≤ 2000 characters').optional(),
+  status: z.string().optional(),
+  starts_on: dateString('Start date').optional(),
+  ends_on: dateString('End date').optional(),
+});
+
+export type ProjectInput = z.infer<typeof projectSchema>;
 
 // ── Line Items ─────────────────────────────────────────────────────
 export const lineItemSchema = z.object({

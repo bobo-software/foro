@@ -1,12 +1,7 @@
-/**
- * Payment Service
- * Handles payment CRUD via Skaftin app-api (payments table)
- */
-
 import { skaftinClient } from '../backend';
-import type { Payment, CreatePaymentDto } from '../types/payment';
+import type { Project, CreateProjectDto } from '../types/project';
 
-const TABLE_NAME = 'payments';
+const TABLE_NAME = 'projects';
 
 function normalizeRows<T>(response: unknown): T[] {
   const r = response as Record<string, unknown>;
@@ -16,23 +11,23 @@ function normalizeRows<T>(response: unknown): T[] {
   return [];
 }
 
-function normalizePayment(raw: Record<string, unknown>): Payment {
+function normalizeProject(raw: Record<string, unknown>): Project {
   return {
     ...raw,
     id: raw.id != null ? Number(raw.id) : undefined,
-    amount: Number(raw.amount) || 0,
-    invoice_id: raw.invoice_id != null ? Number(raw.invoice_id) : undefined,
-  } as Payment;
+    business_id: raw.business_id != null ? Number(raw.business_id) : undefined,
+    company_id: Number(raw.company_id),
+  } as Project;
 }
 
-export class PaymentService {
+export class ProjectService {
   static async findAll(params?: {
     where?: Record<string, unknown>;
     orderBy?: string;
     orderDirection?: 'ASC' | 'DESC';
     limit?: number;
     offset?: number;
-  }): Promise<Payment[]> {
+  }): Promise<Project[]> {
     const response = await skaftinClient.post(
       `/app-api/database/tables/${TABLE_NAME}/select`,
       {
@@ -44,48 +39,35 @@ export class PaymentService {
       }
     );
     const rows = normalizeRows<Record<string, unknown>>(response);
-    return rows.map((p) => normalizePayment(p));
+    return rows.map((row) => normalizeProject(row));
   }
 
-  static async findById(id: number): Promise<Payment | null> {
+  static async findById(id: number): Promise<Project | null> {
     const response = await skaftinClient.post(
       `/app-api/database/tables/${TABLE_NAME}/select`,
       { where: { id }, limit: 1, offset: 0 }
     );
     const rows = normalizeRows<Record<string, unknown>>(response);
-    const p = rows[0] ?? null;
-    return p ? normalizePayment(p) : null;
+    const project = rows[0] ?? null;
+    return project ? normalizeProject(project) : null;
   }
 
-  static async findByCompany(
-    companyName: string,
-    options?: { projectId?: number }
-  ): Promise<Payment[]> {
-    const where: Record<string, unknown> = { customer_name: companyName };
-    if (options?.projectId != null) where.project_id = options.projectId;
-    return this.findAll({
-      where,
-      orderBy: 'date',
-      orderDirection: 'DESC',
-    });
-  }
-
-  static async create(data: CreatePaymentDto): Promise<Payment> {
+  static async create(data: CreateProjectDto): Promise<Project> {
     const response = await skaftinClient.post(
       `/app-api/database/tables/${TABLE_NAME}/insert`,
       { data }
     );
-    const r = response as unknown as Record<string, unknown>;
+    const r = response as Record<string, unknown>;
     const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizePayment(inserted as Record<string, unknown>);
+    return normalizeProject(inserted as Record<string, unknown>);
   }
 
-  static async update(id: number, data: Partial<CreatePaymentDto>): Promise<{ rowCount: number }> {
+  static async update(id: number, data: Partial<CreateProjectDto>): Promise<{ rowCount: number }> {
     const response = await skaftinClient.put(
       `/app-api/database/tables/${TABLE_NAME}/update`,
       { where: { id }, data }
     );
-    const r = response as unknown as Record<string, unknown>;
+    const r = response as Record<string, unknown>;
     return { rowCount: (r?.rowCount as number) ?? 0 };
   }
 
@@ -94,9 +76,10 @@ export class PaymentService {
       `/app-api/database/tables/${TABLE_NAME}/delete`,
       { where: { id } }
     );
-    const r = response as unknown as Record<string, unknown>;
+    const r = response as Record<string, unknown>;
     return { rowCount: (r?.rowCount as number) ?? 0 };
   }
 }
 
-export default PaymentService;
+export default ProjectService;
+

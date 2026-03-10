@@ -1,9 +1,93 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import CompanyService from '@/services/companyService';
+import BankingDetailsService from '@/services/bankingDetailsService';
+import AddressService from '@/services/addressService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import type { CreateCompanyDto, Company } from '@/types/company';
+import type { CreateBankingDetailsDto, BankingDetails } from '@/types/bankingDetails';
+import type { Address, CreateAddressDto } from '@/types/address';
+import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';
 import toast from 'react-hot-toast';
+
+declare global {
+  interface Window {
+    google?: any;
+    __foromanGoogleMapsPromise?: Promise<void>;
+  }
+}
+
+function loadGoogleMapsPlaces(apiKey: string): Promise<void> {
+  if (window.google?.maps?.places) return Promise.resolve();
+  if (window.__foromanGoogleMapsPromise) return window.__foromanGoogleMapsPromise;
+
+  window.__foromanGoogleMapsPromise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Maps Places'));
+    document.head.appendChild(script);
+  });
+
+  return window.__foromanGoogleMapsPromise;
+}
+
+const SA_PROVINCES = [
+  { value: '', label: 'Select province…' },
+  { value: 'Eastern Cape', label: 'Eastern Cape' },
+  { value: 'Free State', label: 'Free State' },
+  { value: 'Gauteng', label: 'Gauteng' },
+  { value: 'KwaZulu-Natal', label: 'KwaZulu-Natal' },
+  { value: 'Limpopo', label: 'Limpopo' },
+  { value: 'Mpumalanga', label: 'Mpumalanga' },
+  { value: 'Northern Cape', label: 'Northern Cape' },
+  { value: 'North West', label: 'North West' },
+  { value: 'Western Cape', label: 'Western Cape' },
+];
+
+function parseGooglePlace(place: any): Partial<CreateAddressDto> {
+  const components = place?.address_components ?? [];
+  const byType = (type: string) =>
+    components.find((c: any) => Array.isArray(c.types) && c.types.includes(type));
+
+  const streetNumber = byType('street_number')?.long_name ?? '';
+  const route = byType('route')?.long_name ?? '';
+  const streetAddress = [streetNumber, route].filter(Boolean).join(' ').trim();
+  const suburb = byType('sublocality_level_1')?.long_name ?? byType('neighborhood')?.long_name ?? '';
+  const city =
+    byType('locality')?.long_name ??
+    byType('postal_town')?.long_name ??
+    byType('administrative_area_level_2')?.long_name ??
+    '';
+  const province = byType('administrative_area_level_1')?.long_name ?? '';
+  const postalCode = byType('postal_code')?.long_name ?? '';
+  const country = byType('country')?.long_name ?? 'South Africa';
+
+  return {
+    street_address: streetAddress || place?.formatted_address || '',
+    suburb,
+    city,
+    province,
+    postal_code: postalCode,
+    country,
+  };
+}
+
+function composeAddress(address: CreateAddressDto): string {
+  return [
+    address.street_address,
+    address.street_address_2,
+    address.suburb,
+    address.city || address.town,
+    address.province,
+    address.postal_code,
+    address.country,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
 
 const initial: CreateCompanyDto = {
   name: '',
@@ -37,6 +121,42 @@ export function CompanyFormPage() {
   
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
   const [form, setForm] = useState<CreateCompanyDto>(initial);
+  const [addressLookup, setAddressLookup] = useState('');
+  const addressLookupRef = useRef<HTMLInputElement | null>(null);
+  const googleMapsApiKey = useMemo(
+    () => String(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim(),
+    []
+  );
+  const [mapsStatus, setMapsStatus] = useState<'idle' | 'ready' | 'failed'>('idle');
+  const [existingAddress, setExistingAddress] = useState<Address | null>(null);
+  const [addressForm, setAddressForm] = useState<CreateAddressDto>({
+    label: 'Company Address',
+    street_address: '',
+    street_address_2: '',
+    suburb: '',
+    town: '',
+    city: '',
+    province: '',
+    country: 'South Africa',
+    postal_code: '',
+    is_primary: true,
+    address_type: 'physical',
+  });
+
+  const [includeBankingDetails, setIncludeBankingDetails] = useState(false);
+  const [existingBankingDetails, setExistingBankingDetails] = useState<BankingDetails | null>(null);
+  const [bankingForm, setBankingForm] = useState<CreateBankingDetailsDto>({
+    label: 'Primary Account',
+    bank_name: '',
+    account_holder: '',
+    account_number: '',
+    account_type: 'cheque',
+    branch_code: '',
+    branch_name: '',
+    swift_code: '',
+    is_primary: true,
+    is_active: true,
+  });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -63,6 +183,66 @@ export function CompanyFormPage() {
             website: data.website || '',
             notes: data.notes || '',
           });
+          setAddressLookup(data.address || '');
+          AddressService.findByCompanyId(data.id!)
+            .then((addresses) => {
+              if (cancelled) return;
+              const primary = addresses.find((a) => a.is_primary) || addresses[0];
+              if (!primary) {
+                setAddressForm((prev) => ({
+                  ...prev,
+                  company_id: data.id!,
+                  street_address: data.address || '',
+                }));
+                return;
+              }
+              setExistingAddress(primary);
+              setAddressForm({
+                company_id: data.id!,
+                label: primary.label ?? 'Company Address',
+                street_address: primary.street_address ?? '',
+                street_address_2: primary.street_address_2 ?? '',
+                suburb: primary.suburb ?? '',
+                town: primary.town ?? '',
+                city: primary.city ?? '',
+                province: primary.province ?? '',
+                country: primary.country ?? 'South Africa',
+                postal_code: primary.postal_code ?? '',
+                is_primary: primary.is_primary ?? true,
+                address_type: primary.address_type ?? 'physical',
+              });
+            })
+            .catch(() => {
+              if (cancelled) return;
+              setAddressForm((prev) => ({
+                ...prev,
+                company_id: data.id!,
+                street_address: data.address || '',
+              }));
+            });
+          BankingDetailsService.findByCompanyId(data.id!)
+            .then((details) => {
+              if (cancelled || details.length === 0) return;
+              const primary = details.find((d) => d.is_primary) || details[0];
+              setExistingBankingDetails(primary);
+              setIncludeBankingDetails(true);
+              setBankingForm({
+                company_id: data.id!,
+                label: primary.label ?? 'Primary Account',
+                bank_name: primary.bank_name ?? '',
+                account_holder: primary.account_holder ?? '',
+                account_number: primary.account_number ?? '',
+                account_type: primary.account_type ?? 'cheque',
+                branch_code: primary.branch_code ?? '',
+                branch_name: primary.branch_name ?? '',
+                swift_code: primary.swift_code ?? '',
+                is_primary: primary.is_primary ?? true,
+                is_active: primary.is_active ?? true,
+              });
+            })
+            .catch(() => {
+              // Non-blocking for company edit.
+            });
         }
       })
       .catch((e) => {
@@ -79,8 +259,53 @@ export function CompanyFormPage() {
     };
   }, [id, navigate]);
 
+  useEffect(() => {
+    if (!googleMapsApiKey || !addressLookupRef.current) {
+      if (!googleMapsApiKey) setMapsStatus('failed');
+      return;
+    }
+
+    let autocomplete: any;
+    let mounted = true;
+
+    loadGoogleMapsPlaces(googleMapsApiKey)
+      .then(() => {
+        if (!mounted || !window.google?.maps?.places || !addressLookupRef.current) return;
+        autocomplete = new window.google.maps.places.Autocomplete(addressLookupRef.current, {
+          fields: ['formatted_address', 'address_components'],
+          types: ['address'],
+        });
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace();
+          const formatted = place?.formatted_address ?? '';
+          const parsed = parseGooglePlace(place);
+          setAddressLookup(formatted);
+          setAddressForm((prev) => ({ ...prev, ...parsed }));
+          update('address', formatted);
+        });
+        setMapsStatus('ready');
+      })
+      .catch(() => {
+        if (mounted) setMapsStatus('failed');
+      });
+
+    return () => {
+      mounted = false;
+      if (autocomplete && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(autocomplete);
+      }
+    };
+  }, [googleMapsApiKey]);
+
   const update = (key: keyof CreateCompanyDto, value: string | undefined) => {
     setForm((prev) => ({ ...prev, [key]: value ?? '' }));
+  };
+  const updateAddressField = (key: keyof CreateAddressDto, value: string | boolean | undefined) => {
+    setAddressForm((prev) => {
+      const next = { ...prev, [key]: value };
+      update('address', composeAddress(next));
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,7 +322,7 @@ export function CompanyFormPage() {
         name: form.name.trim(),
         email: form.email?.trim() || undefined,
         phone: form.phone?.trim() || undefined,
-        address: form.address?.trim() || undefined,
+        address: composeAddress(addressForm).trim() || form.address?.trim() || undefined,
         company_name: form.company_name?.trim() || undefined,
         contact_person: form.contact_person?.trim() || undefined,
         tax_id: form.tax_id?.trim() || undefined,
@@ -111,10 +336,106 @@ export function CompanyFormPage() {
 
       if (isEditMode) {
         await CompanyService.update(Number(id), payload);
+        const hasAddressData =
+          addressForm.street_address ||
+          addressForm.suburb ||
+          addressForm.town ||
+          addressForm.city ||
+          addressForm.province ||
+          addressForm.postal_code;
+        if (hasAddressData && id) {
+          const addressPayload: CreateAddressDto = {
+            ...addressForm,
+            company_id: Number(id),
+            label: addressForm.label?.trim() || 'Company Address',
+            street_address: addressForm.street_address?.trim() || undefined,
+            street_address_2: addressForm.street_address_2?.trim() || undefined,
+            suburb: addressForm.suburb?.trim() || undefined,
+            town: addressForm.town?.trim() || undefined,
+            city: addressForm.city?.trim() || undefined,
+            province: addressForm.province || undefined,
+            country: addressForm.country?.trim() || 'South Africa',
+            postal_code: addressForm.postal_code?.trim() || undefined,
+            is_primary: true,
+            address_type: 'physical',
+          };
+          if (existingAddress?.id) {
+            await AddressService.update(existingAddress.id, addressPayload);
+          } else {
+            const createdAddress = await AddressService.create(addressPayload);
+            setExistingAddress(createdAddress);
+          }
+        }
+        if (includeBankingDetails && id) {
+          if (!bankingForm.bank_name?.trim() || !bankingForm.account_number?.trim()) {
+            throw new Error('Bank name and account number are required when adding banking details');
+          }
+          const bankingPayload: CreateBankingDetailsDto = {
+            ...bankingForm,
+            company_id: Number(id),
+            label: bankingForm.label?.trim() || 'Primary Account',
+            bank_name: bankingForm.bank_name.trim(),
+            account_holder: bankingForm.account_holder?.trim() || undefined,
+            account_number: bankingForm.account_number.trim(),
+            branch_code: bankingForm.branch_code?.trim() || undefined,
+            branch_name: bankingForm.branch_name?.trim() || undefined,
+            swift_code: bankingForm.swift_code?.trim() || undefined,
+            is_primary: true,
+            is_active: true,
+          };
+          if (existingBankingDetails?.id) {
+            await BankingDetailsService.update(existingBankingDetails.id, bankingPayload);
+          } else {
+            const created = await BankingDetailsService.create(bankingPayload);
+            setExistingBankingDetails(created);
+          }
+        }
         toast.success('Company updated');
         navigate(`/app/companies/${id}`);
       } else {
-        await CompanyService.create(payload);
+        const createdCompany = await CompanyService.create(payload);
+        const hasAddressData =
+          addressForm.street_address ||
+          addressForm.suburb ||
+          addressForm.town ||
+          addressForm.city ||
+          addressForm.province ||
+          addressForm.postal_code;
+        if (hasAddressData && createdCompany.id) {
+          await AddressService.create({
+            ...addressForm,
+            company_id: Number(createdCompany.id),
+            label: addressForm.label?.trim() || 'Company Address',
+            street_address: addressForm.street_address?.trim() || undefined,
+            street_address_2: addressForm.street_address_2?.trim() || undefined,
+            suburb: addressForm.suburb?.trim() || undefined,
+            town: addressForm.town?.trim() || undefined,
+            city: addressForm.city?.trim() || undefined,
+            province: addressForm.province || undefined,
+            country: addressForm.country?.trim() || 'South Africa',
+            postal_code: addressForm.postal_code?.trim() || undefined,
+            is_primary: true,
+            address_type: 'physical',
+          });
+        }
+        if (includeBankingDetails && createdCompany.id) {
+          if (!bankingForm.bank_name?.trim() || !bankingForm.account_number?.trim()) {
+            throw new Error('Bank name and account number are required when adding banking details');
+          }
+          await BankingDetailsService.create({
+            ...bankingForm,
+            company_id: Number(createdCompany.id),
+            label: bankingForm.label?.trim() || 'Primary Account',
+            bank_name: bankingForm.bank_name.trim(),
+            account_holder: bankingForm.account_holder?.trim() || undefined,
+            account_number: bankingForm.account_number.trim(),
+            branch_code: bankingForm.branch_code?.trim() || undefined,
+            branch_name: bankingForm.branch_name?.trim() || undefined,
+            swift_code: bankingForm.swift_code?.trim() || undefined,
+            is_primary: true,
+            is_active: true,
+          });
+        }
         toast.success('Company created');
         navigate('/app/companies');
       }
@@ -127,6 +448,8 @@ export function CompanyFormPage() {
 
   const inputClass =
     'mt-1 block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-800 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed';
+  const addressInputClass =
+    'mt-1 block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed';
 
   const hasNoBusiness = businessId == null;
 
@@ -230,17 +553,103 @@ export function CompanyFormPage() {
               </div>
             </div>
             <div>
-              <label htmlFor="address" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Address
+              <label htmlFor="address_lookup" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Address lookup
               </label>
-              <textarea
-                id="address"
-                rows={3}
-                value={form.address ?? ''}
-                onChange={(e) => update('address', e.target.value)}
+              <input
+                id="address_lookup"
+                ref={addressLookupRef}
+                type="text"
+                value={addressLookup}
+                onChange={(e) => setAddressLookup(e.target.value)}
                 disabled={saving}
-                className={inputClass}
+                placeholder="Search address with Google Places"
+                className={addressInputClass}
               />
+              {mapsStatus === 'ready' && (
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Select a suggestion to auto-fill the address.
+                </p>
+              )}
+              {mapsStatus === 'failed' && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  Google Places unavailable. Enter address manually below.
+                </p>
+              )}
+            </div>
+            <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label htmlFor="street_address" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Street address
+                </label>
+                <input
+                  id="street_address"
+                  type="text"
+                  value={addressForm.street_address ?? ''}
+                  onChange={(e) => updateAddressField('street_address', e.target.value)}
+                  disabled={saving}
+                  placeholder="123 Main Street"
+                  className={addressInputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="suburb" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Suburb
+                </label>
+                <input
+                  id="suburb"
+                  type="text"
+                  value={addressForm.suburb ?? ''}
+                  onChange={(e) => updateAddressField('suburb', e.target.value)}
+                  disabled={saving}
+                  className={addressInputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="city" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  City
+                </label>
+                <input
+                  id="city"
+                  type="text"
+                  value={addressForm.city ?? ''}
+                  onChange={(e) => updateAddressField('city', e.target.value)}
+                  disabled={saving}
+                  className={addressInputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="province" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Province
+                </label>
+                <select
+                  id="province"
+                  value={addressForm.province ?? ''}
+                  onChange={(e) => updateAddressField('province', e.target.value)}
+                  disabled={saving}
+                  className={addressInputClass}
+                >
+                  {SA_PROVINCES.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="postal_code" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Postal code
+                </label>
+                <input
+                  id="postal_code"
+                  type="text"
+                  value={addressForm.postal_code ?? ''}
+                  onChange={(e) => updateAddressField('postal_code', e.target.value)}
+                  disabled={saving}
+                  placeholder="0001"
+                  className={addressInputClass}
+                />
+              </div>
             </div>
           </section>
 
@@ -349,6 +758,129 @@ export function CompanyFormPage() {
                 placeholder="Additional notes about this company"
                 className={inputClass}
               />
+            </div>
+
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={includeBankingDetails}
+                  onChange={(e) => setIncludeBankingDetails(e.target.checked)}
+                  disabled={saving}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Add banking details (optional)
+              </label>
+
+              {includeBankingDetails && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Bank name *
+                    </label>
+                    <select
+                      value={bankingForm.bank_name ?? ''}
+                      onChange={(e) =>
+                        setBankingForm((prev) => {
+                          const selectedBank = SA_BANKS.find((b) => b.name === e.target.value);
+                          return {
+                            ...prev,
+                            bank_name: e.target.value,
+                            branch_code: selectedBank?.branchCode ?? prev.branch_code,
+                          };
+                        })
+                      }
+                      disabled={saving}
+                      className={inputClass}
+                    >
+                      <option value="">Select bank…</option>
+                      {SA_BANKS.map((bank) => (
+                        <option key={bank.name} value={bank.name}>
+                          {bank.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Account number *
+                    </label>
+                    <input
+                      type="text"
+                      value={bankingForm.account_number ?? ''}
+                      onChange={(e) =>
+                        setBankingForm((prev) => ({ ...prev, account_number: e.target.value }))
+                      }
+                      disabled={saving}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Account holder
+                    </label>
+                    <input
+                      type="text"
+                      value={bankingForm.account_holder ?? ''}
+                      onChange={(e) =>
+                        setBankingForm((prev) => ({ ...prev, account_holder: e.target.value }))
+                      }
+                      disabled={saving}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Account type
+                    </label>
+                    <select
+                      value={bankingForm.account_type ?? 'cheque'}
+                      onChange={(e) =>
+                        setBankingForm((prev) => ({
+                          ...prev,
+                          account_type: e.target.value as CreateBankingDetailsDto['account_type'],
+                        }))
+                      }
+                      disabled={saving}
+                      className={inputClass}
+                    >
+                      {ACCOUNT_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Branch code
+                    </label>
+                    <input
+                      type="text"
+                      value={bankingForm.branch_code ?? ''}
+                      onChange={(e) =>
+                        setBankingForm((prev) => ({ ...prev, branch_code: e.target.value }))
+                      }
+                      disabled={saving}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      SWIFT code
+                    </label>
+                    <input
+                      type="text"
+                      value={bankingForm.swift_code ?? ''}
+                      onChange={(e) =>
+                        setBankingForm((prev) => ({ ...prev, swift_code: e.target.value }))
+                      }
+                      disabled={saving}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         </div>

@@ -5,6 +5,8 @@
 export interface Quotation {
   id?: number;
   business_id?: number | null;
+  company_id?: number | null;
+  project_id?: number | null;
   quotation_number: string;
   customer_name: string;
   customer_email?: string;
@@ -43,6 +45,8 @@ export interface QuotationLine {
 
 export interface CreateQuotationDto {
   business_id?: number | null;
+  company_id?: number | null;
+  project_id?: number | null;
   quotation_number: string;
   customer_name: string;
   customer_email?: string;

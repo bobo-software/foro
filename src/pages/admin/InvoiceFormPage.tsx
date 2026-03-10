@@ -8,11 +8,14 @@ export function InvoiceFormPage() {
   const invoiceId = id ? parseInt(id, 10) : undefined;
   const companyIdParam = searchParams.get('company_id');
   const initialCompanyId = companyIdParam ? parseInt(companyIdParam, 10) : undefined;
+  const projectIdParam = searchParams.get('project_id');
+  const initialProjectId = projectIdParam ? parseInt(projectIdParam, 10) : undefined;
 
   return (
     <InvoiceForm
       invoiceId={invoiceId}
       initialCompanyId={initialCompanyId}
+      initialProjectId={initialProjectId}
       onSuccess={() => navigate('/app/invoices')}
       onCancel={() =>
         invoiceId ? navigate(`/app/invoices/${invoiceId}`) : navigate('/app/invoices')

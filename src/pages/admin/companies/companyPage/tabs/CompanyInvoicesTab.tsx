@@ -4,7 +4,8 @@ import { formatCurrency } from '@/utils/currency';
 import type { CompanyTabProps } from './types';
 import { formatDate } from './types';
 
-export function CompanyInvoicesTab({ company, invoices, docsLoading }: CompanyTabProps) {
+export function CompanyInvoicesTab({ company, selectedProjectId, invoices, docsLoading }: CompanyTabProps) {
+  const projectQuery = selectedProjectId !== 'all' ? `&project_id=${selectedProjectId}` : '';
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
       {/* Header with Create Button */}
@@ -13,7 +14,7 @@ export function CompanyInvoicesTab({ company, invoices, docsLoading }: CompanyTa
           Invoices ({invoices.length})
         </h3>
         <Link
-          to={`/app/invoices/create?company_id=${company.id}`}
+          to={`/app/invoices/create?company_id=${company.id}${projectQuery}`}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400 rounded-lg transition-colors no-underline"
         >
           <LuPlus className="w-4 h-4" />

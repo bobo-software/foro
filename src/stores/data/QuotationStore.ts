@@ -7,7 +7,7 @@ interface QuotationState {
   quotations: Quotation[];
   loading: boolean;
   error: string | null;
-  fetchQuotations: (params?: { status?: string }) => Promise<void>;
+  fetchQuotations: (params?: { status?: string; projectId?: number }) => Promise<void>;
   removeQuotation: (id: number) => Promise<void>;
   addQuotation: (quotation: Quotation) => void;
 }
@@ -17,11 +17,12 @@ export const useQuotationStore = create<QuotationState>((set, get) => ({
   loading: false,
   error: null,
 
-  fetchQuotations: async (params?: { status?: string }) => {
+  fetchQuotations: async (params?: { status?: string; projectId?: number }) => {
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const where: Record<string, unknown> = {};
     if (businessId != null) where.business_id = businessId;
     if (params?.status && params.status !== 'all') where.status = params.status;
+    if (params?.projectId != null) where.project_id = params.projectId;
     const finalWhere = Object.keys(where).length > 0 ? where : undefined;
     set({ loading: true, error: null });
     try {

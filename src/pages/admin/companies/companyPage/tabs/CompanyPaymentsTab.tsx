@@ -4,13 +4,14 @@ import { PAYMENT_METHODS } from '@/types/payment';
 import type { CompanyTabProps } from './types';
 import { formatDate } from './types';
 
-export function CompanyPaymentsTab({ company, payments, docsLoading }: CompanyTabProps) {
+export function CompanyPaymentsTab({ company, selectedProjectId, payments, docsLoading }: CompanyTabProps) {
+  const projectQuery = selectedProjectId !== 'all' ? `&project_id=${selectedProjectId}` : '';
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Payments</h2>
         <Link
-          to={`/app/payments/create?company=${encodeURIComponent(company.name)}`}
+          to={`/app/payments/create?company_id=${company.id}&company=${encodeURIComponent(company.name)}${projectQuery}`}
           className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white no-underline hover:bg-indigo-500"
         >
           Record payment

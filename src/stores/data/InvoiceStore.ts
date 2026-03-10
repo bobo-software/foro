@@ -7,7 +7,7 @@ interface InvoiceState {
   invoices: Invoice[];
   loading: boolean;
   error: string | null;
-  fetchInvoices: (params?: { status?: string }) => Promise<void>;
+  fetchInvoices: (params?: { status?: string; projectId?: number }) => Promise<void>;
   removeInvoice: (id: number) => Promise<void>;
   addInvoice: (invoice: Invoice) => void;
 }
@@ -17,11 +17,12 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
   loading: false,
   error: null,
 
-  fetchInvoices: async (params?: { status?: string }) => {
+  fetchInvoices: async (params?: { status?: string; projectId?: number }) => {
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const where: Record<string, unknown> = {};
     if (businessId != null) where.business_id = businessId;
     if (params?.status && params.status !== 'all') where.status = params.status;
+    if (params?.projectId != null) where.project_id = params.projectId;
     const finalWhere = Object.keys(where).length > 0 ? where : undefined;
     set({ loading: true, error: null });
     try {

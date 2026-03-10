@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MaterialReactTable, type MRT_ColumnDef } from 'material-react-table';
 import { LuFilter } from 'react-icons/lu';
 import type { Payment } from '../../types/payment';
@@ -7,22 +7,31 @@ import { PAYMENT_METHODS } from '../../types/payment';
 import PaymentService from '../../services/paymentService';
 import MRTThemeProvider from '../providers/MRTThemeProvider';
 import { formatCurrency } from '../../utils/currency';
+import { useBusinessStore } from '../../stores/data/BusinessStore';
 
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString();
 }
 
 export function PaymentList() {
+  const [searchParams] = useSearchParams();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const businessId = useBusinessStore((s) => s.currentBusiness?.id);
+  const projectIdParam = searchParams.get('project_id');
+  const projectId = projectIdParam ? Number(projectIdParam) : undefined;
 
   const fetchPayments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const where: Record<string, unknown> = {};
+      if (businessId != null) where.business_id = businessId;
+      if (projectId != null && Number.isFinite(projectId)) where.project_id = projectId;
       const data = await PaymentService.findAll({
+        where: Object.keys(where).length > 0 ? where : undefined,
         orderBy: 'date',
         orderDirection: 'DESC',
       });
@@ -33,7 +42,7 @@ export function PaymentList() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [businessId, projectId]);
 
   useEffect(() => {
     fetchPayments();

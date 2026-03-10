@@ -5,6 +5,8 @@
 export interface Invoice {
   id?: number;
   business_id?: number | null;
+  company_id?: number | null;
+  project_id?: number | null;
   invoice_number: string;
   customer_name: string;
   customer_email?: string;
@@ -42,6 +44,8 @@ export interface InvoiceItem {
 
 export interface CreateInvoiceDto {
   business_id?: number | null;
+  company_id?: number | null;
+  project_id?: number | null;
   invoice_number: string;
   customer_name: string;
   customer_email?: string;

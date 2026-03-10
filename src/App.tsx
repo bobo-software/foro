@@ -28,6 +28,7 @@ const InvoiceDetailPage = lazy(() => import('@pages/admin/InvoiceDetailPage').th
 const InvoiceFormPage = lazy(() => import('@pages/admin/InvoiceFormPage').then((m) => ({ default: m.InvoiceFormPage })));
 const CompaniesPage = lazy(() => import('@/pages/admin/companies/CompaniesPage').then((m) => ({ default: m.CompaniesPage })));
 const CompanyDetailPage = lazy(() => import('@/pages/admin/companies/companyPage/CompanyDetailPage').then((m) => ({ default: m.CompanyDetailPage })));
+const CompanyProjectsPage = lazy(() => import('@/pages/admin/companies/CompanyProjectsPage').then((m) => ({ default: m.CompanyProjectsPage })));
 const CompanyFormPage = lazy(() => import('@/pages/admin/companies/CompanyFormPage').then((m) => ({ default: m.CompanyFormPage })));
 const ItemsPage = lazy(() => import('@pages/admin/ItemsPage').then((m) => ({ default: m.ItemsPage })));
 const ItemDetailPage = lazy(() => import('@pages/admin/ItemDetailPage').then((m) => ({ default: m.ItemDetailPage })));
@@ -120,6 +121,7 @@ function App() {
                 <Route index element={<CompaniesPage />} />
                 <Route path="create" element={<CompanyFormPage />} />
                 <Route path=":id" element={<CompanyDetailPage />} />
+                <Route path=":id/projects" element={<CompanyProjectsPage />} />
                 <Route path=":id/edit" element={<CompanyFormPage />} />
               </Route>
               <Route path="invoices" element={<Outlet />}>
