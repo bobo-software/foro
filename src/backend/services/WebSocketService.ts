@@ -89,9 +89,14 @@ class WebSocketService {
    * Call this when your app starts (e.g., in App.tsx or a provider)
    */
   init() {
-    if (this.initialized) return;
-    this.initialized = true;
     this.debugLog('init() called');
+    this.initialized = true;
+    this.shouldReconnect = true;
+    this.explicitlyDisconnected = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.connect();
   }
 
