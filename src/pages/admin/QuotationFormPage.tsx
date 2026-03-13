@@ -11,14 +11,19 @@ export function QuotationFormPage() {
   const projectIdParam = searchParams.get('project_id');
   const initialProjectId = projectIdParam ? parseInt(projectIdParam, 10) : undefined;
 
+  const fromCompany = searchParams.get('from_company');
+  const companyBackPath = fromCompany ? `/app/companies/${fromCompany}?tab=quotations` : '/app/quotations';
+
   return (
     <QuotationForm
       quotationId={quotationId}
       initialCompanyId={initialCompanyId}
       initialProjectId={initialProjectId}
-      onSuccess={() => navigate('/app/quotations')}
+      onSuccess={() => navigate(companyBackPath)}
       onCancel={() =>
-        quotationId ? navigate(`/app/quotations/${quotationId}`) : navigate('/app/quotations')
+        quotationId
+          ? navigate(`/app/quotations/${quotationId}${fromCompany ? `?from_company=${fromCompany}` : ''}`)
+          : navigate(companyBackPath)
       }
     />
   );

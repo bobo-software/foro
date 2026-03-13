@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import CompanyService from '@/services/companyService';
 import InvoiceService from '@/services/invoiceService';
 import QuotationService from '@/services/quotationService';
@@ -26,7 +26,8 @@ import { useBusinessStore } from '@/stores/data/BusinessStore';
 type TabId = 'summary' | 'contacts' | 'quotations' | 'invoices' | 'payments' | 'statements' | 'edit';
 
 export function CompanyDetailPage() {
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const currentBusinessId = useBusinessStore((s) => s.currentBusiness?.id);
   const { id } = useParams<{ id: string }>();
   const [company, setCompany] = useState<Company | null>(null);
@@ -38,7 +39,9 @@ export function CompanyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [docsLoading, setDocsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('summary');
+  const [docsRefreshTick, setDocsRefreshTick] = useState(0);
+  const tabParam = searchParams.get('tab') as TabId | null;
+  const [activeTab, setActiveTab] = useState<TabId>(tabParam ?? 'summary');
 
   const loadProjects = useCallback(async (companyId: number) => {
     const where: Record<string, unknown> = { company_id: companyId };
@@ -127,7 +130,7 @@ export function CompanyDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [company?.name, selectedProjectId]);
+  }, [company?.name, selectedProjectId, docsRefreshTick]);
 
   useEffect(() => {
     if (selectedProjectId === 'all') return;
@@ -256,7 +259,7 @@ export function CompanyDetailPage() {
       {activeTab === 'contacts' && <CompanyContactsTab company={company} />}
       {activeTab === 'quotations' && <CompanyQuotationsTab {...tabProps} />}
       {activeTab === 'invoices' && <CompanyInvoicesTab {...tabProps} />}
-      {activeTab === 'payments' && <CompanyPaymentsTab {...tabProps} />}
+      {activeTab === 'payments' && <CompanyPaymentsTab {...tabProps} onRefresh={() => setDocsRefreshTick((t) => t + 1)} />}
       {activeTab === 'statements' && <CompanyStatementsTab {...tabProps} />}
       {activeTab === 'edit' && <CompanyEditTab company={company} onCompanyUpdate={handleCompanyUpdate} />}
     </div>

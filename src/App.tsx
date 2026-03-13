@@ -145,6 +145,7 @@ function App() {
               <Route path="payments" element={<Outlet />}>
                 <Route index element={<PaymentsPage />} />
                 <Route path="create" element={<PaymentFormPage />} />
+                <Route path=":id/edit" element={<PaymentFormPage />} />
               </Route>
               <Route path="statements" element={<StatementsPage />} />
               <Route path="settings" element={<SettingsPage />}>

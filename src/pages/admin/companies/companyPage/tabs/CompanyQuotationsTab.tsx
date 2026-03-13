@@ -14,7 +14,7 @@ export function CompanyQuotationsTab({ company, selectedProjectId, quotations, d
           Quotations ({quotations.length})
         </h3>
         <Link
-          to={`/app/quotations/create?company_id=${company.id}${projectQuery}`}
+          to={`/app/quotations/create?company_id=${company.id}${projectQuery}&from_company=${company.id}`}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400 rounded-lg transition-colors no-underline"
         >
           <LuPlus className="w-4 h-4" />
@@ -35,7 +35,7 @@ export function CompanyQuotationsTab({ company, selectedProjectId, quotations, d
           {quotations.map((q) => (
             <li key={q.id} className="py-3 first:pt-0">
               <Link
-                to={q.id != null ? `/app/quotations/${q.id}` : '#'}
+                to={q.id != null ? `/app/quotations/${q.id}?from_company=${company.id}` : '#'}
                 className="block focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { CreateInvoiceDto, InvoiceStatus, InvoiceItem } from '../../types/invoice';
+import type { CreateInvoiceDto, InvoiceStatus } from '../../types/invoice';
 import type { Company } from '../../types/company';
 import type { Item } from '../../types/item';
 import type { Project } from '../../types/project';
@@ -11,6 +11,7 @@ import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
+import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
 
 interface InvoiceFormProps {
   invoiceId?: number;
@@ -18,21 +19,6 @@ interface InvoiceFormProps {
   initialProjectId?: number;
   onSuccess?: () => void;
   onCancel?: () => void;
-}
-
-interface LineRow {
-  id: string;
-  itemId?: number;
-  sku?: string;
-  description: string;
-  quantity: number;
-  unit_price: number;
-  discountPercent: number;
-}
-
-function lineTotal(row: LineRow): number {
-  const beforeDiscount = row.quantity * row.unit_price;
-  return beforeDiscount * (1 - row.discountPercent / 100);
 }
 
 export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onSuccess, onCancel }: InvoiceFormProps) {
@@ -46,6 +32,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
+  const [initialProjectApplied, setInitialProjectApplied] = useState(false);
 
   const [formData, setFormData] = useState<CreateInvoiceDto>({
     company_id: undefined,
@@ -70,14 +57,16 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     notes: '',
   });
 
-  // Load companies and stock items on mount
   useEffect(() => {
-    Promise.all([CompanyService.findAll(), ItemService.findAll()]).then(
-      ([comps, items]) => {
-        setCompanies(comps);
-        setStockItems(items);
-      }
-    );
+    const businessId = useBusinessStore.getState().currentBusiness?.id;
+    const itemWhere = businessId != null ? { business_id: businessId } : undefined;
+    Promise.all([
+      CompanyService.findAll(),
+      ItemService.findAll({ where: itemWhere, orderBy: 'name', orderDirection: 'ASC' }),
+    ]).then(([comps, items]) => {
+      setCompanies(comps);
+      setStockItems(items);
+    });
   }, []);
 
   const loadProjectsForCompany = useCallback(async (companyId: number) => {
@@ -94,7 +83,6 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     return projectList;
   }, []);
 
-  // Pre-select company if initialCompanyId is provided
   useEffect(() => {
     if (initialCompanyId && companies.length > 0 && !initialCompanyApplied && !invoiceId) {
       const company = companies.find((c) => c.id === initialCompanyId);
@@ -108,8 +96,10 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
           customer_email: company.email ?? '',
           customer_address: company.address ?? '',
           customer_vat_number: company.vat_number ?? '',
+          delivery_address: company.address ?? '',
         }));
         setSelectedProject(null);
+        setInitialProjectApplied(false);
         loadProjectsForCompany(company.id!);
         setInitialCompanyApplied(true);
       }
@@ -117,16 +107,16 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   }, [initialCompanyId, companies, initialCompanyApplied, invoiceId, loadProjectsForCompany]);
 
   useEffect(() => {
-    if (!invoiceId && initialProjectId && projects.length > 0 && formData.project_id == null) {
+    if (!invoiceId && initialProjectId && projects.length > 0 && !initialProjectApplied) {
       const project = projects.find((p) => p.id === initialProjectId);
       if (project) {
         setSelectedProject(project);
         setFormData((prev) => ({ ...prev, project_id: project.id }));
+        setInitialProjectApplied(true);
       }
     }
-  }, [invoiceId, initialProjectId, projects, formData.project_id]);
+  }, [invoiceId, initialProjectId, projects, initialProjectApplied]);
 
-  // Auto-generate invoice number for new invoices (0001, 0002, ...)
   useEffect(() => {
     if (!invoiceId) {
       InvoiceService.count()
@@ -149,6 +139,10 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     const matchedCompany = companies.find((c) => c.id === formData.company_id) ?? null;
     if (!matchedCompany) return;
     setSelectedCompany(matchedCompany);
+    setFormData((prev) => ({
+      ...prev,
+      delivery_address: prev.delivery_address || matchedCompany.address || '',
+    }));
     loadProjectsForCompany(matchedCompany.id!).then((projectList) => {
       if (formData.project_id == null) return;
       const matchedProject = projectList.find((p) => p.id === formData.project_id) ?? null;
@@ -165,6 +159,9 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         InvoiceItemService.findByInvoiceId(invoiceId),
       ]);
       if (invoice) {
+        const matchedCompany = invoice.company_id != null
+          ? companies.find((c) => c.id === invoice.company_id) ?? null
+          : null;
         setFormData({
           company_id: invoice.company_id,
           project_id: invoice.project_id,
@@ -173,7 +170,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
           customer_email: invoice.customer_email || '',
           customer_address: invoice.customer_address || '',
           customer_vat_number: invoice.customer_vat_number || '',
-          delivery_address: invoice.delivery_address || '',
+          delivery_address: invoice.delivery_address || matchedCompany?.address || '',
           delivery_conditions: invoice.delivery_conditions || '',
           order_number: invoice.order_number || '',
           terms: invoice.terms || 'C.O.D',
@@ -187,9 +184,6 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
           currency: invoice.currency || 'ZAR',
           notes: invoice.notes || '',
         });
-        const matchedCompany = invoice.company_id != null
-          ? companies.find((c) => c.id === invoice.company_id) ?? null
-          : null;
         setSelectedCompany(matchedCompany);
         if (matchedCompany?.id) {
           const projectList = await loadProjectsForCompany(matchedCompany.id);
@@ -205,33 +199,26 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         } else {
           setSelectedProject(null);
         }
-        const rows: LineRow[] = (items || []).map((item) => {
-          const qty = item.quantity || 1;
-          const up = Number(item.unit_price) || 0;
-          const tot = Number(item.total) || 0;
-          const beforeDiscount = qty * up;
-          const discountPercent =
-            beforeDiscount > 0 ? Math.round((1 - tot / beforeDiscount) * 100 * 100) / 100 : 0;
-          return {
-            id: `line-${item.id ?? Math.random()}`,
-            itemId: item.item_id,
-            sku: item.sku || '',
-            description: item.description,
-            quantity: qty,
-            unit_price: up,
-            discountPercent,
-          };
-        });
+        const rows: LineRow[] = (items || []).map((item) => ({
+          id: `line-${item.id ?? Math.random()}`,
+          itemId: item.item_id,
+          sku: item.sku || '',
+          description: item.description,
+          quantity: item.quantity || 1,
+          unit_price: Number(item.unit_price) || 0,
+          discountPercent: Number(item.discount_percent ?? 0),
+          unit_type: (item.unit_type as 'qty' | 'hrs') ?? 'qty',
+        }));
         setLineRows(rows);
+        setGlobalDiscountPercent(Number(invoice.discount_percent ?? 0));
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load invoice');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load invoice');
     } finally {
       setLoading(false);
     }
   };
 
-  // Live calculations from line items + global discount + tax
   const totals = useMemo(() => {
     const linesSubtotal = lineRows.reduce((sum, row) => sum + lineTotal(row), 0);
     const discountAmount = (linesSubtotal * globalDiscountPercent) / 100;
@@ -239,16 +226,9 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     const taxRate = formData.tax_rate ?? 0;
     const taxAmount = (subtotalAfterDiscount * taxRate) / 100;
     const total = subtotalAfterDiscount + taxAmount;
-    return {
-      linesSubtotal,
-      discountAmount,
-      subtotalAfterDiscount,
-      taxAmount,
-      total,
-    };
+    return { linesSubtotal, discountAmount, subtotalAfterDiscount, taxAmount, total };
   }, [lineRows, globalDiscountPercent, formData.tax_rate]);
 
-  // Sync formData subtotal/tax_amount/total for API
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
@@ -272,6 +252,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
       customer_email: company.email || '',
       customer_address: company.address || '',
       customer_vat_number: company.vat_number || '',
+      delivery_address: prev.delivery_address || company.address || '',
     }));
     setSelectedProject(null);
     if (company.id != null) {
@@ -291,56 +272,19 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
       customer_email: '',
       customer_address: '',
       customer_vat_number: '',
+      delivery_address: '',
     }));
   }, []);
 
   const handleProjectSelect = useCallback((project: Project) => {
     setSelectedProject(project);
-    setFormData((prev) => ({
-      ...prev,
-      project_id: project.id,
-    }));
+    setFormData((prev) => ({ ...prev, project_id: project.id }));
   }, []);
 
   const handleProjectClear = useCallback(() => {
     setSelectedProject(null);
     setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
-
-  const addLine = useCallback(() => {
-    setLineRows((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID?.() ?? `line-${Date.now()}`,
-        description: '',
-        quantity: 1,
-        unit_price: 0,
-        discountPercent: 0,
-      },
-    ]);
-  }, []);
-
-  const removeLine = useCallback((id: string) => {
-    setLineRows((prev) => prev.filter((r) => r.id !== id));
-  }, []);
-
-  const updateLine = useCallback((id: string, updates: Partial<LineRow>) => {
-    setLineRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
-    );
-  }, []);
-
-  const onItemSelect = useCallback(
-    (id: string) => (item: Item) => {
-      updateLine(id, {
-        itemId: item.id,
-        sku: item.sku || '',
-        description: item.name,
-        unit_price: item.unit_price ?? 0,
-      });
-    },
-    [updateLine]
-  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -360,12 +304,15 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         description: r.description,
         quantity: r.quantity,
         unit_price: r.unit_price,
+        discount_percent: r.discountPercent || 0,
+        unit_type: r.unit_type,
         total: lineTotal(r),
         item_id: r.itemId,
       }));
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const payload: CreateInvoiceDto = {
       ...formData,
+      discount_percent: globalDiscountPercent || 0,
       ...(businessId != null && { business_id: businessId }),
       items: items.length ? items : undefined,
     };
@@ -381,8 +328,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         if (newId != null && items.length) await InvoiceItemService.insertMany(newId, items);
       }
       onSuccess?.();
-    } catch (err: any) {
-      setError(err.message || 'Failed to save invoice');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save invoice');
     } finally {
       setLoading(false);
     }
@@ -390,7 +337,6 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
 
   const inputClass =
     'w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
-  const readonlyClass = 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed';
   const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
   const groupClass = 'flex flex-col';
 
@@ -403,7 +349,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   }
 
   return (
-    <div className="max-w-[900px] mx-auto">
+    <div className="max-w-[1200px] mx-auto">
       <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
         {invoiceId ? 'Edit Invoice' : 'Create Invoice'}
       </h2>
@@ -563,33 +509,35 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
                   {formData.customer_address && <div>{formData.customer_address}</div>}
                 </div>
               )}
-              <div className={`${groupClass} mt-2`}>
-                <AppLabledAutocomplete
-                  label="Project *"
-                  options={projects}
-                  value={selectedProject?.id != null ? String(selectedProject.id) : ''}
-                  displayValue={selectedProject?.name ?? ''}
-                  accessor="name"
-                  valueAccessor="id"
-                  onSelect={handleProjectSelect}
-                  onClear={handleProjectClear}
-                  required={!invoiceId}
-                  disabled={!selectedCompany}
-                  placeholder={selectedCompany ? 'Search project...' : 'Select company first'}
-                />
-              </div>
-              <div className={`${groupClass} mt-2`}>
-                <label htmlFor="customer_vat_number" className={labelClass}>
-                  Company VAT #
-                </label>
-                <input
-                  id="customer_vat_number"
-                  type="text"
-                  value={formData.customer_vat_number || ''}
-                  onChange={(e) => handleChange('customer_vat_number', e.target.value)}
-                  className={inputClass}
-                  placeholder="VAT number"
-                />
+              <div className="flex flex-row gap-2">
+                <div className={`${groupClass} mt-2 flex-1`}>
+                  <AppLabledAutocomplete
+                    label="Project *"
+                    options={projects}
+                    value={selectedProject?.id != null ? String(selectedProject.id) : ''}
+                    displayValue={selectedProject?.name ?? ''}
+                    accessor="name"
+                    valueAccessor="id"
+                    onSelect={handleProjectSelect}
+                    onClear={handleProjectClear}
+                    required={!invoiceId}
+                    disabled={!selectedCompany}
+                    placeholder={selectedCompany ? 'Search project...' : 'Select company first'}
+                  />
+                </div>
+                <div className={`${groupClass} mt-2 flex-1`}>
+                  <label htmlFor="customer_vat_number" className={labelClass}>
+                    Company VAT #
+                  </label>
+                  <input
+                    id="customer_vat_number"
+                    type="text"
+                    value={formData.customer_vat_number || ''}
+                    onChange={(e) => handleChange('customer_vat_number', e.target.value)}
+                    className={inputClass}
+                    placeholder="VAT number"
+                  />
+                </div>
               </div>
             </div>
             <div className={groupClass}>
@@ -609,121 +557,15 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         </div>
 
         <div className="pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-              Line items
-            </h3>
-            <button
-              type="button"
-              onClick={addLine}
-              className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-            >
-              + Add line
-            </button>
-          </div>
-          {lineRows.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400 py-2">
-              No items. Click &quot;Add line&quot; and select from stock.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {lineRows.map((row) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-1 gap-2 p-2 rounded-md bg-gray-50 dark:bg-gray-700/50 md:grid-cols-12 md:items-end"
-                >
-                  <div className={`${groupClass} md:col-span-2`}>
-                    <label className={labelClass}>SKU</label>
-                    <input
-                      type="text"
-                      value={row.sku || ''}
-                      onChange={(e) => updateLine(row.id, { sku: e.target.value })}
-                      className={inputClass}
-                      placeholder="SKU"
-                    />
-                  </div>
-                  <div className="md:col-span-3">
-                    <AppLabledAutocomplete
-                      label=""
-                      options={stockItems}
-                      value={row.itemId != null ? String(row.itemId) : ''}
-                      displayValue={row.description}
-                      accessor="name"
-                      valueAccessor="id"
-                      onSelect={onItemSelect(row.id)}
-                      onClear={() =>
-                        updateLine(row.id, { itemId: undefined, sku: '', description: '', unit_price: 0 })
-                      }
-                      placeholder="Item"
-                      className="mb-0"
-                    />
-                  </div>
-                  <div className={`${groupClass} md:col-span-1`}>
-                    <label className={labelClass}>Qty</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={row.quantity}
-                      onChange={(e) =>
-                        updateLine(row.id, { quantity: parseInt(e.target.value, 10) || 1 })
-                      }
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className={`${groupClass} md:col-span-2`}>
-                    <label className={labelClass}>Unit price</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={row.unit_price}
-                      onChange={(e) =>
-                        updateLine(row.id, {
-                          unit_price: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className={`${groupClass} md:col-span-1`}>
-                    <label className={labelClass}>Disc %</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      max={100}
-                      value={row.discountPercent}
-                      onChange={(e) =>
-                        updateLine(row.id, {
-                          discountPercent: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className={`${groupClass} md:col-span-2`}>
-                    <label className={labelClass}>Line total</label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={formatCurrency(lineTotal(row), formData.currency)}
-                      className={`${inputClass} ${readonlyClass}`}
-                    />
-                  </div>
-                  <div className="flex items-end md:col-span-1">
-                    <button
-                      type="button"
-                      onClick={() => removeLine(row.id)}
-                      className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                      aria-label="Remove line"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+            Line items
+          </h3>
+          <LineItemsEditor
+            rows={lineRows}
+            stockItems={stockItems}
+            currency={formData.currency || 'ZAR'}
+            onChange={setLineRows}
+          />
         </div>
 
         <div className="pb-3 mb-4">
@@ -738,10 +580,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
                 step="0.01"
                 min={0}
                 max={100}
-                value={globalDiscountPercent}
-                onChange={(e) =>
-                  setGlobalDiscountPercent(parseFloat(e.target.value) || 0)
-                }
+                value={globalDiscountPercent || ''}
+                onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
                 className={inputClass}
               />
             </div>
@@ -754,10 +594,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
                 type="number"
                 step="0.01"
                 min={0}
-                value={formData.tax_rate}
-                onChange={(e) =>
-                  handleChange('tax_rate', parseFloat(e.target.value) || 0)
-                }
+                value={formData.tax_rate || ''}
+                onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
                 className={inputClass}
               />
             </div>
@@ -780,7 +618,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
               </>
             )}
             <div className="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Tax ({(formData.tax_rate ?? 0)}%)</span>
+              <span>Tax ({formData.tax_rate ?? 0}%)</span>
               <span>{formatCurrency(totals.taxAmount, formData.currency)}</span>
             </div>
             <div className="flex justify-between font-semibold text-base pt-1 border-t border-gray-200 dark:border-gray-600">

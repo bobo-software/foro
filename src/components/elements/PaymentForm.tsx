@@ -11,6 +11,7 @@ import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { SUPPORTED_CURRENCIES } from '../../utils/currency';
 
 interface PaymentFormProps {
+  paymentId?: number;
   initialCompanyId?: number;
   initialProjectId?: number;
   initialCompanyName?: string;
@@ -18,12 +19,14 @@ interface PaymentFormProps {
   onCancel?: () => void;
 }
 
-export function PaymentForm({ initialCompanyId, initialProjectId, initialCompanyName, onSuccess, onCancel }: PaymentFormProps) {
+export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, initialCompanyName, onSuccess, onCancel }: PaymentFormProps) {
+  const isEditing = paymentId != null;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingPayment, setLoadingPayment] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CreatePaymentDto>({
     company_id: initialCompanyId,
@@ -54,17 +57,66 @@ export function PaymentForm({ initialCompanyId, initialProjectId, initialCompany
     return data;
   }, []);
 
+  // Load existing payment for edit mode
   useEffect(() => {
-    if (companies.length === 0 || selectedCompany) return;
+    if (!paymentId) return;
+    setLoadingPayment(true);
+    PaymentService.findById(paymentId)
+      .then((payment) => {
+        if (!payment) return;
+        setFormData({
+          company_id: payment.company_id,
+          project_id: payment.project_id,
+          customer_name: payment.customer_name ?? '',
+          amount: payment.amount,
+          currency: payment.currency ?? 'ZAR',
+          date: payment.date ?? '',
+          payment_method: payment.payment_method ?? 'eft',
+          reference: payment.reference ?? '',
+          business_id: payment.business_id,
+        });
+        if (payment.company_id) {
+          loadProjectsForCompany(payment.company_id).catch(() => {});
+        }
+      })
+      .catch(() => setError('Failed to load payment'))
+      .finally(() => setLoadingPayment(false));
+  }, [paymentId, loadProjectsForCompany]);
+
+  // Populate company/project selectors after companies list + formData are ready
+  useEffect(() => {
+    if (companies.length === 0) return;
+    const companyId = formData.company_id;
+    const projectId = formData.project_id;
+    if (!companyId) return;
+    const match = companies.find((c) => c.id === companyId);
+    if (match && !selectedCompany) {
+      setSelectedCompany(match);
+      loadProjectsForCompany(match.id!).then((projectList) => {
+        if (!projectId) return;
+        const project = projectList.find((p) => p.id === projectId) ?? null;
+        setSelectedProject(project);
+      }).catch(() => {});
+    }
+  }, [companies, formData.company_id, formData.project_id, selectedCompany, loadProjectsForCompany]);
+
+  // Populate project selector once projects list is loaded
+  useEffect(() => {
+    if (projects.length === 0 || selectedProject) return;
+    const projectId = formData.project_id;
+    if (!projectId) return;
+    const project = projects.find((p) => p.id === projectId) ?? null;
+    if (project) setSelectedProject(project);
+  }, [projects, formData.project_id, selectedProject]);
+
+  // Handle initial company name (non-edit mode, when company not resolved by id)
+  useEffect(() => {
+    if (isEditing || companies.length === 0 || selectedCompany) return;
     if (initialCompanyId) {
       const match = companies.find((c) => c.id === initialCompanyId);
       if (match) {
         setSelectedCompany(match);
-        setFormData((prev) => ({
-          ...prev,
-          company_id: match.id,
-          customer_name: match.name,
-        }));
+        setFormData((prev) => ({ ...prev, company_id: match.id, customer_name: match.name }));
         loadProjectsForCompany(match.id!).then((projectList) => {
           if (!initialProjectId) return;
           const project = projectList.find((p) => p.id === initialProjectId) ?? null;
@@ -91,7 +143,7 @@ export function PaymentForm({ initialCompanyId, initialProjectId, initialCompany
         setFormData((prev) => ({ ...prev, customer_name: initialCompanyName }));
       }
     }
-  }, [initialCompanyId, initialCompanyName, initialProjectId, companies, selectedCompany, loadProjectsForCompany]);
+  }, [isEditing, initialCompanyId, initialCompanyName, initialProjectId, companies, selectedCompany, loadProjectsForCompany]);
 
   const handleChange = useCallback((field: keyof CreatePaymentDto, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -139,18 +191,26 @@ export function PaymentForm({ initialCompanyId, initialProjectId, initialCompany
       return;
     }
     if (!formData.project_id) {
-      setError('Project is required for new payments');
+      setError('Project is required');
       return;
     }
     try {
       setLoading(true);
       setError(null);
       const businessId = useBusinessStore.getState().currentBusiness?.id;
-      await PaymentService.create({
-        ...formData,
-        amount: Number(formData.amount),
-        ...(businessId != null && { business_id: businessId }),
-      });
+      if (isEditing) {
+        await PaymentService.update(paymentId, {
+          ...formData,
+          amount: Number(formData.amount),
+          ...(businessId != null && { business_id: businessId }),
+        });
+      } else {
+        await PaymentService.create({
+          ...formData,
+          amount: Number(formData.amount),
+          ...(businessId != null && { business_id: businessId }),
+        });
+      }
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save payment');
@@ -164,9 +224,29 @@ export function PaymentForm({ initialCompanyId, initialProjectId, initialCompany
   const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
   const groupClass = 'flex flex-col';
 
+  if (loadingPayment) {
+    return (
+      <div className="py-8 text-center text-slate-500 dark:text-slate-400">Loading payment…</div>
+    );
+  }
+
   return (
     <div className=" mx-auto">
-      <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-gray-100">Record payment</h2>
+      <div className="flex items-center gap-2 mb-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded"
+            aria-label="Back"
+          >
+            ←
+          </button>
+        )}
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {isEditing ? 'Edit payment' : 'Record payment'}
+        </h2>
+      </div>
       {error && (
         <div className="mb-2 px-3 py-2 text-sm rounded-md bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300">
           {error}

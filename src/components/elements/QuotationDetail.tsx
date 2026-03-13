@@ -224,9 +224,19 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
       {/* Action bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center print:hidden">
         <div>
-          <h1 className="m-0 mb-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Quotation {quotation.quotation_number}
-          </h1>
+          <div className="flex items-center gap-2 mb-1">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded"
+              aria-label="Back"
+            >
+              ←
+            </button>
+            <h1 className="m-0 text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Quotation {quotation.quotation_number}
+            </h1>
+          </div>
           <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadgeClass(quotation.status)}`}>
             {quotation.status}
           </span>

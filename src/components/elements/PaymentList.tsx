@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { MaterialReactTable, type MRT_ColumnDef } from 'material-react-table';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { MaterialReactTable, type MRT_ColumnDef, type MRT_Row } from 'material-react-table';
 import { LuFilter } from 'react-icons/lu';
 import type { Payment } from '../../types/payment';
 import { PAYMENT_METHODS } from '../../types/payment';
@@ -14,11 +14,13 @@ function formatDate(dateString: string) {
 }
 
 export function PaymentList() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
   const projectIdParam = searchParams.get('project_id');
   const projectId = projectIdParam ? Number(projectIdParam) : undefined;
@@ -46,6 +48,21 @@ export function PaymentList() {
 
   useEffect(() => {
     fetchPayments();
+  }, [fetchPayments]);
+
+  const handleDelete = useCallback(async (row: MRT_Row<Payment>) => {
+    const id = row.original.id;
+    if (!id) return;
+    if (!window.confirm('Delete this payment? This cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      await PaymentService.delete(id);
+      await fetchPayments();
+    } catch {
+      setError('Failed to delete payment');
+    } finally {
+      setDeletingId(null);
+    }
   }, [fetchPayments]);
 
   const getPaymentMethodLabel = (value: string | undefined) => {
@@ -138,6 +155,28 @@ export function PaymentList() {
           enableGlobalFilter={false}
           enableColumnOrdering={false}
           enableColumnResizing={false}
+          enableRowActions
+          positionActionsColumn="last"
+          displayColumnDefOptions={{ 'mrt-row-actions': { header: '' } }}
+          renderRowActions={({ row }) => (
+            <div className="flex gap-1">
+              <button
+                onClick={() => navigate(`/app/payments/${row.original.id}/edit`)}
+                className="p-1 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded"
+                title="Edit"
+              >
+                ✎
+              </button>
+              <button
+                onClick={() => handleDelete(row)}
+                disabled={deletingId === row.original.id}
+                className="p-1 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 rounded disabled:opacity-40"
+                title="Delete"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           initialState={{ density: 'compact' }}
         />
       </MRTThemeProvider>
