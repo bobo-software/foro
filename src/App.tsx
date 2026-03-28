@@ -23,7 +23,6 @@ const ResetPassword = lazy(() => import('@pages/auth/ResetPassword').then((m) =>
 const Onboard = lazy(() => import('@pages/admin/Onboard').then((m) => ({ default: m.Onboard })));
 const AppLayout = lazy(() => import('./layouts/AppLayout').then((m) => ({ default: m.AppLayout })));
 const DashboardPage = lazy(() => import('@pages/admin/DashboardPage').then((m) => ({ default: m.DashboardPage })));
-const InvoiceListPage = lazy(() => import('@pages/admin/InvoiceListPage').then((m) => ({ default: m.InvoiceListPage })));
 const InvoiceDetailPage = lazy(() => import('@pages/admin/InvoiceDetailPage').then((m) => ({ default: m.InvoiceDetailPage })));
 const InvoiceFormPage = lazy(() => import('@pages/admin/InvoiceFormPage').then((m) => ({ default: m.InvoiceFormPage })));
 const CompaniesPage = lazy(() => import('@/pages/admin/companies/CompaniesPage').then((m) => ({ default: m.CompaniesPage })));
@@ -125,7 +124,7 @@ function App() {
                 <Route path=":id/edit" element={<CompanyFormPage />} />
               </Route>
               <Route path="invoices" element={<Outlet />}>
-                <Route index element={<InvoiceListPage />} />
+                <Route index element={<Navigate to="/app/dashboard" replace />} />
                 <Route path="create" element={<InvoiceFormPage />} />
                 <Route path=":id" element={<InvoiceDetailPage />} />
                 <Route path=":id/edit" element={<InvoiceFormPage />} />

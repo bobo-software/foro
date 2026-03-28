@@ -176,7 +176,6 @@ export function DashboardPage() {
           title="Invoices"
           value={stats.invoices}
           icon={<LuFileText className="w-5 h-5" />}
-          to="/app/invoices"
           loading={loading}
         />
         <StatCard
@@ -201,12 +200,6 @@ export function DashboardPage() {
             <LuTrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             Recent Invoices
           </h2>
-          <Link
-            to="/app/invoices"
-            className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 no-underline"
-          >
-            View all
-          </Link>
         </div>
         <div className="overflow-x-auto">
           {recentError && (
