@@ -32,7 +32,6 @@ const CompanyFormPage = lazy(() => import('@/pages/admin/companies/CompanyFormPa
 const ItemsPage = lazy(() => import('@pages/admin/ItemsPage').then((m) => ({ default: m.ItemsPage })));
 const ItemDetailPage = lazy(() => import('@pages/admin/ItemDetailPage').then((m) => ({ default: m.ItemDetailPage })));
 const ItemFormPage = lazy(() => import('@pages/admin/ItemFormPage').then((m) => ({ default: m.ItemFormPage })));
-const QuotationListPage = lazy(() => import('@pages/admin/QuotationListPage').then((m) => ({ default: m.QuotationListPage })));
 const QuotationDetailPage = lazy(() => import('@pages/admin/QuotationDetailPage').then((m) => ({ default: m.QuotationDetailPage })));
 const QuotationFormPage = lazy(() => import('@pages/admin/QuotationFormPage').then((m) => ({ default: m.QuotationFormPage })));
 const StatementsPage = lazy(() => import('@pages/admin/StatementsPage').then((m) => ({ default: m.StatementsPage })));
@@ -136,7 +135,7 @@ function App() {
                 <Route path=":id/edit" element={<ItemFormPage />} />
               </Route>
               <Route path="quotations" element={<Outlet />}>
-                <Route index element={<QuotationListPage />} />
+                <Route index element={<Navigate to="/app/dashboard" replace />} />
                 <Route path="create" element={<QuotationFormPage />} />
                 <Route path=":id" element={<QuotationDetailPage />} />
                 <Route path=":id/edit" element={<QuotationFormPage />} />

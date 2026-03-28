@@ -7,7 +7,7 @@ export function QuotationDetailPage() {
   const [searchParams] = useSearchParams();
   const fromCompany = searchParams.get('from_company');
   const quotationId = id ? parseInt(id, 10) : NaN;
-  const backPath = fromCompany ? `/app/companies/${fromCompany}?tab=quotations` : '/app/quotations';
+  const backPath = fromCompany ? `/app/companies/${fromCompany}?tab=quotations` : '/app/dashboard';
 
   if (!id || isNaN(quotationId)) {
     navigate(backPath, { replace: true });

@@ -182,7 +182,6 @@ export function DashboardPage() {
           title="Quotations"
           value={stats.quotations}
           icon={<LuQuote className="w-5 h-5" />}
-          to="/app/quotations"
           loading={loading}
         />
         <StatCard

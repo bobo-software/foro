@@ -12,7 +12,7 @@ export function QuotationFormPage() {
   const initialProjectId = projectIdParam ? parseInt(projectIdParam, 10) : undefined;
 
   const fromCompany = searchParams.get('from_company');
-  const companyBackPath = fromCompany ? `/app/companies/${fromCompany}?tab=quotations` : '/app/quotations';
+  const companyBackPath = fromCompany ? `/app/companies/${fromCompany}?tab=quotations` : '/app/dashboard';
 
   return (
     <QuotationForm

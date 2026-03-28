@@ -66,7 +66,6 @@ const AppSidebar = () => {
         {navLink('/app/dashboard', 'Dashboard')}
         {navLink('/app/companies', 'Companies')}
         {navLink('/app/items', 'Stock')}
-        {navLink('/app/quotations', 'Quotations')}
         {navLink('/app/payments', 'Payments')}
         {navLink('/app/statements', 'Statements')}
       </nav>
