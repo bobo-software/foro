@@ -13,6 +13,13 @@ import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
 
+const NO_PROJECT_ID = -1;
+const NO_PROJECT_OPTION: Project = {
+  id: NO_PROJECT_ID,
+  company_id: 0,
+  name: 'No project',
+};
+
 interface InvoiceFormProps {
   invoiceId?: number;
   initialCompanyId?: number;
@@ -28,7 +35,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   const [stockItems, setStockItems] = useState<Item[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(NO_PROJECT_OPTION);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
@@ -98,7 +105,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
           customer_vat_number: company.vat_number ?? '',
           delivery_address: company.address ?? '',
         }));
-        setSelectedProject(null);
+        setSelectedProject(NO_PROJECT_OPTION);
         setInitialProjectApplied(false);
         loadProjectsForCompany(company.id!);
         setInitialCompanyApplied(true);
@@ -191,13 +198,13 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
             const matchedProject = projectList.find((p) => p.id === invoice.project_id) ?? null;
             setSelectedProject(matchedProject);
           } else {
-            setSelectedProject(null);
+            setSelectedProject(NO_PROJECT_OPTION);
           }
         } else if (invoice.project_id != null) {
           const project = await ProjectService.findById(invoice.project_id);
           setSelectedProject(project);
         } else {
-          setSelectedProject(null);
+          setSelectedProject(NO_PROJECT_OPTION);
         }
         const rows: LineRow[] = (items || []).map((item) => ({
           id: `line-${item.id ?? Math.random()}`,
@@ -229,6 +236,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     return { linesSubtotal, discountAmount, subtotalAfterDiscount, taxAmount, total };
   }, [lineRows, globalDiscountPercent, formData.tax_rate]);
 
+  const projectOptions = useMemo(() => [NO_PROJECT_OPTION, ...projects], [projects]);
+
   useEffect(() => {
     setFormData((prev) => ({
       ...prev,
@@ -254,7 +263,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
       customer_vat_number: company.vat_number || '',
       delivery_address: prev.delivery_address || company.address || '',
     }));
-    setSelectedProject(null);
+    setSelectedProject(NO_PROJECT_OPTION);
     if (company.id != null) {
       loadProjectsForCompany(company.id).catch(() => setProjects([]));
     }
@@ -262,7 +271,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
-    setSelectedProject(null);
+    setSelectedProject(NO_PROJECT_OPTION);
     setProjects([]);
     setFormData((prev) => ({
       ...prev,
@@ -277,12 +286,17 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   }, []);
 
   const handleProjectSelect = useCallback((project: Project) => {
+    if (project.id === NO_PROJECT_ID) {
+      setSelectedProject(NO_PROJECT_OPTION);
+      setFormData((prev) => ({ ...prev, project_id: undefined }));
+      return;
+    }
     setSelectedProject(project);
     setFormData((prev) => ({ ...prev, project_id: project.id }));
   }, []);
 
   const handleProjectClear = useCallback(() => {
-    setSelectedProject(null);
+    setSelectedProject(NO_PROJECT_OPTION);
     setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
 
@@ -291,10 +305,6 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     setError(null);
     if (!formData.invoice_number || !formData.customer_name) {
       setError('Invoice number and company are required');
-      return;
-    }
-    if (!invoiceId && !formData.project_id) {
-      setError('Project is required for new invoices');
       return;
     }
     const items = lineRows
@@ -512,17 +522,16 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
               <div className="flex flex-row gap-2">
                 <div className={`${groupClass} mt-2 flex-1`}>
                   <AppLabledAutocomplete
-                    label="Project *"
-                    options={projects}
-                    value={selectedProject?.id != null ? String(selectedProject.id) : ''}
-                    displayValue={selectedProject?.name ?? ''}
+                    label="Project"
+                    options={projectOptions}
+                    value={selectedProject?.id != null ? String(selectedProject.id) : String(NO_PROJECT_ID)}
+                    displayValue={selectedProject?.name ?? 'No project'}
                     accessor="name"
                     valueAccessor="id"
                     onSelect={handleProjectSelect}
                     onClear={handleProjectClear}
-                    required={!invoiceId}
                     disabled={!selectedCompany}
-                    placeholder={selectedCompany ? 'Search project...' : 'Select company first'}
+                    placeholder={selectedCompany ? 'Search project...' : 'No project'}
                   />
                 </div>
                 <div className={`${groupClass} mt-2 flex-1`}>
