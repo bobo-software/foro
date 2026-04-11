@@ -10,6 +10,7 @@ import ItemService from '../../services/itemService';
 import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
+import AppText from '../text/AppText';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
 
@@ -27,7 +28,6 @@ interface QuotationFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
 }
-
 
 export function QuotationForm({ quotationId, initialCompanyId, initialProjectId, onSuccess, onCancel }: QuotationFormProps) {
   const [loading, setLoading] = useState(false);
@@ -91,7 +91,6 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     return projectList;
   }, []);
 
-  // Pre-select company if initialCompanyId is provided
   useEffect(() => {
     if (initialCompanyId && companies.length > 0 && !initialCompanyApplied && !quotationId) {
       const company = companies.find((c) => c.id === initialCompanyId);
@@ -130,10 +129,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     if (!quotationId) {
       QuotationService.getNextNumber()
         .then((nextNumber) => {
-          setFormData((prev) => ({
-            ...prev,
-            quotation_number: nextNumber,
-          }));
+          setFormData((prev) => ({ ...prev, quotation_number: nextNumber }));
         })
         .catch(() => {});
     }
@@ -234,13 +230,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     const taxRate = formData.tax_rate ?? 0;
     const taxAmount = (subtotalAfterDiscount * taxRate) / 100;
     const total = subtotalAfterDiscount + taxAmount;
-    return {
-      linesSubtotal,
-      discountAmount,
-      subtotalAfterDiscount,
-      taxAmount,
-      total,
-    };
+    return { linesSubtotal, discountAmount, subtotalAfterDiscount, taxAmount, total };
   }, [lineRows, globalDiscountPercent, formData.tax_rate]);
 
   const projectOptions = useMemo(() => [NO_PROJECT_OPTION, ...projects], [projects]);
@@ -295,17 +285,11 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   const handleProjectSelect = useCallback((project: Project) => {
     if (project.id === NO_PROJECT_ID) {
       setSelectedProject(NO_PROJECT_OPTION);
-      setFormData((prev) => ({
-        ...prev,
-        project_id: undefined,
-      }));
+      setFormData((prev) => ({ ...prev, project_id: undefined }));
       return;
     }
     setSelectedProject(project);
-    setFormData((prev) => ({
-      ...prev,
-      project_id: project.id,
-    }));
+    setFormData((prev) => ({ ...prev, project_id: project.id }));
   }, []);
 
   const handleProjectClear = useCallback(() => {
@@ -357,174 +341,167 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     }
   };
 
+  // Shared input + label styles aligned with the app design system
   const inputClass =
-    'w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
-const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
+    'w-full px-2.5 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
+  const labelClass = 'mb-1 text-xs font-medium text-slate-500 dark:text-slate-400';
   const groupClass = 'flex flex-col';
 
   if (loading && quotationId) {
     return (
-      <div className="max-w-[900px] mx-auto px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-        Loading quotation...
+      <div className="max-w-[900px] mx-auto px-4 py-3">
+        <AppText variant="caption">Loading quotation…</AppText>
       </div>
     );
   }
 
   return (
     <div className="max-w-[1200px] mx-auto">
-      <div className="flex items-center gap-2 mb-2">
+      {/* Page title row */}
+      <div className="flex items-center gap-2 mb-3">
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
-            className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded"
+            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded transition-colors"
             aria-label="Back"
           >
             ←
           </button>
         )}
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+        <AppText variant="h2">
           {quotationId ? 'Edit Quotation' : 'Create Quotation'}
-        </h2>
+        </AppText>
       </div>
+
       {error && (
-        <div className="mb-2 px-3 py-2 text-sm rounded-md bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300">
-          {error}
+        <div className="mb-3 px-3 py-2 rounded-md bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+          <AppText variant="caption" className="text-red-700 dark:text-red-300">{error}</AppText>
         </div>
       )}
+
       <form
         onSubmit={handleSubmit}
-        className="p-4 rounded-lg shadow bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+        className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-700"
       >
-        <div className="grid grid-cols-1 gap-x-4 gap-y-2 mb-2 md:grid-cols-4">
-          <div className={groupClass}>
-            <label htmlFor="quotation_number" className={labelClass}>
-              Quotation #
-            </label>
-            <input
-              id="quotation_number"
-              type="text"
-              value={formData.quotation_number}
-              onChange={(e) => handleChange('quotation_number', e.target.value)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="order_number" className={labelClass}>
-              Order #
-            </label>
-            <input
-              id="order_number"
-              type="text"
-              value={formData.order_number || ''}
-              onChange={(e) => handleChange('order_number', e.target.value)}
-              className={inputClass}
-              placeholder="PO number"
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="status" className={labelClass}>
-              Status
-            </label>
-            <select
-              id="status"
-              value={formData.status}
-              onChange={(e) => handleChange('status', e.target.value as QuotationStatus)}
-              className={inputClass}
-            >
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="accepted">Accepted</option>
-              <option value="declined">Declined</option>
-              <option value="expired">Expired</option>
-              <option value="converted">Converted</option>
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="currency" className={labelClass}>
-              Currency
-            </label>
-            <select
-              id="currency"
-              value={formData.currency || 'ZAR'}
-              onChange={(e) => handleChange('currency', e.target.value)}
-              className={inputClass}
-            >
-              {SUPPORTED_CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="issue_date" className={labelClass}>
-              Issue Date
-            </label>
-            <input
-              id="issue_date"
-              type="date"
-              value={formData.issue_date}
-              onChange={(e) => handleChange('issue_date', e.target.value)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="valid_until" className={labelClass}>
-              Valid Until
-            </label>
-            <input
-              id="valid_until"
-              type="date"
-              value={formData.valid_until || ''}
-              onChange={(e) => handleChange('valid_until', e.target.value || undefined)}
-              className={inputClass}
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="terms" className={labelClass}>
-              Terms
-            </label>
-            <select
-              id="terms"
-              value={formData.terms || ''}
-              onChange={(e) => handleChange('terms', e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select terms...</option>
-              <option value="C.O.D">C.O.D (Cash on Delivery)</option>
-              <option value="Net 7">Net 7 Days</option>
-              <option value="Net 14">Net 14 Days</option>
-              <option value="Net 30">Net 30 Days</option>
-              <option value="Net 60">Net 60 Days</option>
-              <option value="Due on Receipt">Due on Receipt</option>
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="delivery_conditions" className={labelClass}>
-              Delivery
-            </label>
-            <select
-              id="delivery_conditions"
-              value={formData.delivery_conditions || ''}
-              onChange={(e) => handleChange('delivery_conditions', e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select...</option>
-              <option value="collect">Collect</option>
-              <option value="deliver">Deliver</option>
-            </select>
+        {/* ── Header fields ── */}
+        <div className="p-4">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
+            Document
+          </AppText>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+            <div className={groupClass}>
+              <label htmlFor="quotation_number" className={labelClass}>Quotation #</label>
+              <input
+                id="quotation_number"
+                type="text"
+                value={formData.quotation_number}
+                onChange={(e) => handleChange('quotation_number', e.target.value)}
+                className={inputClass}
+                required
+              />
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="order_number" className={labelClass}>Order #</label>
+              <input
+                id="order_number"
+                type="text"
+                value={formData.order_number || ''}
+                onChange={(e) => handleChange('order_number', e.target.value)}
+                className={inputClass}
+                placeholder="PO number"
+              />
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="status" className={labelClass}>Status</label>
+              <select
+                id="status"
+                value={formData.status}
+                onChange={(e) => handleChange('status', e.target.value as QuotationStatus)}
+                className={inputClass}
+              >
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="accepted">Accepted</option>
+                <option value="declined">Declined</option>
+                <option value="expired">Expired</option>
+                <option value="converted">Converted</option>
+              </select>
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="currency" className={labelClass}>Currency</label>
+              <select
+                id="currency"
+                value={formData.currency || 'ZAR'}
+                onChange={(e) => handleChange('currency', e.target.value)}
+                className={inputClass}
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="issue_date" className={labelClass}>Issue Date</label>
+              <input
+                id="issue_date"
+                type="date"
+                value={formData.issue_date}
+                onChange={(e) => handleChange('issue_date', e.target.value)}
+                className={inputClass}
+                required
+              />
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="valid_until" className={labelClass}>Valid Until</label>
+              <input
+                id="valid_until"
+                type="date"
+                value={formData.valid_until || ''}
+                onChange={(e) => handleChange('valid_until', e.target.value || undefined)}
+                className={inputClass}
+              />
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="terms" className={labelClass}>Terms</label>
+              <select
+                id="terms"
+                value={formData.terms || ''}
+                onChange={(e) => handleChange('terms', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select terms…</option>
+                <option value="C.O.D">C.O.D (Cash on Delivery)</option>
+                <option value="Net 7">Net 7 Days</option>
+                <option value="Net 14">Net 14 Days</option>
+                <option value="Net 30">Net 30 Days</option>
+                <option value="Net 60">Net 60 Days</option>
+                <option value="Due on Receipt">Due on Receipt</option>
+              </select>
+            </div>
+            <div className={groupClass}>
+              <label htmlFor="delivery_conditions" className={labelClass}>Delivery</label>
+              <select
+                id="delivery_conditions"
+                value={formData.delivery_conditions || ''}
+                onChange={(e) => handleChange('delivery_conditions', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select…</option>
+                <option value="collect">Collect</option>
+                <option value="deliver">Deliver</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+        {/* ── Company ── */}
+        <div className="p-4">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
             Company
-          </h3>
+          </AppText>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
+            <div className="space-y-2">
               <AppLabledAutocomplete
                 label="Company *"
                 options={companies}
@@ -535,17 +512,19 @@ const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
                 onSelect={handleCompanySelect}
                 onClear={handleCompanyClear}
                 required
-                placeholder="Search company..."
+                placeholder="Search company…"
               />
               {(formData.customer_email || formData.customer_address) && (
-                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                  {formData.customer_email && <div>{formData.customer_email}</div>}
-                  {formData.customer_address && <div>{formData.customer_address}</div>}
+                <div className="space-y-0.5">
+                  {formData.customer_email && (
+                    <AppText variant="caption">{formData.customer_email}</AppText>
+                  )}
+                  {formData.customer_address && (
+                    <AppText variant="caption">{formData.customer_address}</AppText>
+                  )}
                 </div>
               )}
-              <div className="flex flex-row gap-2">
-
-              <div className={`${groupClass} mt-2 flex-1`}>
+              <div className="grid grid-cols-2 gap-3">
                 <AppLabledAutocomplete
                   label="Project"
                   options={projectOptions}
@@ -556,44 +535,40 @@ const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
                   onSelect={handleProjectSelect}
                   onClear={handleProjectClear}
                   disabled={!selectedCompany}
-                  placeholder={selectedCompany ? 'Search project...' : 'No project'}
+                  placeholder={selectedCompany ? 'Search project…' : 'No project'}
                 />
-              </div>
-              <div className={`${groupClass} mt-2 flex-1`}>
-                <label htmlFor="customer_vat_number" className={labelClass}>
-                  Company VAT #
-                </label>
-                <input
-                  id="customer_vat_number"
-                  type="text"
-                  value={formData.customer_vat_number || ''}
-                  onChange={(e) => handleChange('customer_vat_number', e.target.value)}
-                  className={inputClass}
-                  placeholder="VAT number"
-                />
-              </div>
+                <div className={groupClass}>
+                  <label htmlFor="customer_vat_number" className={labelClass}>Company VAT #</label>
+                  <input
+                    id="customer_vat_number"
+                    type="text"
+                    value={formData.customer_vat_number || ''}
+                    onChange={(e) => handleChange('customer_vat_number', e.target.value)}
+                    className={inputClass}
+                    placeholder="VAT number"
+                  />
+                </div>
               </div>
             </div>
             <div className={groupClass}>
-              <label htmlFor="delivery_address" className={labelClass}>
-                Delivery address
-              </label>
+              <label htmlFor="delivery_address" className={labelClass}>Delivery address</label>
               <textarea
                 id="delivery_address"
                 value={formData.delivery_address || ''}
                 onChange={(e) => handleChange('delivery_address', e.target.value)}
-                rows={3}
-                className={`${inputClass} resize-y min-h-[80px]`}
+                rows={5}
+                className={`${inputClass} resize-y`}
                 placeholder="Delivery address (if different from billing)"
               />
             </div>
           </div>
         </div>
 
-        <div className="pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+        {/* ── Line items ── */}
+        <div className="p-4">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
             Line items
-          </h3>
+          </AppText>
           <LineItemsEditor
             rows={lineRows}
             stockItems={stockItems}
@@ -602,11 +577,12 @@ const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
           />
         </div>
 
-        <div className="pb-3 mb-4">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+        {/* ── Totals ── */}
+        <div className="p-4">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
             Totals
-          </h3>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-2 mb-2 md:grid-cols-2">
+          </AppText>
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div className={groupClass}>
               <label className={labelClass}>Global discount %</label>
               <input
@@ -615,76 +591,72 @@ const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
                 min={0}
                 max={100}
                 value={globalDiscountPercent || ''}
-                onChange={(e) =>
-                  setGlobalDiscountPercent(parseFloat(e.target.value) || 0)
-                }
+                onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
                 className={inputClass}
               />
             </div>
             <div className={groupClass}>
-              <label htmlFor="tax_rate" className={labelClass}>
-                Tax %
-              </label>
+              <label htmlFor="tax_rate" className={labelClass}>Tax %</label>
               <input
                 id="tax_rate"
                 type="number"
                 step="0.01"
                 min={0}
                 value={formData.tax_rate || ''}
-                onChange={(e) =>
-                  handleChange('tax_rate', parseFloat(e.target.value) || 0)
-                }
+                onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
                 className={inputClass}
               />
             </div>
           </div>
-          <div className="rounded-md bg-gray-50 dark:bg-gray-700/50 p-3 space-y-1 text-sm">
-            <div className="flex justify-between text-gray-700 dark:text-gray-300">
-              <span>Subtotal (lines)</span>
-              <span>{formatCurrency(totals.linesSubtotal, formData.currency)}</span>
+          <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 space-y-1.5">
+            <div className="flex justify-between">
+              <AppText variant="body">Subtotal (lines)</AppText>
+              <AppText variant="body">{formatCurrency(totals.linesSubtotal, formData.currency)}</AppText>
             </div>
             {globalDiscountPercent > 0 && (
               <>
-                <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                  <span>Discount ({globalDiscountPercent}%)</span>
-                  <span>-{formatCurrency(totals.discountAmount, formData.currency)}</span>
+                <div className="flex justify-between">
+                  <AppText variant="caption">Discount ({globalDiscountPercent}%)</AppText>
+                  <AppText variant="caption">−{formatCurrency(totals.discountAmount, formData.currency)}</AppText>
                 </div>
-                <div className="flex justify-between text-gray-700 dark:text-gray-300">
-                  <span>Subtotal after discount</span>
-                  <span>{formatCurrency(totals.subtotalAfterDiscount, formData.currency)}</span>
+                <div className="flex justify-between">
+                  <AppText variant="body">Subtotal after discount</AppText>
+                  <AppText variant="body">{formatCurrency(totals.subtotalAfterDiscount, formData.currency)}</AppText>
                 </div>
               </>
             )}
-            <div className="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Tax ({(formData.tax_rate ?? 0)}%)</span>
-              <span>{formatCurrency(totals.taxAmount, formData.currency)}</span>
+            <div className="flex justify-between">
+              <AppText variant="caption">Tax ({formData.tax_rate ?? 0}%)</AppText>
+              <AppText variant="caption">{formatCurrency(totals.taxAmount, formData.currency)}</AppText>
             </div>
-            <div className="flex justify-between font-semibold text-base pt-1 border-t border-gray-200 dark:border-gray-600">
-              <span>Total</span>
-              <span>{formatCurrency(totals.total, formData.currency)}</span>
+            <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+              <AppText variant="h3">Total</AppText>
+              <AppText variant="h3">{formatCurrency(totals.total, formData.currency)}</AppText>
             </div>
           </div>
         </div>
 
-        <div className={groupClass}>
-          <label htmlFor="notes" className={labelClass}>
+        {/* ── Notes ── */}
+        <div className="p-4">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
             Notes
-          </label>
+          </AppText>
           <textarea
             id="notes"
             value={formData.notes}
             onChange={(e) => handleChange('notes', e.target.value)}
             rows={2}
-            className={`${inputClass} resize-y min-h-10`}
+            className={`${inputClass} resize-y`}
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-2 pt-3 mt-4 border-t border-gray-200 dark:border-gray-700 sm:flex-row sm:justify-end">
+        {/* ── Actions ── */}
+        <div className="flex flex-col-reverse gap-2 px-4 py-3 sm:flex-row sm:justify-end">
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              className="w-full px-4 py-1.5 text-sm font-medium rounded-md transition-colors sm:w-auto bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+              className="w-full px-4 py-1.5 text-sm font-medium rounded-lg transition-colors sm:w-auto border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
             >
               Cancel
             </button>
@@ -692,9 +664,9 @@ const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-4 py-1.5 text-sm font-medium text-white rounded-md transition-colors sm:w-auto bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full px-4 py-1.5 text-sm font-medium text-white rounded-lg transition-colors sm:w-auto bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {loading ? 'Saving...' : quotationId ? 'Update Quotation' : 'Create Quotation'}
+            {loading ? 'Saving…' : quotationId ? 'Update Quotation' : 'Create Quotation'}
           </button>
         </div>
       </form>
