@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuPlus, LuTrash2 } from 'react-icons/lu';
+import { LuPlus, LuTrash2, LuPackage, LuLayers, LuInfo } from 'react-icons/lu';
 import ItemService from '@/services/itemService';
 import StockItemBomService from '@/services/stockItemBomService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
@@ -9,6 +9,8 @@ import type { CreateItemDto, Item, StockItemType } from '@/types/item';
 import { itemFormWithBomSchema } from '@/validation/schemas';
 import { wouldIntroduceBomCycle } from '@/utils/bomGraph';
 import AppLabledAutocomplete from '@/components/forms/AppLabledAutocomplete';
+import AppText from '@/components/text/AppText';
+import { formatCurrency } from '@/utils/currency';
 import toast from 'react-hot-toast';
 
 type BomRow = {
@@ -37,6 +39,9 @@ function newBomRow(): BomRow {
   };
 }
 
+const INPUT_CLS =
+  'mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none';
+
 export function ItemFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -50,9 +55,7 @@ export function ItemFormPage() {
 
   const numericId = id ? Number(id) : undefined;
 
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems, businessId]);
+  useEffect(() => { fetchItems(); }, [fetchItems, businessId]);
 
   const componentOptions = useMemo(() => {
     if (numericId == null) return stockItems;
@@ -77,12 +80,8 @@ export function ItemFormPage() {
           });
         }
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [id]);
 
   useEffect(() => {
@@ -91,10 +90,6 @@ export function ItemFormPage() {
     StockItemBomService.findByParentId(numericId)
       .then((lines) => {
         if (cancelled) return;
-        if (lines.length === 0) {
-          setBomRows([]);
-          return;
-        }
         setBomRows(
           lines.map((l) => {
             const comp = stockItems.find((i) => i.id === l.component_item_id);
@@ -107,48 +102,69 @@ export function ItemFormPage() {
           }),
         );
       })
-      .catch(() => {
-        if (!cancelled) toast.error('Failed to load bill of materials');
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => { if (!cancelled) toast.error('Failed to load bill of materials'); });
+    return () => { cancelled = true; };
   }, [id, numericId, stockItems]);
 
-  const update = (key: keyof typeof form, value: string | number | undefined) => {
+  const update = (key: keyof typeof form, value: string | number | undefined) =>
     setForm((prev) => ({ ...prev, [key]: value }));
-  };
 
   const setItemType = (t: StockItemType) => {
     setForm((prev) => ({ ...prev, item_type: t }));
-    if (t === 'single') {
-      setBomRows([]);
-    } else if (bomRows.length === 0) {
-      setBomRows([newBomRow()]);
-    }
+    if (t === 'single') setBomRows([]);
+    else if (bomRows.length === 0) setBomRows([newBomRow()]);
   };
 
-  const addBomRow = useCallback(() => {
-    setBomRows((r) => [...r, newBomRow()]);
-  }, []);
-
-  const removeBomRow = useCallback((key: string) => {
-    setBomRows((r) => r.filter((row) => row.key !== key));
-  }, []);
-
-  const updateBomRow = useCallback((key: string, patch: Partial<BomRow>) => {
-    setBomRows((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
-  }, []);
+  const addBomRow = useCallback(() => setBomRows((r) => [...r, newBomRow()]), []);
+  const removeBomRow = useCallback((key: string) =>
+    setBomRows((r) => r.filter((row) => row.key !== key)), []);
+  const updateBomRow = useCallback((key: string, patch: Partial<BomRow>) =>
+    setBomRows((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row))), []);
 
   const onSelectComponent = useCallback(
-    (rowKey: string) => (item: Item) => {
-      updateBomRow(rowKey, {
-        component_item_id: item.id,
-        displayName: item.name,
-      });
-    },
+    (rowKey: string) => (item: Item) =>
+      updateBomRow(rowKey, { component_item_id: item.id, displayName: item.name }),
     [updateBomRow],
   );
+
+  // Live BOM cost breakdown
+  const bomCostLines = useMemo(() =>
+    bomRows
+      .filter((r) => r.component_item_id != null)
+      .map((r) => {
+        const item = stockItems.find((i) => i.id === r.component_item_id);
+        const unitCost = item?.cost_price != null ? Number(item.cost_price) : null;
+        return {
+          key: r.key,
+          name: r.displayName || 'Unknown',
+          qty: r.quantity_per,
+          unitCost,
+          lineTotal: unitCost != null ? unitCost * r.quantity_per : null,
+        };
+      }),
+    [bomRows, stockItems],
+  );
+
+  const bomTotalCost = useMemo(() =>
+    bomCostLines.every((l) => l.lineTotal != null)
+      ? bomCostLines.reduce((sum, l) => sum + (l.lineTotal ?? 0), 0)
+      : null,
+    [bomCostLines],
+  );
+
+  const hasPartialCosts = bomCostLines.length > 0 && bomCostLines.some((l) => l.lineTotal == null);
+
+  // How many finished units can be manufactured from current component stock
+  const bomManufacturable = useMemo(() => {
+    const activeRows = bomRows.filter((r) => r.component_item_id != null && r.quantity_per > 0);
+    if (activeRows.length === 0) return null;
+    const limits = activeRows.map((r) => {
+      const item = stockItems.find((i) => i.id === r.component_item_id);
+      const stock = item?.quantity != null ? Number(item.quantity) : 0;
+      return Math.floor(stock / r.quantity_per);
+    });
+    return Math.min(...limits);
+  }, [bomRows, stockItems]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,10 +175,7 @@ export function ItemFormPage() {
       form.item_type === 'manufactured'
         ? bomRows
             .filter((r) => r.component_item_id != null && r.quantity_per > 0)
-            .map((r) => ({
-              component_item_id: r.component_item_id!,
-              quantity_per: r.quantity_per,
-            }))
+            .map((r) => ({ component_item_id: r.component_item_id!, quantity_per: r.quantity_per }))
         : [];
 
     const parsed = itemFormWithBomSchema.safeParse({
@@ -178,8 +191,7 @@ export function ItemFormPage() {
     });
 
     if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      toast.error(first?.message ?? 'Invalid form');
+      toast.error(parsed.error.issues[0]?.message ?? 'Invalid form');
       return;
     }
 
@@ -210,23 +222,18 @@ export function ItemFormPage() {
         const itemId = Number(id);
         if (parsed.data.item_type === 'manufactured') {
           const allLines = await StockItemBomService.findAll({ limit: 20000 });
-          const edges = allLines.map((l) => ({
-            parent_item_id: l.parent_item_id,
-            component_item_id: l.component_item_id,
-          }));
+          const edges = allLines.map((l) => ({ parent_item_id: l.parent_item_id, component_item_id: l.component_item_id }));
           if (wouldIntroduceBomCycle(itemId, bom_lines.map((l) => l.component_item_id), edges)) {
             toast.error('This bill of materials would create a circular dependency');
             setSaving(false);
             return;
           }
         }
-
         await ItemService.update(itemId, payload);
-        if (parsed.data.item_type === 'single') {
-          await StockItemBomService.deleteByParentId(itemId);
-        } else {
-          await StockItemBomService.replaceForParent(itemId, bom_lines);
-        }
+        await StockItemBomService.replaceForParent(
+          itemId,
+          parsed.data.item_type === 'manufactured' ? bom_lines : [],
+        );
         toast.success('Item updated');
         navigate(`/app/items/${id}`);
       } else {
@@ -239,14 +246,11 @@ export function ItemFormPage() {
         }
         if (parsed.data.item_type === 'manufactured') {
           const allLines = await StockItemBomService.findAll({ limit: 20000 });
-          const edges = allLines.map((l) => ({
-            parent_item_id: l.parent_item_id,
-            component_item_id: l.component_item_id,
-          }));
+          const edges = allLines.map((l) => ({ parent_item_id: l.parent_item_id, component_item_id: l.component_item_id }));
           if (wouldIntroduceBomCycle(newId, bom_lines.map((l) => l.component_item_id), edges)) {
             toast.error('This bill of materials would create a circular dependency');
             await ItemService.update(newId, { item_type: 'single' });
-            await StockItemBomService.deleteByParentId(newId);
+            await StockItemBomService.replaceForParent(newId, []);
             setSaving(false);
             return;
           }
@@ -264,225 +268,329 @@ export function ItemFormPage() {
 
   const hasNoBusiness = !isEdit && businessId == null;
 
-  if (loading) {
-    return <div className="text-slate-500">Loading…</div>;
-  }
+  if (loading) return <AppText variant="caption">Loading…</AppText>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800">{isEdit ? 'Edit item' : 'New item'}</h1>
-        <Link
-          to="/app/items"
-          className="text-sm font-medium text-indigo-600 hover:text-indigo-500 no-underline"
-        >
+        <AppText variant="h1">{isEdit ? 'Edit stock item' : 'New item'}</AppText>
+        <Link to="/app/items" className="text-sm font-medium text-indigo-600 hover:text-indigo-500 no-underline">
           ← Back to stock
         </Link>
       </div>
+
+      {/* No-business warning */}
       {hasNoBusiness && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           Add your business first before creating items.{' '}
           <Link to="/onboard" className="font-medium text-amber-900 underline hover:no-underline">
             Add business
           </Link>
         </div>
       )}
-      <form
-        onSubmit={handleSubmit}
-        className="max-w-2xl space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-      >
-        <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-slate-700">Item type</legend>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-              <input
-                type="radio"
-                name="item_type"
-                checked={form.item_type === 'single'}
-                onChange={() => setItemType('single')}
-                className="text-indigo-600"
-              />
-              Single — raw stock or simple SKU
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-              <input
-                type="radio"
-                name="item_type"
-                checked={form.item_type === 'manufactured'}
-                onChange={() => setItemType('manufactured')}
-                className="text-indigo-600"
-              />
-              Manufactured — made from other stock items
-            </label>
+
+      <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+
+        {/* Item type */}
+        <div className="space-y-2">
+          <AppText variant="label">Item type</AppText>
+          <div className="grid grid-cols-2 gap-3 sm:max-w-lg">
+            {([
+              { value: 'single' as const, Icon: LuPackage, title: 'Single', desc: 'Raw stock or simple SKU' },
+              { value: 'manufactured' as const, Icon: LuLayers, title: 'Manufactured', desc: 'Made from other stock items' },
+            ]).map(({ value, Icon, title, desc }) => {
+              const active = form.item_type === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setItemType(value)}
+                  className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                    active
+                      ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 shrink-0 ${active ? 'text-indigo-600' : 'text-slate-400'}`} strokeWidth={1.5} />
+                  <div>
+                    <p className={`text-sm font-semibold ${active ? 'text-indigo-700' : 'text-slate-800'}`}>{title}</p>
+                    <AppText variant="caption">{desc}</AppText>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </fieldset>
+        </div>
+
+        <div className="h-px bg-slate-100" />
+
+        {/* Identity */}
+        <div className={`grid gap-4 ${form.item_type === 'manufactured' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-slate-600">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="name"
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => update('name', e.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label htmlFor="sku" className="block text-sm font-medium text-slate-600">SKU</label>
+            <input
+              id="sku"
+              type="text"
+              value={form.sku ?? ''}
+              onChange={(e) => update('sku', e.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
+          {form.item_type === 'single' && (
+            <div>
+              <label htmlFor="quantity" className="block text-sm font-medium text-slate-600">Stock quantity</label>
+              <input
+                id="quantity"
+                type="number"
+                min={0}
+                step={1}
+                value={form.quantity ?? 0}
+                onChange={(e) => update('quantity', e.target.value ? Number(e.target.value) : 0)}
+                className={INPUT_CLS}
+              />
+            </div>
+          )}
+        </div>
 
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-slate-700">Name *</label>
-          <input
-            id="name"
-            type="text"
-            required
-            value={form.name}
-            onChange={(e) => update('name', e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="sku" className="block text-sm font-medium text-slate-700">SKU</label>
-          <input
-            id="sku"
-            type="text"
-            value={form.sku ?? ''}
-            onChange={(e) => update('sku', e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="quantity" className="block text-sm font-medium text-slate-700">Quantity</label>
-          <input
-            id="quantity"
-            type="number"
-            min={0}
-            step={1}
-            value={form.quantity ?? 0}
-            onChange={(e) => update('quantity', e.target.value ? Number(e.target.value) : 0)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="unit_price" className="block text-sm font-medium text-slate-700">Selling price</label>
-          <input
-            id="unit_price"
-            type="number"
-            min={0}
-            step="0.01"
-            value={form.unit_price === 0 ? '' : form.unit_price}
-            onChange={(e) => update('unit_price', e.target.value ? Number(e.target.value) : 0)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="cost_price" className="block text-sm font-medium text-slate-700">Cost price (optional)</label>
-          <input
-            id="cost_price"
-            type="number"
-            min={0}
-            step="0.01"
-            value={form.cost_price ?? ''}
-            onChange={(e) => update('cost_price', e.target.value ? Number(e.target.value) : undefined)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="tax_rate" className="block text-sm font-medium text-slate-700">Tax rate (%)</label>
-          <input
-            id="tax_rate"
-            type="number"
-            min={0}
-            max={100}
-            step="0.01"
-            value={form.tax_rate ?? ''}
-            onChange={(e) => update('tax_rate', e.target.value ? Number(e.target.value) : undefined)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-slate-700">Description</label>
+          <label htmlFor="description" className="block text-sm font-medium text-slate-600">Description</label>
           <textarea
             id="description"
-            rows={3}
+            rows={2}
             value={form.description ?? ''}
             onChange={(e) => update('description', e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className={INPUT_CLS}
           />
         </div>
 
+        <div className="h-px bg-slate-100" />
+
+        {/* Pricing */}
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="unit_price" className="block text-sm font-medium text-slate-600">Selling price</label>
+            <input
+              id="unit_price"
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.unit_price === 0 ? '' : form.unit_price}
+              onChange={(e) => update('unit_price', e.target.value ? Number(e.target.value) : 0)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label htmlFor="cost_price" className="block text-sm font-medium text-slate-600">Cost price (per item / unit)</label>
+            <input
+              id="cost_price"
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.cost_price ?? ''}
+              onChange={(e) => update('cost_price', e.target.value ? Number(e.target.value) : undefined)}
+              className={INPUT_CLS}
+            />
+          </div>
+          <div>
+            <label htmlFor="tax_rate" className="block text-sm font-medium text-slate-600">Tax rate (%)</label>
+            <input
+              id="tax_rate"
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              value={form.tax_rate ?? ''}
+              onChange={(e) => update('tax_rate', e.target.value ? Number(e.target.value) : undefined)}
+              className={INPUT_CLS}
+            />
+          </div>
+        </div>
+
+        {/* Bill of materials */}
         {form.item_type === 'manufactured' && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-600 dark:bg-slate-800/40">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Bill of materials</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Quantities are per one unit of this item.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={addBomRow}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
-              >
-                <LuPlus className="h-3.5 w-3.5" />
-                Add line
-              </button>
-            </div>
+          <>
+            <div className="h-px bg-slate-100" />
             <div className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <AppText variant="h3">Bill of materials</AppText>
+                  <AppText variant="caption">Quantities per one finished unit</AppText>
+                </div>
+                <div className="flex items-center gap-3">
+                  {bomManufacturable != null && (
+                    <div className={`rounded-lg border px-3 py-1.5 text-center ${
+                      bomManufacturable === 0
+                        ? 'border-red-200 bg-red-50'
+                        : 'border-emerald-200 bg-emerald-50'
+                    }`}>
+                      <p className={`text-lg font-bold leading-none ${bomManufacturable === 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                        {bomManufacturable}
+                      </p>
+                      <p className={`mt-0.5 text-xs ${bomManufacturable === 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                        can make
+                      </p>
+                    </div>
+                  )}
+                  <button
+                  type="button"
+                  onClick={addBomRow}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  <LuPlus className="h-3.5 w-3.5" />
+                  Add line
+                </button>
+                </div>
+              </div>
+
+              {/* BOM rows */}
               {bomRows.length === 0 && (
-                <p className="text-sm text-slate-500">Add at least one component.</p>
+                <AppText variant="caption">Add at least one component.</AppText>
               )}
               {bomRows.map((row) => (
                 <div
                   key={row.key}
-                  className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-end dark:border-slate-600 dark:bg-slate-900"
+                  className="grid items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                  style={{ gridTemplateColumns: '1fr 140px 36px' }}
                 >
-                  <div className="min-w-0 flex-1">
-                    <AppLabledAutocomplete
-                      label="Component"
-                      options={componentOptions}
-                      value={row.component_item_id != null ? String(row.component_item_id) : ''}
-                      displayValue={row.displayName}
-                      accessor="name"
-                      valueAccessor="id"
-                      onSelect={onSelectComponent(row.key)}
-                      onClear={() =>
-                        updateBomRow(row.key, { component_item_id: undefined, displayName: '' })
-                      }
-                      placeholder="Search stock item…"
-                      className="mb-0"
-                    />
-                  </div>
-                  <div className="w-full sm:w-32">
-                    <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                      Qty per unit
-                    </label>
+                  <AppLabledAutocomplete
+                    label="Component"
+                    options={componentOptions}
+                    value={row.component_item_id != null ? String(row.component_item_id) : ''}
+                    displayValue={row.displayName}
+                    accessor="name"
+                    valueAccessor="id"
+                    onSelect={onSelectComponent(row.key)}
+                    onClear={() => updateBomRow(row.key, { component_item_id: undefined, displayName: '' })}
+                    placeholder="Search stock item…"
+                    className="mb-0"
+                  />
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500">Qty / unit</label>
                     <input
                       type="number"
                       min={0.0001}
                       step="any"
                       value={row.quantity_per || ''}
                       onChange={(e) =>
-                        updateBomRow(row.key, {
-                          quantity_per: e.target.value ? Number(e.target.value) : 0,
-                        })
+                        updateBomRow(row.key, { quantity_per: e.target.value ? Number(e.target.value) : 0 })
                       }
-                      className="block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className={INPUT_CLS}
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => removeBomRow(row.key)}
-                    className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
                     aria-label="Remove line"
+                    className="self-end rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
                   >
                     <LuTrash2 className="h-4 w-4" />
                   </button>
                 </div>
               ))}
+
+              {/* Cost breakdown */}
+              {bomCostLines.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-white">
+                  {/* Header row */}
+                  <div className="grid grid-cols-4 gap-3 border-b border-slate-100 px-4 py-2">
+                    <span className="col-span-2 text-xs font-medium text-slate-400">Component</span>
+                    <span className="text-right text-xs font-medium text-slate-400">Unit cost</span>
+                    <span className="text-right text-xs font-medium text-slate-400">Line total</span>
+                  </div>
+
+                  {/* Lines */}
+                  {bomCostLines.map((line) => (
+                    <div key={line.key} className="grid grid-cols-4 gap-3 px-4 py-2">
+                      <span className="col-span-2 truncate text-sm text-slate-700">{line.name}</span>
+                      <span className="text-right text-sm text-slate-500">
+                        {line.unitCost != null ? formatCurrency(line.unitCost) : '—'}
+                        {line.unitCost != null && (
+                          <span className="ml-1 text-xs text-slate-400">× {line.qty}</span>
+                        )}
+                      </span>
+                      <span className={`text-right text-sm font-medium ${line.lineTotal != null ? 'text-slate-800' : 'text-slate-400'}`}>
+                        {line.lineTotal != null ? formatCurrency(line.lineTotal) : '—'}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Total */}
+                  <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-2.5 rounded-b-lg">
+                    <div className="flex items-center gap-1.5">
+                      <AppText variant="label" className="text-slate-700!">Est. materials cost per unit</AppText>
+                      {hasPartialCosts && (
+                        <span title="Some components are missing a cost price">
+                          <LuInfo className="h-3.5 w-3.5 text-amber-500" />
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-base font-semibold text-slate-800">
+                      {bomTotalCost != null ? formatCurrency(bomTotalCost) : '—'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Margin hint */}
+              {bomTotalCost != null && form.unit_price > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
+                  <div className="flex-1">
+                    <AppText variant="caption">
+                      Selling price{' '}
+                      <span className="font-medium text-slate-700">{formatCurrency(Number(form.unit_price))}</span>
+                      {' '}— materials cost{' '}
+                      <span className="font-medium text-slate-700">{formatCurrency(bomTotalCost)}</span>
+                    </AppText>
+                  </div>
+                  <div className="text-right">
+                    {(() => {
+                      const margin = Number(form.unit_price) - bomTotalCost;
+                      const pct = Number(form.unit_price) > 0 ? (margin / Number(form.unit_price)) * 100 : 0;
+                      const isPositive = margin >= 0;
+                      return (
+                        <div>
+                          <p className={`text-sm font-semibold ${isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {isPositive ? '+' : ''}{formatCurrency(margin)}
+                          </p>
+                          <p className={`text-xs ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {pct.toFixed(1)}% margin
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          </>
         )}
 
-        <div className="flex gap-3 pt-2">
+        {/* Actions */}
+        <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
           <button
             type="submit"
             disabled={saving || hasNoBusiness}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {saving ? 'Saving…' : isEdit ? 'Update item' : 'Create item'}
           </button>
           <Link
             to="/app/items"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 no-underline hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 no-underline hover:bg-slate-50"
           >
             Cancel
           </Link>

@@ -72,10 +72,18 @@ export function ItemList() {
       },
       {
         id: 'unit_price',
-        header: 'Selling price',
+        header: 'Stock price',
         align: 'right',
-        cellClassName: 'text-slate-800 dark:text-slate-100',
-        render: (row) => formatCurrency(Number(row.unit_price)),
+        cellClassName: 'tabular-nums text-slate-800 dark:text-slate-100',
+        render: (row) => formatCurrency(Number(row.unit_price ?? 0)),
+      },
+      {
+        id: 'cost_price',
+        header: 'Cost price',
+        align: 'right',
+        cellClassName: 'tabular-nums text-slate-600 dark:text-slate-300',
+        render: (row) =>
+          row.cost_price != null ? formatCurrency(Number(row.cost_price)) : '—',
       },
       {
         id: 'tax_rate',

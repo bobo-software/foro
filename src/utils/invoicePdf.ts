@@ -3,7 +3,7 @@ import { useInvoiceStore } from '../stores/data/InvoiceStore';
 import InvoiceService from '../services/invoiceService';
 import { isCreditNoteInvoice } from './invoiceLedger';
 import type { Business } from '../types/business';
-import type { DocumentTemplateId } from '../types/documentTemplate';
+import type { DocumentTemplateConfig } from '../types/documentTemplate';
 import { getTemplateConfig } from '../types/documentTemplate';
 import { fetchLogoAsBase64 } from './pdfLogoHelper';
 import {
@@ -21,11 +21,11 @@ export async function downloadInvoicePdfById(invoiceId: number): Promise<void> {
   await generateInvoicePdf(invoice, items, business);
 }
 
+/** Invoices always use the classic PDF layout (matches the on-screen invoice view). */
 export async function generateInvoicePdf(
   invoice: Invoice,
   lineItems: InvoiceItem[] = [],
   business?: Business | null,
-  templateOverride?: DocumentTemplateId,
 ): Promise<void> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF();
@@ -41,8 +41,13 @@ export async function generateInvoicePdf(
     }
   }
 
-  // Resolve template config — use override if provided, otherwise business preference
-  const config = getTemplateConfig(templateOverride ?? business?.document_template);
+  const base = getTemplateConfig('classic');
+  const config: DocumentTemplateConfig = {
+    ...base,
+    compactTypography: true,
+    logoMaxWidth: base.logoMaxWidth * 0.82,
+    logoMaxHeight: base.logoMaxHeight * 0.82,
+  };
   const curr = invoice.currency || 'ZAR';
 
   // Fetch logo if enabled

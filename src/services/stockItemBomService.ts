@@ -34,6 +34,10 @@ export class StockItemBomService {
   }
 
   static async deleteByParentId(parentItemId: number): Promise<{ rowCount: number }> {
+    const existing = await this.findByParentId(parentItemId);
+    if (existing.length === 0) {
+      return { rowCount: 0 };
+    }
     const response = await skaftinClient.delete<{ rowCount: number }>(
       `/app-api/database/tables/${TABLE_NAME}/delete`,
       { where: { parent_item_id: parentItemId } },
@@ -49,12 +53,24 @@ export class StockItemBomService {
     return response.data;
   }
 
-  /** Deletes all BOM rows for the parent, then inserts the given lines. */
+  /**
+   * Syncs BOM rows for a parent item.
+   * Skips DELETE when there are no existing rows (many APIs error on delete with 0 matches).
+   */
   static async replaceForParent(
     parentItemId: number,
     lines: Array<{ component_item_id: number; quantity_per: number }>,
   ): Promise<void> {
-    await this.deleteByParentId(parentItemId);
+    const existing = await this.findByParentId(parentItemId);
+    if (existing.length === 0 && lines.length === 0) return;
+
+    if (existing.length > 0) {
+      await skaftinClient.delete<{ rowCount: number }>(
+        `/app-api/database/tables/${TABLE_NAME}/delete`,
+        { where: { parent_item_id: parentItemId } },
+      );
+    }
+
     for (const line of lines) {
       await this.insertLine({
         parent_item_id: parentItemId,

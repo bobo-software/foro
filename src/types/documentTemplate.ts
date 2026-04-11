@@ -58,6 +58,13 @@ export interface DocumentTemplateConfig {
   /* ---- Footer ---- */
   /** Draw a thin accent line above the footer */
   footerAccentLine: boolean;
+
+  /**
+   * Invoice PDF export only: smaller fonts and tighter vertical spacing so the
+   * downloaded PDF matches compact browser print (does not affect quotations /
+   * settings preview unless they opt in).
+   */
+  compactTypography?: boolean;
 }
 
 /** Human-friendly template metadata for the settings UI picker cards */

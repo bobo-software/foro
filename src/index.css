@@ -372,28 +372,37 @@
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
     background: white !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
-  /* Hide everything, then reveal only the quotation detail */
-  body * {
-    visibility: hidden;
+  #root,
+  #root > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
-  .quotation-print-root,
-  .quotation-print-root *,
-  .invoice-print-root,
-  .invoice-print-root * {
-    visibility: visible;
+  #main-content {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
   }
 
+  /*
+   * Flow in normal document order so the print engine can paginate (banking, totals,
+   * signature). The old pattern (fixed + inset:0, or visibility:hidden on body *)
+   * clipped content below the first viewport or broke multi-page output.
+   * Sidebar/nav use print:hidden in the app shell.
+   */
   .quotation-print-root,
   .invoice-print-root {
-    position: fixed;
-    inset: 0;
+    position: static !important;
     width: 100%;
+    max-width: none !important;
     padding: 0;
     margin: 0;
-    overflow: visible;
+    overflow: visible !important;
   }
 
   /* Page break between page 1 and page 2 */
@@ -402,6 +411,63 @@
     page-break-before: always;
     break-before: page;
     margin-top: 0;
+  }
+
+  /* Compact type + spacing for invoice / quotation printouts (Tailwind text-* uses rem) */
+  .invoice-print-page,
+  .quotation-print-page {
+    padding: 0.45cm 0.55cm !important;
+    font-size: 7.25pt !important;
+    line-height: 1.22 !important;
+  }
+
+  .invoice-print-page .text-xs,
+  .quotation-print-page .text-xs {
+    font-size: 6.75pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .invoice-print-page .text-sm,
+  .quotation-print-page .text-sm {
+    font-size: 7.5pt !important;
+    line-height: 1.28 !important;
+  }
+
+  .invoice-print-page .text-base,
+  .quotation-print-page .text-base {
+    font-size: 8.25pt !important;
+    line-height: 1.28 !important;
+  }
+
+  .invoice-print-page .text-lg,
+  .quotation-print-page .text-lg {
+    font-size: 9.5pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .invoice-print-page .text-xl,
+  .quotation-print-page .text-xl {
+    font-size: 10.5pt !important;
+    line-height: 1.15 !important;
+  }
+
+  .invoice-print-page .text-2xl,
+  .quotation-print-page .text-2xl {
+    font-size: 11.5pt !important;
+    line-height: 1.1 !important;
+  }
+
+  .invoice-print-page table th,
+  .invoice-print-page table td,
+  .quotation-print-page table th,
+  .quotation-print-page table td {
+    padding: 0.12rem 0.28rem !important;
+  }
+
+  .invoice-print-page img[alt='logo'],
+  .quotation-print-page img[alt='logo'] {
+    max-height: 9mm !important;
+    max-width: 24mm !important;
   }
 }
 

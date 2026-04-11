@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { LuFileDown } from 'react-icons/lu';
+import { LuPrinter } from 'react-icons/lu';
 import type { Invoice, InvoiceItem } from '../../types/invoice';
 import { ACCOUNT_TYPES } from '../../types/bankingDetails';
 import StorageService from '../../services/storageService';
 import { formatCurrency } from '../../utils/currency';
-import { generateInvoicePdf } from '../../utils/invoicePdf';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { useInvoiceStore } from '../../stores/data/InvoiceStore';
 import { useBusinessDocumentContextStore } from '../../stores/data/BusinessDocumentContextStore';
 import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
 import InvoiceService from '../../services/invoiceService';
-import { TEMPLATE_LIST, type DocumentTemplateId } from '../../types/documentTemplate';
 
 interface InvoiceDetailProps {
   invoiceId: number;
@@ -24,16 +22,13 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   const [lineItems, setLineItems] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   const business = useBusinessStore((s) => s.currentBusiness);
   const bankingDetails = useBusinessDocumentContextStore((s) => s.bankingDetails);
   const contacts = useBusinessDocumentContextStore((s) => s.contacts);
   const loadDocumentContext = useBusinessDocumentContextStore((s) => s.loadForCurrentBusiness);
-  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplateId>(
-    (business?.document_template as DocumentTemplateId) || 'classic'
-  );
   const [creditedInvoiceLabel, setCreditedInvoiceLabel] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,15 +75,16 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
       .catch(() => setLogoUrl(null));
   }, [business?.logo_url]);
 
-  const handleDownloadPdf = useCallback(async () => {
+  const handlePrint = useCallback(() => {
     if (!invoice) return;
-    setExporting(true);
-    try {
-      await generateInvoicePdf(invoice, lineItems, business, selectedTemplate);
-    } finally {
-      setExporting(false);
-    }
-  }, [invoice, lineItems, business, selectedTemplate]);
+    const isCn = isCreditNoteInvoice(invoice);
+    const prev = document.title;
+    document.title = isCn
+      ? `credit-note-${invoice.invoice_number}`
+      : `invoice-${invoice.invoice_number}`;
+    window.print();
+    document.title = prev;
+  }, [invoice]);
 
   const handleDelete = async () => {
     if (!invoice) return;
@@ -183,36 +179,13 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           </span>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Template selector + Export PDF */}
-          <div className="flex items-center gap-0">
-            <select
-              value={selectedTemplate}
-              onChange={(e) => setSelectedTemplate(e.target.value as DocumentTemplateId)}
-              className="h-[34px] px-2 text-sm rounded-l-lg border border-r-0 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-teal-500 transition-colors"
-            >
-              {TEMPLATE_LIST.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={exporting}
-              className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-r-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {exporting ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Exporting…
-                </>
-              ) : (
-                <><LuFileDown size={15} aria-hidden />Export PDF</>
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors"
+          >
+            <LuPrinter size={15} aria-hidden />Print / Save PDF
+          </button>
           {!isCn && (
             <Link
               to={`/app/invoices/create?${creditNoteCreateSearch.toString()}`}
@@ -231,7 +204,7 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
       </div>
 
       {/* ── Page 1 ── */}
-      <div className="invoice-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col gap-0 print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-0">
+      <div className="invoice-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col gap-0 print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between pb-4 mb-4 border-b-2 border-gray-300 dark:border-gray-600">
@@ -345,8 +318,8 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
         </div>
 
         {/* ── Banking + Totals — pushed to bottom ── */}
-        <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="grid grid-cols-2 gap-8 items-start">
+        <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
+          <div className="grid grid-cols-2 gap-8 items-start print:break-inside-avoid">
             {/* Banking */}
             {bankingDetails.length > 0 ? (
               <div className="text-xs">
@@ -423,7 +396,7 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
 
       {/* ── Page 2 — notes ── */}
       {hasPage2 && (
-        <div className="invoice-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-0">
+        <div className="invoice-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
           <div className="pb-4 mb-4 border-b border-gray-200 dark:border-gray-700">
             <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
             <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">

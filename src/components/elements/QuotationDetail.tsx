@@ -332,7 +332,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
       </div>
 
       {/* ── Page 1 ── */}
-      <div className="quotation-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col gap-0 print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-0">
+      <div className="quotation-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col gap-0 print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between pb-4 mb-4 border-b-2 border-gray-300 dark:border-gray-600">
@@ -449,8 +449,8 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
         </div>
 
         {/* ── Banking + Totals — pushed to bottom ── */}
-        <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="grid grid-cols-2 gap-8 items-start">
+        <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
+          <div className="grid grid-cols-2 gap-8 items-start print:break-inside-avoid">
             {/* Banking */}
             {bankingDetails.length > 0 ? (
               <div className="text-xs">
@@ -588,7 +588,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
 
       {/* ── Page 2 — notes ── */}
       {hasPage2 && (
-        <div className="quotation-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-0">
+        <div className="quotation-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
           <div className="pb-4 mb-4 border-b border-gray-200 dark:border-gray-700">
             <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
             <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">

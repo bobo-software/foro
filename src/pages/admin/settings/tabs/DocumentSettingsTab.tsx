@@ -12,8 +12,8 @@ import {
 
 /**
  * Settings > Documents tab.
- * Lets the user pick a PDF template (Classic / Modern / Minimal)
- * and toggle whether the business logo appears on documents.
+ * Lets the user pick a PDF template for quotations and statements (Classic / Modern / Minimal),
+ * toggle logo on documents, and note that invoices use a fixed classic layout.
  */
 export function DocumentSettingsTab() {
   const business = useBusinessStore((s) => s.currentBusiness);
@@ -90,7 +90,7 @@ export function DocumentSettingsTab() {
           Document Template
         </h2>
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-          Choose the look and feel for your invoices, quotations, and statements.
+          Choose the look and feel for quotations and account statements. Invoices always use the same classic layout as the on-screen preview.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -19,13 +19,16 @@ export function AppLayout() {
 
   return (
     <div
-      className={`flex h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 ${isDark ? 'dark' : ''}`}
+      className={`flex h-screen print:h-auto print:min-h-0 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 print:bg-white ${isDark ? 'dark' : ''}`}
       data-theme={theme}
     >
       <AppSidebar />
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden print:overflow-visible">
         <AppNavbar />
-        <main id="main-content" className="flex-1 min-h-0 p-6 overflow-auto bg-slate-50 dark:bg-slate-900">
+        <main
+          id="main-content"
+          className="flex-1 min-h-0 p-6 overflow-auto print:p-0 print:overflow-visible print:h-auto print:min-h-0 print:max-h-none bg-slate-50 dark:bg-slate-900 print:bg-white"
+        >
           <Outlet />
         </main>
       </div>

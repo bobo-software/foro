@@ -13,12 +13,30 @@ import {
   type LineItem, type TotalsData,
 } from './types';
 
+/** Smaller fonts for invoice PDF export (`compactTypography` on config). */
+const COMPACT_FS = 0.78;
+const COMPACT_GAP = 0.82;
+
+function pdfFs(config: DocumentTemplateConfig, pt: number): number {
+  if (!config.compactTypography) return pt;
+  return Math.max(6, Math.round(pt * COMPACT_FS * 10) / 10);
+}
+
+function pdfGap(config: DocumentTemplateConfig, mm: number): number {
+  if (!config.compactTypography) return mm;
+  return Math.round(mm * COMPACT_GAP * 10) / 10;
+}
+
+function pdfLh(config: DocumentTemplateConfig): number {
+  return pdfGap(config, PDF.lineHeight);
+}
+
 export const classicTemplate: PdfTemplateFunctions = {
 
   // ──────────────────────────────────────────────────────────────── Header ──
   renderHeader(doc: jsPDF, data: HeaderData, config: DocumentTemplateConfig): number {
     const { margin, rightEdge, middleX } = PDF;
-    const lh = PDF.lineHeight;
+    const lh = pdfLh(config);
     let y = margin;
 
     // ── Logo (left position for classic) ──
@@ -31,32 +49,32 @@ export const classicTemplate: PdfTemplateFunctions = {
     }
 
     // Left column: Business name & address
-    doc.setFontSize(14);
+    doc.setFontSize(pdfFs(config, 14));
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...config.textColor);
     doc.text(data.businessName, margin, y);
-    y += lh + 1;
+    y += lh + pdfGap(config, 1);
 
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...config.secondaryTextColor);
     if (data.businessAddress) {
       const lines = doc.splitTextToSize(data.businessAddress, 60);
       doc.text(lines, margin, y);
-      y += lines.length * 4;
+      y += lines.length * pdfGap(config, 4);
     }
 
     // Middle column: Phone, VAT, Reg
-    let headerY = data.logo ? logoBottomY + 1 : margin;
-    doc.setFontSize(9);
+    let headerY = data.logo ? logoBottomY + pdfGap(config, 1) : margin;
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(...config.secondaryTextColor);
     if (data.businessPhone) {
       doc.text(`Tel: ${data.businessPhone}`, middleX - 15, headerY);
-      headerY += 4;
+      headerY += pdfGap(config, 4);
     }
     if (data.businessVat) {
       doc.text(`VAT: ${data.businessVat}`, middleX - 15, headerY);
-      headerY += 4;
+      headerY += pdfGap(config, 4);
     }
     if (data.businessReg) {
       doc.text(`Reg: ${data.businessReg}`, middleX - 15, headerY);
@@ -64,114 +82,114 @@ export const classicTemplate: PdfTemplateFunctions = {
 
     // Right column: Document title, number, order, page
     let rightY = margin;
-    doc.setFontSize(16);
+    doc.setFontSize(pdfFs(config, 16));
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...config.textColor);
     doc.text(data.documentTitle, rightEdge, rightY, { align: 'right' });
-    rightY += 6;
-    doc.setFontSize(11);
+    rightY += pdfGap(config, 6);
+    doc.setFontSize(pdfFs(config, 11));
     doc.text(data.documentNumber, rightEdge, rightY, { align: 'right' });
-    rightY += 5;
+    rightY += pdfGap(config, 5);
 
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...config.secondaryTextColor);
     if (data.orderNumber) {
       doc.text(`Order: ${data.orderNumber}`, rightEdge, rightY, { align: 'right' });
-      rightY += 4;
+      rightY += pdfGap(config, 4);
     }
     doc.text('Page 1', rightEdge, rightY, { align: 'right' });
 
     // Status badge
     if (data.status && data.statusColors) {
-      rightY += 5;
+      rightY += pdfGap(config, 5);
       const color = data.statusColors[data.status] || [100, 100, 100];
       doc.setTextColor(...color);
-      doc.setFontSize(8);
+      doc.setFontSize(pdfFs(config, 8));
       doc.text(`Status: ${data.status.toUpperCase()}`, rightEdge, rightY, { align: 'right' });
     }
 
-    y = Math.max(y, rightY) + 8;
+    y = Math.max(y, rightY) + pdfGap(config, 8);
     drawHLine(doc, y, [180, 180, 180], true);
-    y += 8;
+    y += pdfGap(config, 8);
     return y;
   },
 
   // ──────────────────────────────────────────────────────── Customer Info ──
   renderCustomerSection(doc: jsPDF, data: CustomerData, y: number, config: DocumentTemplateConfig): number {
     const { margin, middleX } = PDF;
-    const lh = PDF.lineHeight;
+    const lh = pdfLh(config);
     const customerRightX = middleX + 10;
     let customerY = y;
     let deliveryY = y;
 
     // Left: Bill To
     doc.setTextColor(...config.textColor);
-    doc.setFontSize(10);
+    doc.setFontSize(pdfFs(config, 10));
     doc.setFont('helvetica', 'bold');
     doc.text('Bill To:', margin, customerY);
     customerY += lh;
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
+    doc.setFontSize(pdfFs(config, 10));
     doc.text(data.customerName, margin, customerY);
     customerY += lh;
 
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(...config.secondaryTextColor);
     if (data.customerVat) {
       doc.text(`VAT: ${data.customerVat}`, margin, customerY);
-      customerY += 4;
+      customerY += pdfGap(config, 4);
     }
     if (data.customerAddress) {
       const lines = doc.splitTextToSize(data.customerAddress, 70);
       doc.text(lines, margin, customerY);
-      customerY += lines.length * 4;
+      customerY += lines.length * pdfGap(config, 4);
     }
     if (data.customerEmail) {
       doc.text(data.customerEmail, margin, customerY);
-      customerY += 4;
+      customerY += pdfGap(config, 4);
     }
 
     // Right: Deliver To
     doc.setTextColor(...config.textColor);
-    doc.setFontSize(10);
+    doc.setFontSize(pdfFs(config, 10));
     doc.setFont('helvetica', 'bold');
     doc.text('Deliver To:', customerRightX, deliveryY);
     deliveryY += lh;
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(...config.secondaryTextColor);
     if (data.deliveryAddress) {
       const lines = doc.splitTextToSize(data.deliveryAddress, 70);
       doc.text(lines, customerRightX, deliveryY);
-      deliveryY += lines.length * 4;
+      deliveryY += lines.length * pdfGap(config, 4);
     } else {
       doc.text('Same as billing address', customerRightX, deliveryY);
-      deliveryY += 4;
+      deliveryY += pdfGap(config, 4);
     }
     if (data.deliveryConditions) {
-      deliveryY += 2;
+      deliveryY += pdfGap(config, 2);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...config.textColor);
       const label = data.deliveryConditions === 'collect' ? 'COLLECT' : 'DELIVER';
       doc.text(`Delivery: ${label}`, customerRightX, deliveryY);
     }
 
-    y = Math.max(customerY, deliveryY) + 6;
+    y = Math.max(customerY, deliveryY) + pdfGap(config, 6);
     drawHLine(doc, y);
-    y += 6;
+    y += pdfGap(config, 6);
     return y;
   },
 
   // ──────────────────────────────────────────────────────── Dates & Terms ──
   renderDatesRow(doc: jsPDF, data: DatesData, y: number, config: DocumentTemplateConfig): number {
     const { margin, contentWidth } = PDF;
-    const lh = PDF.lineHeight;
+    const lh = pdfLh(config);
     const colW = contentWidth / 3;
 
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(...config.textColor);
     doc.setFont('helvetica', 'normal');
 
@@ -186,7 +204,7 @@ export const classicTemplate: PdfTemplateFunctions = {
       doc.text(`Terms: ${data.terms}`, margin + colW * 2, y);
     }
 
-    y += lh + 6;
+    y += lh + pdfGap(config, 6);
     return y;
   },
 
@@ -198,27 +216,31 @@ export const classicTemplate: PdfTemplateFunctions = {
     const colWidths = [25, 70, 20, 30, 35];
     const tableWidth = colWidths.reduce((a, b) => a + b, 0);
     const colStart = (i: number) => margin + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
+    const headerH = pdfGap(config, 8);
+    const rowH = pdfGap(config, 7);
+    const headerTextY = pdfGap(config, 5.5);
+    const cellTextY = pdfGap(config, 5);
 
     // Header row
     doc.setFillColor(...config.tableHeaderBg);
-    doc.rect(margin, y, tableWidth, 8, 'F');
+    doc.rect(margin, y, tableWidth, headerH, 'F');
     if (config.tableBorders) {
       doc.setDrawColor(180, 180, 180);
       doc.setLineWidth(0.3);
-      doc.rect(margin, y, tableWidth, 8, 'S');
+      doc.rect(margin, y, tableWidth, headerH, 'S');
     }
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(...config.tableHeaderText);
-    doc.text('SKU', colStart(0) + 2, y + 5.5);
-    doc.text('Description', colStart(1) + 2, y + 5.5);
-    doc.text('Qty', colStart(2) + 2, y + 5.5);
-    doc.text('Unit Price', colStart(3) + 2, y + 5.5);
-    doc.text('Line Total', colStart(4) + 2, y + 5.5);
+    doc.text('SKU', colStart(0) + 2, y + headerTextY);
+    doc.text('Description', colStart(1) + 2, y + headerTextY);
+    doc.text('Qty', colStart(2) + 2, y + headerTextY);
+    doc.text('Unit Price', colStart(3) + 2, y + headerTextY);
+    doc.text('Line Total', colStart(4) + 2, y + headerTextY);
 
     const tableTop = y;
-    y += 8;
+    y += headerH;
 
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...config.textColor);
@@ -227,18 +249,18 @@ export const classicTemplate: PdfTemplateFunctions = {
       const rowY = y;
       if (config.tableAlternateRows && idx % 2 === 1) {
         doc.setFillColor(...config.tableAlternateRowBg);
-        doc.rect(margin, rowY, tableWidth, 7, 'F');
+        doc.rect(margin, rowY, tableWidth, rowH, 'F');
       }
 
-      doc.setFontSize(9);
+      doc.setFontSize(pdfFs(config, 9));
       doc.setTextColor(...config.textColor);
       const sku = item.sku || '\u2014';
-      doc.text(sku.slice(0, 12), colStart(0) + 2, rowY + 5);
-      doc.text(String(item.description).slice(0, 38), colStart(1) + 2, rowY + 5);
-      doc.text(item.unitType === 'hrs' ? `${item.quantity} hrs` : String(item.quantity), colStart(2) + 2, rowY + 5);
-      doc.text(formatCurrency(item.unitPrice, currency), colStart(3) + 2, rowY + 5);
-      doc.text(formatCurrency(item.total, currency), colStart(4) + 2, rowY + 5);
-      y += 7;
+      doc.text(sku.slice(0, 12), colStart(0) + 2, rowY + cellTextY);
+      doc.text(String(item.description).slice(0, 38), colStart(1) + 2, rowY + cellTextY);
+      doc.text(item.unitType === 'hrs' ? `${item.quantity} hrs` : String(item.quantity), colStart(2) + 2, rowY + cellTextY);
+      doc.text(formatCurrency(item.unitPrice, currency), colStart(3) + 2, rowY + cellTextY);
+      doc.text(formatCurrency(item.total, currency), colStart(4) + 2, rowY + cellTextY);
+      y += rowH;
     });
 
     // Borders
@@ -253,20 +275,20 @@ export const classicTemplate: PdfTemplateFunctions = {
       }
     }
 
-    y += 8;
+    y += pdfGap(config, 8);
     return y;
   },
 
   // ──────────────────────────────────────────────────── Totals & Banking ──
   renderTotalsSection(doc: jsPDF, data: TotalsData, y: number, config: DocumentTemplateConfig): number {
     const { margin, rightEdge } = PDF;
-    const lh = PDF.lineHeight;
+    const lh = pdfLh(config);
     let bankingY = y;
     let totalsY = y;
 
     // Left: Banking details
     if (data.bankingDetails) {
-      doc.setFontSize(9);
+      doc.setFontSize(pdfFs(config, 9));
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(...config.textColor);
       doc.text('Banking Details:', margin, bankingY);
@@ -276,14 +298,14 @@ export const classicTemplate: PdfTemplateFunctions = {
       doc.setTextColor(...config.secondaryTextColor);
       const lines = doc.splitTextToSize(data.bankingDetails, 70);
       doc.text(lines, margin, bankingY);
-      bankingY += lines.length * 4;
+      bankingY += lines.length * pdfGap(config, 4);
     }
 
     // Right: Totals
     const totalsWidth = 70;
     const totalsLabelX = rightEdge - totalsWidth;
 
-    doc.setFontSize(10);
+    doc.setFontSize(pdfFs(config, 10));
     doc.setTextColor(...config.textColor);
     doc.setFont('helvetica', 'normal');
 
@@ -296,26 +318,26 @@ export const classicTemplate: PdfTemplateFunctions = {
     totalsY += lh;
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    drawHLine(doc, totalsY - 1);
-    totalsY += 3;
+    doc.setFontSize(pdfFs(config, 12));
+    drawHLine(doc, totalsY - pdfGap(config, 1));
+    totalsY += pdfGap(config, 3);
     doc.text('Total:', totalsLabelX, totalsY);
     doc.text(formatCurrency(data.total, data.currency), rightEdge, totalsY, { align: 'right' });
-    totalsY += 2;
+    totalsY += pdfGap(config, 2);
     drawHLine(doc, totalsY);
 
-    return Math.max(bankingY, totalsY) + 10;
+    return Math.max(bankingY, totalsY) + pdfGap(config, 10);
   },
 
   // ──────────────────────────────────────────────────────────────── Notes ──
   renderNotesSection(doc: jsPDF, notes: string, y: number, config: DocumentTemplateConfig): number {
     const { margin, contentWidth } = PDF;
-    const lh = PDF.lineHeight;
+    const lh = pdfLh(config);
 
     drawHLine(doc, y);
-    y += 6;
+    y += pdfGap(config, 6);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(...config.textColor);
     doc.text('Notes:', margin, y);
     y += lh;
@@ -323,24 +345,26 @@ export const classicTemplate: PdfTemplateFunctions = {
     doc.setTextColor(...config.secondaryTextColor);
     const lines = doc.splitTextToSize(notes, contentWidth);
     doc.text(lines, margin, y);
-    y += lines.length * 4 + 8;
+    y += lines.length * pdfGap(config, 4) + pdfGap(config, 8);
     return y;
   },
 
   // ──────────────────────────────────────────────────────── Signature ──
-  renderSignatureSection(doc: jsPDF, y: number, _config: DocumentTemplateConfig): number {
+  renderSignatureSection(doc: jsPDF, y: number, config: DocumentTemplateConfig): number {
     const { margin, rightEdge } = PDF;
+    const pageBreakY = config.compactTypography ? 252 : 240;
+    const minSigY = config.compactTypography ? 248 : 230;
 
-    if (y > 240) {
+    if (y > pageBreakY) {
       doc.addPage();
       y = margin;
     }
-    y = Math.max(y, 230);
+    y = Math.max(y, minSigY);
 
     drawHLine(doc, y);
-    y += 10;
+    y += pdfGap(config, 10);
 
-    doc.setFontSize(9);
+    doc.setFontSize(pdfFs(config, 9));
     doc.setTextColor(100, 100, 100);
     doc.setFont('helvetica', 'normal');
 
@@ -359,13 +383,13 @@ export const classicTemplate: PdfTemplateFunctions = {
     doc.text('Signature:', signFieldX, y);
     doc.line(signFieldX + 22, y + 1, rightEdge - 5, y + 1);
 
-    return y + 10;
+    return y + pdfGap(config, 10);
   },
 
   // ──────────────────────────────────────────────────────────── Footer ──
-  renderFooter(doc: jsPDF, _config: DocumentTemplateConfig): void {
-    const y = PDF.pageHeight - 12;
-    doc.setFontSize(8);
+  renderFooter(doc: jsPDF, config: DocumentTemplateConfig): void {
+    const y = PDF.pageHeight - pdfGap(config, 12);
+    doc.setFontSize(pdfFs(config, 8));
     doc.setTextColor(150, 150, 150);
     doc.text('Foroman by Bobo Softwares (2026)', PDF.middleX, y, { align: 'center' });
   },
