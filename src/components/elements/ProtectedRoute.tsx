@@ -41,8 +41,8 @@ export function ProtectedRoute({
   const location = useLocation();
   const accessToken = useAuthStore((s) => s.accessToken);
   const sessionUser = useAuthStore((s) => s.sessionUser);
+  const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const hasRole = useAuthStore((s) => s.hasRole);
   const hasAnyRole = useAuthStore((s) => s.hasAnyRole);
   const hasAllRoles = useAuthStore((s) => s.hasAllRoles);
 
@@ -67,6 +67,20 @@ export function ProtectedRoute({
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to={loginPath} state={{ from: location }} replace />;
+  }
+
+  // Email / SMS OTP must be completed before onboarding or the app shell
+  if (requiresOtpVerification) {
+    return (
+      <Navigate
+        to="/verify-otp"
+        replace
+        state={{
+          email: sessionUser?.email,
+          userId: sessionUser?.id != null ? Number(sessionUser.id) : undefined,
+        }}
+      />
+    );
   }
 
   // Check roles if specified

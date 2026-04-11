@@ -6,7 +6,7 @@ import type { jsPDF } from 'jspdf';
 import type { DocumentTemplateConfig } from '../../types/documentTemplate';
 import { formatCurrency } from '../currency';
 import {
-  PDF, drawHLine, addLogo,
+  PDF, addLogo,
   type PdfTemplateFunctions,
   type HeaderData, type CustomerData, type DatesData,
   type LineItem, type TotalsData,
@@ -183,7 +183,7 @@ export const modernTemplate: PdfTemplateFunctions = {
 
   // ──────────────────────────────────────────────────────── Dates & Terms ──
   renderDatesRow(doc: jsPDF, data: DatesData, y: number, config: DocumentTemplateConfig): number {
-    const { margin, contentWidth, rightEdge } = PDF;
+    const { margin, contentWidth } = PDF;
     const lh = PDF.lineHeight;
 
     // Light background bar for dates

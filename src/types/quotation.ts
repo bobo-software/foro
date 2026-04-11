@@ -71,6 +71,7 @@ export interface CreateQuotationDto {
   total: number;
   currency?: string;
   notes?: string;
-  converted_invoice_id?: number;
+  /** Omit or set a number when creating; use `null` on update to clear the invoice link */
+  converted_invoice_id?: number | null;
   items?: Omit<QuotationLine, 'id' | 'quotation_id'>[];
 }

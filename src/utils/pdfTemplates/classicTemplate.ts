@@ -259,7 +259,7 @@ export const classicTemplate: PdfTemplateFunctions = {
 
   // ──────────────────────────────────────────────────── Totals & Banking ──
   renderTotalsSection(doc: jsPDF, data: TotalsData, y: number, config: DocumentTemplateConfig): number {
-    const { margin, middleX, rightEdge } = PDF;
+    const { margin, rightEdge } = PDF;
     const lh = PDF.lineHeight;
     let bankingY = y;
     let totalsY = y;
@@ -328,7 +328,7 @@ export const classicTemplate: PdfTemplateFunctions = {
   },
 
   // ──────────────────────────────────────────────────────── Signature ──
-  renderSignatureSection(doc: jsPDF, y: number, config: DocumentTemplateConfig): number {
+  renderSignatureSection(doc: jsPDF, y: number, _config: DocumentTemplateConfig): number {
     const { margin, rightEdge } = PDF;
 
     if (y > 240) {

@@ -15,6 +15,9 @@ declare global {
   }
 }
 
+/** ISO 3166-1 alpha-2 — Google Places `componentRestrictions` */
+const SA_COUNTRY_CODE = 'za' as const;
+
 const SA_PROVINCES = [
   { value: '', label: 'Select province…' },
   { value: 'Eastern Cape', label: 'Eastern Cape' },
@@ -43,6 +46,15 @@ function loadGoogleMapsPlaces(apiKey: string): Promise<void> {
   });
 
   return window.__foromanGoogleMapsPromise;
+}
+
+function placeCountryIsSouthAfrica(place: any): boolean {
+  const components = place?.address_components ?? [];
+  const country = components.find(
+    (c: any) => Array.isArray(c.types) && c.types.includes('country')
+  );
+  const code = String(country?.short_name ?? '').toUpperCase();
+  return code === 'ZA';
 }
 
 function parseGooglePlace(place: any): Partial<CreateAddressDto> {
@@ -177,12 +189,22 @@ export function Onboard() {
         autocomplete = new window.google.maps.places.Autocomplete(addressLookupRef.current, {
           fields: ['formatted_address', 'address_components'],
           types: ['address'],
+          componentRestrictions: { country: SA_COUNTRY_CODE },
         });
         autocomplete.addListener('place_changed', () => {
           const place = autocomplete.getPlace();
+          if (!place?.address_components?.length) return;
+          if (!placeCountryIsSouthAfrica(place)) {
+            toast.error('Please choose a South African address');
+            return;
+          }
           const parsed = parseGooglePlace(place);
           setAddressLookup(place?.formatted_address ?? '');
-          setAddressForm((prev) => ({ ...prev, ...parsed }));
+          setAddressForm((prev) => ({
+            ...prev,
+            ...parsed,
+            country: 'South Africa',
+          }));
         });
         setMapsStatus('ready');
       })
@@ -329,11 +351,11 @@ export function Onboard() {
                 value={addressLookup}
                 onChange={(e) => setAddressLookup(e.target.value)}
                 className={inputClass}
-                placeholder="Start typing your company address"
+                placeholder="Start typing a South African street address"
               />
               {mapsStatus === 'ready' && (
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Select a suggestion to auto-fill address fields.
+                  South African addresses only — pick a suggestion to auto-fill the fields below.
                 </p>
               )}
               {mapsStatus === 'failed' && (

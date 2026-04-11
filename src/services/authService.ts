@@ -15,7 +15,8 @@ export interface RegisterPayload {
   email: string;
   password: string;
   phone?: string;
-  role_key?: string;
+  /** Optional role ID (see `01-AUTH-REQUESTS.md`); server applies default if omitted */
+  role_id?: number;
   metadata?: Record<string, unknown>;
   otp_method?: 'email' | 'sms' | null;
 }
@@ -34,6 +35,7 @@ interface AuthResponseUser {
   email: string;
   phone?: string | null;
   is_active?: boolean;
+  email_verified?: boolean;
   roles?: Array<{ id: number; role_name: string; role_key: string }>;
 }
 
@@ -43,7 +45,10 @@ interface AuthResponseSession {
 
 interface AuthResponseData {
   user: AuthResponseUser;
+  /** Some app-api responses nest the JWT here */
   session?: AuthResponseSession;
+  /** Skaftin register/login often returns the JWT alongside user at this level */
+  accessToken?: string;
   organisation_id?: number;
   organisation_name?: string;
   organisation?: { id: number; name: string; is_admin?: boolean };
@@ -52,9 +57,31 @@ interface AuthResponseData {
   otp_method?: string;
 }
 
+function accessTokenFromAuthData(data: AuthResponseData): string {
+  return data.session?.accessToken ?? data.accessToken ?? '';
+}
+
+/**
+ * Whether the user must complete registration OTP before using the app.
+ * Matches `01-AUTH-REQUESTS.md`: pending registration OTP uses `is_active: false`;
+ * also treats explicit `email_verified: false` as pending when the API sends it.
+ */
+export function authPayloadNeedsOtpVerification(payload: {
+  requires_otp_verification?: boolean;
+  user?: { email_verified?: boolean; is_active?: boolean };
+}): boolean {
+  if (payload.requires_otp_verification === false) return false;
+  if (payload.requires_otp_verification === true) return true;
+  const u = payload.user;
+  if (!u) return false;
+  if (u.is_active === false) return true;
+  if (u.email_verified === false) return true;
+  return false;
+}
+
 function mapAuthResponseToSessionUser(data: AuthResponseData): SessionUser {
   const user = data.user;
-  const token = data.session?.accessToken ?? '';
+  const token = accessTokenFromAuthData(data);
   const orgId = data.organisation_id ?? data.organisation?.id ?? 0;
   const orgName = data.organisation_name ?? data.organisation?.name ?? '';
   const role = user.roles?.[0]?.role_key ?? '';
@@ -75,6 +102,7 @@ function mapAuthResponseToSessionUser(data: AuthResponseData): SessionUser {
     first_name: user.name,
     phone: user.phone ?? null,
     is_active: user.is_active,
+    email_verified: user.email_verified,
     roles: user.roles,
     is_admin: data.is_admin ?? data.organisation?.is_admin ?? false,
   };
@@ -97,29 +125,33 @@ export const authService = {
     store.clearError();
 
     try {
+      const registerBody: Record<string, unknown> = {
+        name: payload.name,
+        last_name: payload.last_name,
+        email: payload.email,
+        password: payload.password,
+        phone: payload.phone,
+        metadata: payload.metadata,
+        otp_method: payload.otp_method ?? 'email',
+      };
+      if (payload.role_id != null) registerBody.role_id = payload.role_id;
+
       const response = await skaftinClient.post<AuthResponseData>(
         SKAFTIN_CONFIG.endpoints.register,
-        {
-          name: payload.name,
-          last_name: payload.last_name,
-          email: payload.email,
-          password: payload.password,
-          phone: payload.phone,
-          role_key: payload.role_key ?? 'user',
-          metadata: payload.metadata,
-          otp_method: payload.otp_method ?? 'email',
-        }
+        registerBody
       );
       const data = response.data;
       if (!data?.user) {
         throw new Error('Invalid register response');
       }
 
-      const sessionUser = data.session?.accessToken
+      const sessionUser = accessTokenFromAuthData(data)
         ? mapAuthResponseToSessionUser(data)
         : undefined;
 
-      if (data.requires_otp_verification) {
+      const needsOtp = authPayloadNeedsOtpVerification(data);
+
+      if (needsOtp) {
         if (sessionUser) {
           TokenManager.setAccessToken(sessionUser.accessToken);
           store.login(sessionUser);
@@ -134,7 +166,7 @@ export const authService = {
       }
 
       if (!sessionUser) throw new Error('Invalid register response');
-      
+
       TokenManager.setAccessToken(sessionUser.accessToken);
       store.login(sessionUser);
       store.setLoading(false);
@@ -148,34 +180,43 @@ export const authService = {
   },
 
   /**
-   * Verify OTP after registration. Returns SessionUser if server includes a session;
-   * otherwise returns null (account activated, user should log in).
+   * Verify registration OTP (`POST .../verify-otp`).
+   * Response is empty `data` per API docs; reuses the existing access token from register when present.
+   * Returns updated session user if still logged in, otherwise null (caller should send user to login).
    */
-  async verifyOtp(email: string, otp: string): Promise<SessionUser | null> {
+  async verifyOtp(userId: number, otp: string): Promise<SessionUser | null> {
     const store = useAuthStore.getState();
     store.setLoading(true);
     store.clearError();
 
     try {
-      const response = await skaftinClient.post<AuthResponseData>(
+      const response = await skaftinClient.post<Record<string, unknown>>(
         SKAFTIN_CONFIG.endpoints.verifyOtp,
-        { email, code: otp }
+        { user_id: userId, otp }
       );
-      const data = response.data;
-      if (!data?.user) {
-        throw new Error('Invalid verify response');
-      }
 
-      if (data.session?.accessToken) {
-        const sessionUser = mapAuthResponseToSessionUser(data);
-        TokenManager.setAccessToken(sessionUser.accessToken);
-        store.login(sessionUser);
-        store.setRequiresOtpVerification(false);
-        store.setLoading(false);
-        return sessionUser;
+      if (!response.success) {
+        throw new Error(
+          (response as { message?: string }).message || 'OTP verification failed'
+        );
       }
 
       store.setRequiresOtpVerification(false);
+
+      const prev = store.sessionUser;
+      const token = TokenManager.getAccessToken() || prev?.accessToken;
+      if (prev && token) {
+        const updated: SessionUser = {
+          ...prev,
+          email_verified: true,
+          is_active: true,
+        };
+        TokenManager.setAccessToken(token);
+        store.setUser(updated);
+        store.setLoading(false);
+        return updated;
+      }
+
       store.setLoading(false);
       return null;
     } catch (err: any) {
@@ -206,19 +247,22 @@ export const authService = {
       const response = await skaftinClient.post<AuthResponseData>(
         SKAFTIN_CONFIG.endpoints.login,
         {
-          username: payload.username,
+          credential: payload.username,
           password: payload.password,
           method: payload.method,
         }
       );
       const data = response.data;
-      if (!data?.user || !data?.session?.accessToken) {
+      if (!data?.user || !accessTokenFromAuthData(data)) {
         throw new Error('Invalid login response');
       }
 
       const sessionUser = mapAuthResponseToSessionUser(data);
       TokenManager.setAccessToken(sessionUser.accessToken);
       store.login(sessionUser);
+      if (authPayloadNeedsOtpVerification(data)) {
+        store.setRequiresOtpVerification(true);
+      }
       store.setLoading(false);
       return sessionUser;
     } catch (err: any) {
@@ -281,7 +325,7 @@ export const authService = {
         data?: { reset_token?: string; expires_in_minutes?: number };
         reset_token?: string;
         expires_in_minutes?: number;
-      }>(SKAFTIN_CONFIG.endpoints.verifyForgotPasswordOtp, { email, code });
+      }>(SKAFTIN_CONFIG.endpoints.verifyForgotPasswordOtp, { email, otp: code });
       
       const data = (response as any).data ?? response;
       const token = data?.reset_token;

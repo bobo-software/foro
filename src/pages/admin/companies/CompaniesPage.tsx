@@ -1,12 +1,38 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MaterialReactTable, type MRT_ColumnDef } from 'material-react-table';
+import { LuFilter, LuUsers } from 'react-icons/lu';
+import { AppDataTable, type AppDataTableColumn } from '@/components/elements/AppDataTable';
 import { useCompanyStore } from '@/stores/data/CompanyStore';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import { useAutoRefresh, useProjectId } from '@/hooks';
-import MRTThemeProvider from '@/components/providers/MRTThemeProvider';
 import type { Company } from '@/types/company';
-import { LuFilter } from 'react-icons/lu';
+
+const companyColumns: AppDataTableColumn<Company>[] = [
+  {
+    id: 'name',
+    header: 'Name',
+    cellClassName: 'font-medium text-slate-800 dark:text-slate-100',
+    render: (c) => c.name,
+  },
+  {
+    id: 'email',
+    header: 'Email',
+    cellClassName: 'text-slate-600 dark:text-slate-300',
+    render: (c) => c.email ?? '—',
+  },
+  {
+    id: 'phone',
+    header: 'Phone',
+    cellClassName: 'text-slate-600 dark:text-slate-300',
+    render: (c) => c.phone ?? '—',
+  },
+  {
+    id: 'tax_id',
+    header: 'Tax ID',
+    cellClassName: 'text-slate-600 dark:text-slate-300',
+    render: (c) => c.tax_id ?? '—',
+  },
+];
 
 export function CompaniesPage() {
   const navigate = useNavigate();
@@ -19,7 +45,6 @@ export function CompaniesPage() {
     fetchCompanies();
   }, [fetchCompanies, businessId]);
 
-  // Auto-refresh when companies table changes (real-time updates)
   useAutoRefresh(projectId, 'companies', fetchCompanies);
 
   const filteredCompanies = useMemo(() => {
@@ -27,31 +52,22 @@ export function CompaniesPage() {
     const q = search.trim().toLowerCase();
     return companies.filter(
       (c) =>
-        (c.name?.toLowerCase().includes(q)) ||
-        (c.company_name?.toLowerCase().includes(q)) ||
-        (c.email?.toLowerCase().includes(q)) ||
-        (c.phone?.toLowerCase().includes(q)) ||
-        (c.tax_id?.toLowerCase().includes(q))
+        c.name?.toLowerCase().includes(q) ||
+        c.company_name?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q) ||
+        c.phone?.toLowerCase().includes(q) ||
+        c.tax_id?.toLowerCase().includes(q),
     );
   }, [companies, search]);
 
-  const columns = useMemo<MRT_ColumnDef<Company>[]>(
-    () => [
-      { accessorKey: 'name', header: 'Name', enableColumnFilter: true },
-      // { accessorKey: 'company_name', header: 'Business', enableColumnFilter: true },
-      { accessorKey: 'email', header: 'Email', enableColumnFilter: true },
-      { accessorKey: 'phone', header: 'Phone', enableColumnFilter: true },
-      { accessorKey: 'tax_id', header: 'Tax ID', enableColumnFilter: true },
-    ],
-    []
-  );
+  const companiesEmptyMessage = search.trim() ? 'No companies match your search.' : 'No companies yet.';
 
   if (loading) {
     return (
       <div className="space-y-4">
         <div className="">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Companies</h1>
-        <p className="text-slate-500 dark:text-slate-400">Manage your companies</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Companies</h1>
+          <p className="text-slate-500 dark:text-slate-400">Manage your companies</p>
         </div>
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 text-center text-slate-500 dark:text-slate-400">
           Loading companies…
@@ -87,26 +103,19 @@ export function CompaniesPage() {
           + Add company
         </Link>
       </div>
-      <MRTThemeProvider>
-        <MaterialReactTable
-          columns={columns}
-          data={filteredCompanies}
-          state={{ showAlertBanner: !!error }}
-          enableTopToolbar={false}
-          enableColumnFilters={false}
-          enableGlobalFilter={false}
-          enableColumnOrdering={false}
-          enableColumnResizing={false}
-          initialState={{ density: 'compact' }}
-          muiTableBodyRowProps={({ row }) => ({
-            onClick: () => {
-              const id = row.original.id;
-              if (id != null) navigate(`/app/companies/${id}`);
-            },
-            sx: { cursor: 'pointer' },
-          })}
-        />
-      </MRTThemeProvider>
+
+      <AppDataTable<Company>
+        title="Companies"
+        titleIcon={<LuUsers />}
+        columns={companyColumns}
+        data={filteredCompanies}
+        getRowKey={(row, index) => row.id ?? `company-${index}`}
+        onRowClick={(c) => {
+          if (c.id != null) navigate(`/app/companies/${c.id}`);
+        }}
+        error={error}
+        emptyMessage={companiesEmptyMessage}
+      />
     </div>
   );
 }

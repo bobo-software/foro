@@ -1,22 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LuFileDown, LuFileText } from 'react-icons/lu';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { LuCopy, LuFileDown, LuFileText } from 'react-icons/lu';
 import { AppModal } from '../modals/AppModal';
-import type { Quotation, QuotationLine } from '../../types/quotation';
+import type { Quotation, QuotationLine, CreateQuotationDto } from '../../types/quotation';
 import type { CreateInvoiceDto } from '../../types/invoice';
 import type { Project } from '../../types/project';
-import type { BankingDetails } from '../../types/bankingDetails';
 import { ACCOUNT_TYPES } from '../../types/bankingDetails';
-import type { Contact } from '../../types/contact';
-import QuotationService from '../../services/quotationService';
-import QuotationLineService from '../../services/quotationLineService';
-import InvoiceService from '../../services/invoiceService';
-import InvoiceItemService from '../../services/invoiceItemService';
-import ProjectService from '../../services/projectService';
-import BankingDetailsService from '../../services/bankingDetailsService';
-import ContactService from '../../services/contactService';
 import StorageService from '../../services/storageService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
+import { useQuotationStore } from '../../stores/data/QuotationStore';
+import { useInvoiceStore } from '../../stores/data/InvoiceStore';
+import { useProjectStore } from '../../stores/data/ProjectStore';
+import { useBusinessDocumentContextStore } from '../../stores/data/BusinessDocumentContextStore';
 import { formatCurrency } from '../../utils/currency';
 import { generateQuotationPdf } from '../../utils/quotationPdf';
 
@@ -28,6 +23,8 @@ interface QuotationDetailProps {
 
 export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDetailProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromCompany = searchParams.get('from_company');
   const [quotation, setQuotation] = useState<Quotation | null>(null);
   const [lineItems, setLineItems] = useState<QuotationLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,9 +32,9 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [project, setProject] = useState<Project | null>(null);
-  const [bankingDetails, setBankingDetails] = useState<BankingDetails[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const convertInFlightRef = useRef(false);
 
   useEffect(() => {
     loadQuotation();
@@ -47,14 +44,13 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
     try {
       setLoading(true);
       setError(null);
-      const [quo, items] = await Promise.all([
-        QuotationService.findById(quotationId),
-        QuotationLineService.findByQuotationId(quotationId),
-      ]);
+      const { quotation: quo, lines } = await useQuotationStore.getState().fetchQuotationWithLines(quotationId);
       setQuotation(quo);
-      setLineItems(Array.isArray(items) ? items : []);
+      setLineItems(lines);
       if (quo?.project_id != null) {
-        ProjectService.findById(quo.project_id).then((p) => setProject(p));
+        useProjectStore.getState().findProjectById(quo.project_id).then((p) => setProject(p));
+      } else {
+        setProject(null);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load quotation');
@@ -64,17 +60,14 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
   };
 
   const business = useBusinessStore((s) => s.currentBusiness);
+  const bankingDetails = useBusinessDocumentContextStore((s) => s.bankingDetails);
+  const contacts = useBusinessDocumentContextStore((s) => s.contacts);
+  const loadDocumentContext = useBusinessDocumentContextStore((s) => s.loadForCurrentBusiness);
 
   useEffect(() => {
     if (business?.id == null) return;
-    const fetchBanking = business.user_id != null
-      ? BankingDetailsService.findByUserId(business.user_id)
-      : BankingDetailsService.findByCompanyId(business.id);
-    fetchBanking.then((details) =>
-      setBankingDetails(details.filter((d) => d.is_active !== false))
-    );
-    ContactService.findByCompanyId(business.id).then(setContacts);
-  }, [business?.id, business?.user_id]);
+    void loadDocumentContext();
+  }, [business?.id, loadDocumentContext]);
 
   useEffect(() => {
     if (!business?.logo_url) { setLogoUrl(null); return; }
@@ -92,23 +85,86 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
     if (!confirm('Are you sure you want to delete this quotation?')) return;
 
     try {
-      await QuotationService.delete(quotationId);
+      await useQuotationStore.getState().removeQuotation(quotationId);
       onDelete?.();
     } catch (err: unknown) {
       alert('Failed to delete quotation: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
+  const handleDuplicate = useCallback(async () => {
+    if (!quotation) return;
+    try {
+      setDuplicating(true);
+      setError(null);
+      const nextNumber = await useQuotationStore.getState().getNextQuotationNumber();
+      const businessId = useBusinessStore.getState().currentBusiness?.id;
+      const payload: CreateQuotationDto = {
+        company_id: quotation.company_id ?? undefined,
+        project_id: quotation.project_id ?? undefined,
+        quotation_number: nextNumber,
+        customer_name: quotation.customer_name,
+        customer_email: quotation.customer_email,
+        customer_address: quotation.customer_address,
+        customer_vat_number: quotation.customer_vat_number,
+        delivery_address: quotation.delivery_address,
+        delivery_conditions: quotation.delivery_conditions,
+        order_number: quotation.order_number,
+        terms: quotation.terms || 'C.O.D',
+        issue_date: quotation.issue_date.split('T')[0],
+        valid_until: quotation.valid_until ? quotation.valid_until.split('T')[0] : '',
+        status: 'draft',
+        subtotal: quotation.subtotal,
+        discount_percent: quotation.discount_percent ?? 0,
+        tax_rate: quotation.tax_rate,
+        tax_amount: quotation.tax_amount,
+        total: quotation.total,
+        currency: quotation.currency || 'ZAR',
+        notes: quotation.notes,
+        ...(businessId != null && { business_id: businessId }),
+      };
+      const linePayload = lineItems
+        .filter((line) => String(line.description ?? '').trim().length > 0 && Number(line.quantity) > 0)
+        .map((line) => ({
+          sku: line.sku && line.sku !== '' ? line.sku : undefined,
+          description: String(line.description).trim(),
+          quantity: line.quantity,
+          unit_price: Number(line.unit_price) || 0,
+          discount_percent: Number(line.discount_percent ?? 0),
+          total: Number(line.total) || 0,
+          unit_type: line.unit_type ?? 'qty',
+          ...(line.item_id != null && { item_id: line.item_id }),
+        }));
+      const newId = await useQuotationStore.getState().duplicateQuotationWithLines(payload, linePayload);
+      if (newId == null) {
+        setError('Failed to create duplicate quotation');
+        return;
+      }
+      const q = fromCompany ? `?from_company=${fromCompany}` : '';
+      navigate(`/app/quotations/${newId}/edit${q}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to duplicate quotation');
+    } finally {
+      setDuplicating(false);
+    }
+  }, [quotation, lineItems, navigate, fromCompany]);
+
   const handleConvertToInvoice = useCallback(async () => {
+    if (convertInFlightRef.current) return;
     if (!quotation) return;
     if (quotation.converted_invoice_id != null) {
       navigate(`/app/invoices/${quotation.converted_invoice_id}`);
       return;
     }
+    convertInFlightRef.current = true;
+    setConverting(true);
+    setError(null);
     try {
-      setConverting(true);
-      const count = await InvoiceService.count();
-      const invoiceNumber = String(count + 1).padStart(4, '0');
+      const { lines: rawLines } = await useQuotationStore.getState().fetchQuotationWithLines(quotationId);
+      const linesToCopy = rawLines.filter(
+        (line) => String(line.description ?? '').trim().length > 0 && Number(line.quantity) > 0
+      );
+      const invoiceNumber = await useInvoiceStore.getState().peekNextInvoiceNumber();
       const issueDate = quotation.issue_date.split('T')[0];
       const validUntil = quotation.valid_until ? new Date(quotation.valid_until) : null;
       const issueDateObj = new Date(quotation.issue_date);
@@ -119,9 +175,16 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
       const businessId = useBusinessStore.getState().currentBusiness?.id;
       const payload: CreateInvoiceDto = {
         invoice_number: invoiceNumber,
+        ...(quotation.company_id != null && { company_id: quotation.company_id }),
+        ...(quotation.project_id != null && { project_id: quotation.project_id }),
         customer_name: quotation.customer_name,
         customer_email: quotation.customer_email,
         customer_address: quotation.customer_address,
+        customer_vat_number: quotation.customer_vat_number,
+        delivery_address: quotation.delivery_address,
+        delivery_conditions: quotation.delivery_conditions,
+        order_number: quotation.order_number,
+        terms: quotation.terms ?? 'C.O.D',
         issue_date: issueDate,
         due_date: dueDate,
         status: 'draft',
@@ -134,38 +197,29 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
         notes: quotation.notes,
         ...(businessId != null && { business_id: businessId }),
       };
-      const created = await InvoiceService.create(payload);
-      const newId = created?.id;
-      if (newId != null && lineItems.length > 0) {
-        await InvoiceItemService.insertMany(
-          newId,
-          lineItems.map((line) => ({
-            description: line.description,
-            quantity: line.quantity,
-            unit_price: Number(line.unit_price) || 0,
-            unit_type: line.unit_type ?? 'qty',
-            discount_percent: Number(line.discount_percent) || 0,
-            total: Number(line.total) || 0,
-            ...(line.sku != null && { sku: line.sku }),
-            ...(line.item_id != null && { item_id: line.item_id }),
-          }))
-        );
-      }
-      try {
-        await QuotationService.update(quotationId, {
-          status: 'converted',
-          ...(newId != null && { converted_invoice_id: newId }),
-        });
-      } catch {
-        // Backend may not have converted_invoice_id column yet
-      }
+      const newId = await useInvoiceStore.getState().createInvoiceWithLines(
+        payload,
+        linesToCopy.map((line) => ({
+          description: String(line.description).trim(),
+          quantity: line.quantity,
+          unit_price: Number(line.unit_price) || 0,
+          unit_type: line.unit_type ?? 'qty',
+          discount_percent: Number(line.discount_percent) || 0,
+          total: Number(line.total) || 0,
+          ...(line.sku != null && line.sku !== '' && { sku: line.sku }),
+          ...(line.item_id != null && { item_id: line.item_id }),
+        }))
+      );
+      await useQuotationStore.getState().markQuotationConverted(quotationId, newId);
       setConvertModalOpen(false);
       navigate(`/app/invoices/${newId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to convert to invoice');
+    } finally {
+      convertInFlightRef.current = false;
       setConverting(false);
     }
-  }, [quotation, lineItems, quotationId, navigate]);
+  }, [quotation, quotationId, navigate]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -217,6 +271,8 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
 
   const hasPage2 = !!quotation.notes;
 
+  const isConvertedReadOnly = quotation.status === 'converted';
+
   const thClass = 'px-2 py-1.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide';
 
   return (
@@ -248,13 +304,25 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           </button>
           <button
             type="button"
-            onClick={() => quotation.converted_invoice_id != null ? handleConvertToInvoice() : setConvertModalOpen(true)}
-            disabled={converting}
+            onClick={() =>
+              quotation.converted_invoice_id != null ? handleConvertToInvoice() : setConvertModalOpen(true)
+            }
+            disabled={converting || duplicating}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             <LuFileText size={15} aria-hidden />
             {quotation.converted_invoice_id != null ? 'View invoice' : 'Convert to invoice'}
           </button>
-          {onEdit && (
+          {isConvertedReadOnly && (
+            <button
+              type="button"
+              onClick={handleDuplicate}
+              disabled={duplicating}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <LuCopy size={15} aria-hidden />
+              {duplicating ? 'Duplicating…' : 'Duplicate to edit'}
+            </button>
+          )}
+          {onEdit && !isConvertedReadOnly && (
             <button onClick={onEdit} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">Edit</button>
           )}
           {onDelete && (

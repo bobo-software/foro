@@ -1,62 +1,67 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LuPlus } from 'react-icons/lu';
-import { MaterialReactTable, type MRT_ColumnDef } from 'material-react-table';
+import { AppDataTable, type AppDataTableColumn } from '@/components/elements/AppDataTable';
 import { formatCurrency } from '@/utils/currency';
 import type { Quotation } from '@/types/quotation';
-import MRTThemeProvider from '@/components/providers/MRTThemeProvider';
 import type { CompanyTabProps } from './types';
 import { formatDate } from './types';
+
+function sortQuotationsByIssueDateDesc(rows: Quotation[]): Quotation[] {
+  return [...rows].sort((a, b) => {
+    const da = a.issue_date ?? '';
+    const db = b.issue_date ?? '';
+    return db.localeCompare(da);
+  });
+}
 
 export function CompanyQuotationsTab({ company, selectedProjectId, quotations, docsLoading }: CompanyTabProps) {
   const navigate = useNavigate();
   const projectQuery = selectedProjectId !== 'all' ? `&project_id=${selectedProjectId}` : '';
 
-  const columns = useMemo<MRT_ColumnDef<Quotation>[]>(
+  const sortedQuotations = useMemo(() => sortQuotationsByIssueDateDesc(quotations), [quotations]);
+
+  const columns = useMemo<AppDataTableColumn<Quotation>[]>(
     () => [
       {
-        accessorKey: 'quotation_number',
+        id: 'quotation_number',
         header: 'Quote No.',
-        Cell: ({ cell }) => String(cell.getValue() ?? '—'),
+        cellClassName: 'text-slate-800 dark:text-slate-100',
+        render: (q) => String(q.quotation_number ?? '—'),
       },
       {
-        accessorKey: 'issue_date',
+        id: 'issue_date',
         header: 'Date',
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          return val ? formatDate(val) : '—';
-        },
-        sortingFn: 'datetime',
+        cellClassName: 'text-slate-600 dark:text-slate-300',
+        render: (q) => (q.issue_date ? formatDate(q.issue_date) : '—'),
       },
       {
-        accessorKey: 'valid_until',
+        id: 'valid_until',
         header: 'Valid Until',
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          return val ? formatDate(val) : '—';
-        },
-        sortingFn: 'datetime',
+        cellClassName: 'text-slate-600 dark:text-slate-300',
+        render: (q) => (q.valid_until ? formatDate(q.valid_until) : '—'),
       },
       {
-        accessorKey: 'status',
+        id: 'status',
         header: 'Status',
-        Cell: ({ cell }) => {
-          const val = String(cell.getValue() ?? '—');
+        render: (q) => {
+          const val = String(q.status ?? '—');
           return val.charAt(0).toUpperCase() + val.slice(1);
         },
       },
       {
-        accessorKey: 'total',
+        id: 'total',
         header: 'Total',
-        Cell: ({ cell, row }) => formatCurrency(Number(cell.getValue()), row.original.currency),
+        align: 'right',
+        cellClassName: 'font-medium text-slate-800 dark:text-slate-100',
+        render: (q) => formatCurrency(Number(q.total), q.currency),
       },
     ],
-    []
+    [],
   );
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <div>
           <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
@@ -75,35 +80,17 @@ export function CompanyQuotationsTab({ company, selectedProjectId, quotations, d
         </Link>
       </div>
 
-      {docsLoading ? (
-        <div className="py-8 text-center text-slate-500 dark:text-slate-400">
-          Loading quotations…
-        </div>
-      ) : (
-        <MRTThemeProvider>
-          <MaterialReactTable
-            columns={columns}
-            data={quotations}
-            enableTopToolbar={false}
-            enableColumnFilters={false}
-            enableGlobalFilter={false}
-            enableColumnOrdering={false}
-            enableColumnResizing={false}
-            muiTableBodyRowProps={({ row }) => ({
-              onClick: () => {
-                if (row.original.id != null) {
-                  navigate(`/app/quotations/${row.original.id}?from_company=${company.id}`);
-                }
-              },
-              sx: { cursor: 'pointer' },
-            })}
-            initialState={{
-              density: 'compact',
-              sorting: [{ id: 'issue_date', desc: true }],
-            }}
-          />
-        </MRTThemeProvider>
-      )}
+      <AppDataTable<Quotation>
+        embedded
+        columns={columns}
+        data={sortedQuotations}
+        getRowKey={(row, index) => row.id ?? `q-${index}`}
+        onRowClick={(q) => {
+          if (q.id != null) navigate(`/app/quotations/${q.id}?from_company=${company.id}`);
+        }}
+        loading={docsLoading}
+        emptyMessage="No quotations for this company yet."
+      />
     </div>
   );
 }

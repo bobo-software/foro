@@ -91,3 +91,51 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_company_name_unique
 ON projects (company_id, name);
 ```
 
+## 7) Credit notes (same `invoices` table)
+
+Credit notes reuse `invoices` and `invoice_items` with a discriminator and optional link to the original invoice.
+
+```sql
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS document_kind VARCHAR(20) NOT NULL DEFAULT 'invoice';
+
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS credited_invoice_id INTEGER NULL;
+
+ALTER TABLE invoices
+  ADD CONSTRAINT invoices_credited_invoice_id_fkey
+  FOREIGN KEY (credited_invoice_id) REFERENCES invoices(id) ON DELETE SET NULL;
+```
+
+- `document_kind`: `'invoice'` (default) or `'credit_note'`.
+- `credited_invoice_id`: set when the credit note applies to a specific invoice; nullable for ad-hoc credits.
+- Amounts (`subtotal`, `tax_amount`, `total`) stay **positive**; the app applies a negative sign in balances and statements for `credit_note`.
+
+## 8) Stock item types and bill of materials
+
+`stock_items` distinguishes sellable **single** SKUs from **manufactured** assemblies. Manufactured items list component stock items and quantities per finished unit in `stock_item_bom_lines`.
+
+```sql
+ALTER TABLE stock_items
+  ADD COLUMN IF NOT EXISTS item_type VARCHAR(20) NOT NULL DEFAULT 'single';
+
+-- CHECK: item_type IN ('single', 'manufactured')
+```
+
+```sql
+CREATE TABLE IF NOT EXISTS stock_item_bom_lines (
+  id SERIAL PRIMARY KEY,
+  parent_item_id INTEGER NOT NULL REFERENCES stock_items(id) ON DELETE CASCADE,
+  component_item_id INTEGER NOT NULL REFERENCES stock_items(id) ON DELETE RESTRICT,
+  quantity_per NUMERIC NOT NULL,
+  created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+  CONSTRAINT stock_item_bom_lines_quantity_positive CHECK (quantity_per > 0),
+  CONSTRAINT stock_item_bom_lines_parent_component_unique UNIQUE (parent_item_id, component_item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_item_bom_lines_parent ON stock_item_bom_lines (parent_item_id);
+```
+
+- **`item_type`**: `'single'` (default) or `'manufactured'`. Only manufactured items should have BOM rows; the app clears BOM when switching to single.
+- **`stock_item_bom_lines`**: one row per component; `quantity_per` is the amount of that component required **per one** parent unit (supports decimals).
+

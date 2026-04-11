@@ -4,6 +4,7 @@ import {
   quotationSchema,
   companySchema,
   itemSchema,
+  itemFormWithBomSchema,
   paymentSchema,
   projectSchema,
   lineItemSchema,
@@ -70,6 +71,15 @@ describe('invoiceSchema', () => {
     const result = invoiceSchema.safeParse({ ...valid, tax_rate: 150 });
     expect(result.success).toBe(false);
   });
+
+  it('accepts credit note fields', () => {
+    const result = invoiceSchema.safeParse({
+      ...valid,
+      document_kind: 'credit_note' as const,
+      credited_invoice_id: 42,
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('quotationSchema', () => {
@@ -121,6 +131,17 @@ describe('itemSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('defaults item_type to single', () => {
+    const result = itemSchema.safeParse({ name: 'Widget', unit_price: 10 });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.item_type).toBe('single');
+  });
+
+  it('accepts item_type manufactured', () => {
+    const result = itemSchema.safeParse({ name: 'Widget', unit_price: 10, item_type: 'manufactured' });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects negative unit_price', () => {
     const result = itemSchema.safeParse({ name: 'Widget', unit_price: -5 });
     expect(result.success).toBe(false);
@@ -129,6 +150,38 @@ describe('itemSchema', () => {
   it('rejects fractional quantity', () => {
     const result = itemSchema.safeParse({ name: 'Widget', unit_price: 10, quantity: 1.5 });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('itemFormWithBomSchema', () => {
+  const base = { name: 'Assembly', unit_price: 100 };
+
+  it('rejects manufactured without bom_lines', () => {
+    const result = itemFormWithBomSchema.safeParse({ ...base, item_type: 'manufactured' as const });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts manufactured with at least one bom line', () => {
+    const result = itemFormWithBomSchema.safeParse({
+      ...base,
+      item_type: 'manufactured' as const,
+      bom_lines: [{ component_item_id: 2, quantity_per: 3 }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects single item with bom_lines', () => {
+    const result = itemFormWithBomSchema.safeParse({
+      ...base,
+      item_type: 'single' as const,
+      bom_lines: [{ component_item_id: 2, quantity_per: 1 }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts single without bom_lines', () => {
+    const result = itemFormWithBomSchema.safeParse({ ...base, item_type: 'single' as const });
+    expect(result.success).toBe(true);
   });
 });
 

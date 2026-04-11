@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { LuPencil, LuCheck } from 'react-icons/lu';
 import type { CreateQuotationDto, QuotationStatus, QuotationLine } from '../../types/quotation';
 import type { Company } from '../../types/company';
-import type { Item } from '../../types/item';
 import type { Project } from '../../types/project';
-import QuotationService from '../../services/quotationService';
-import QuotationLineService from '../../services/quotationLineService';
-import CompanyService from '../../services/companyService';
-import ItemService from '../../services/itemService';
-import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
+import { useCompanyStore } from '../../stores/data/CompanyStore';
+import { useItemStore } from '../../stores/data/ItemStore';
+import { useProjectStore } from '../../stores/data/ProjectStore';
+import { useQuotationStore } from '../../stores/data/QuotationStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import AppText from '../text/AppText';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
@@ -30,10 +30,10 @@ interface QuotationFormProps {
 }
 
 export function QuotationForm({ quotationId, initialCompanyId, initialProjectId, onSuccess, onCancel }: QuotationFormProps) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [stockItems, setStockItems] = useState<Item[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(NO_PROJECT_OPTION);
@@ -41,6 +41,14 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
   const [initialProjectApplied, setInitialProjectApplied] = useState(false);
+  const [editingCompany, setEditingCompany] = useState(!initialCompanyId && !quotationId);
+  const [editingDelivery, setEditingDelivery] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(!!initialProjectId);
+
+  const fetchCompanies = useCompanyStore((s) => s.fetchCompanies);
+  const fetchItems = useItemStore((s) => s.fetchItems);
+  const companies = useCompanyStore((s) => s.companies);
+  const stockItems = useItemStore((s) => s.items);
 
   const [formData, setFormData] = useState<CreateQuotationDto>({
     company_id: undefined,
@@ -66,27 +74,12 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   });
 
   useEffect(() => {
-    const businessId = useBusinessStore.getState().currentBusiness?.id;
-    const itemWhere = businessId != null ? { business_id: businessId } : undefined;
-    Promise.all([
-      CompanyService.findAll(),
-      ItemService.findAll({ where: itemWhere, orderBy: 'name', orderDirection: 'ASC' }),
-    ]).then(([comps, items]) => {
-      setCompanies(comps);
-      setStockItems(items);
-    });
-  }, []);
+    void fetchCompanies();
+    void fetchItems();
+  }, [fetchCompanies, fetchItems]);
 
   const loadProjectsForCompany = useCallback(async (companyId: number) => {
-    const businessId = useBusinessStore.getState().currentBusiness?.id;
-    const where: Record<string, unknown> = { company_id: companyId };
-    if (businessId != null) where.business_id = businessId;
-    const projectList = await ProjectService.findAll({
-      where,
-      orderBy: 'name',
-      orderDirection: 'ASC',
-      limit: 500,
-    });
+    const projectList = await useProjectStore.getState().fetchProjectsForCompany(companyId);
     setProjects(projectList);
     return projectList;
   }, []);
@@ -127,7 +120,9 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
 
   useEffect(() => {
     if (!quotationId) {
-      QuotationService.getNextNumber()
+      useQuotationStore
+        .getState()
+        .getNextQuotationNumber()
         .then((nextNumber) => {
           setFormData((prev) => ({ ...prev, quotation_number: nextNumber }));
         })
@@ -159,11 +154,15 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     if (!quotationId) return;
     try {
       setLoading(true);
-      const [quotation, items] = await Promise.all([
-        QuotationService.findById(quotationId),
-        QuotationLineService.findByQuotationId(quotationId),
-      ]);
+      const { quotation, lines: items } = await useQuotationStore
+        .getState()
+        .fetchQuotationWithLines(quotationId);
       if (quotation) {
+        if (quotation.status === 'converted') {
+          const from = searchParams.get('from_company');
+          navigate(`/app/quotations/${quotationId}${from ? `?from_company=${from}` : ''}`, { replace: true });
+          return;
+        }
         const matchedCompany = quotation.company_id != null
           ? companies.find((c) => c.id === quotation.company_id) ?? null
           : null;
@@ -199,7 +198,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
             setSelectedProject(NO_PROJECT_OPTION);
           }
         } else if (quotation.project_id != null) {
-          const project = await ProjectService.findById(quotation.project_id);
+          const project = await useProjectStore.getState().findProjectById(quotation.project_id);
           setSelectedProject(project);
         } else {
           setSelectedProject(NO_PROJECT_OPTION);
@@ -324,15 +323,11 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     };
     try {
       setLoading(true);
-      if (quotationId) {
-        await QuotationService.update(quotationId, payload);
-        await QuotationLineService.deleteByQuotationId(quotationId);
-        if (items.length) await QuotationLineService.insertMany(quotationId, items);
-      } else {
-        const created = await QuotationService.create(payload);
-        const newId = created?.id;
-        if (newId != null && items.length) await QuotationLineService.insertMany(newId, items);
-      }
+      await useQuotationStore.getState().saveQuotationWithLines({
+        quotationId,
+        payload,
+        lines: items,
+      });
       onSuccess?.();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save quotation');
@@ -343,8 +338,8 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
 
   // Shared input + label styles aligned with the app design system
   const inputClass =
-    'w-full px-2.5 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
-  const labelClass = 'mb-1 text-xs font-medium text-slate-500 dark:text-slate-400';
+    'w-full px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
+  const labelClass = 'mb-0.5 text-xs font-medium text-slate-400 dark:text-slate-500';
   const groupClass = 'flex flex-col';
 
   if (loading && quotationId) {
@@ -358,7 +353,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   return (
     <div className="max-w-[1200px] mx-auto">
       {/* Page title row */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-2">
         {onCancel && (
           <button
             type="button"
@@ -369,7 +364,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
             ←
           </button>
         )}
-        <AppText variant="h2">
+        <AppText variant="h3">
           {quotationId ? 'Edit Quotation' : 'Create Quotation'}
         </AppText>
       </div>
@@ -385,11 +380,11 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
         className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-700"
       >
         {/* ── Header fields ── */}
-        <div className="p-4">
-          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
+        <div className="p-3">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-2 block">
             Document
           </AppText>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
             <div className={groupClass}>
               <label htmlFor="quotation_number" className={labelClass}>Quotation #</label>
               <input
@@ -496,77 +491,207 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
         </div>
 
         {/* ── Company ── */}
-        <div className="p-4">
-          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
+        <div className="p-3">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-2 block">
             Company
           </AppText>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <AppLabledAutocomplete
-                label="Company *"
-                options={companies}
-                value={selectedCompany?.id != null ? String(selectedCompany.id) : ''}
-                displayValue={selectedCompany?.name ?? formData.customer_name}
-                accessor="name"
-                valueAccessor="id"
-                onSelect={handleCompanySelect}
-                onClear={handleCompanyClear}
-                required
-                placeholder="Search company…"
-              />
-              {(formData.customer_email || formData.customer_address) && (
-                <div className="space-y-0.5">
-                  {formData.customer_email && (
-                    <AppText variant="caption">{formData.customer_email}</AppText>
-                  )}
-                  {formData.customer_address && (
-                    <AppText variant="caption">{formData.customer_address}</AppText>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+
+            {/* Left: company identity */}
+            <div className="space-y-1.5">
+              {editingCompany ? (
+                <>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <AppLabledAutocomplete
+                        label="Company *"
+                        options={companies}
+                        value={selectedCompany?.id != null ? String(selectedCompany.id) : ''}
+                        displayValue={selectedCompany?.name ?? formData.customer_name}
+                        accessor="name"
+                        valueAccessor="id"
+                        onSelect={handleCompanySelect}
+                        onClear={handleCompanyClear}
+                        required
+                        placeholder="Search company…"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCompany(false)}
+                      className="mt-5 p-1 rounded text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                      title="Done"
+                    >
+                      <LuCheck size={14} />
+                    </button>
+                  </div>
+                  <div className={groupClass}>
+                    <label htmlFor="customer_vat_number" className={labelClass}>Company VAT #</label>
+                    <input
+                      id="customer_vat_number"
+                      type="text"
+                      value={formData.customer_vat_number || ''}
+                      onChange={(e) => handleChange('customer_vat_number', e.target.value)}
+                      className={inputClass}
+                      placeholder="VAT number"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-start gap-2 group">
+                  <div className="flex-1 min-w-0">
+                    {formData.customer_name ? (
+                      <>
+                        <AppText variant="body" className="font-medium">{formData.customer_name}</AppText>
+                        {formData.customer_email && <AppText variant="caption">{formData.customer_email}</AppText>}
+                        {formData.customer_address && <AppText variant="caption">{formData.customer_address}</AppText>}
+                        {formData.customer_vat_number && (
+                          <AppText variant="caption">VAT: {formData.customer_vat_number}</AppText>
+                        )}
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingCompany(true)}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >
+                        + Select a company
+                      </button>
+                    )}
+                  </div>
+                  {formData.customer_name && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingCompany(true)}
+                      className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Edit company"
+                    >
+                      <LuPencil size={13} />
+                    </button>
                   )}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <AppLabledAutocomplete
-                  label="Project"
-                  options={projectOptions}
-                  value={selectedProject?.id != null ? String(selectedProject.id) : String(NO_PROJECT_ID)}
-                  displayValue={selectedProject?.name ?? 'No project'}
-                  accessor="name"
-                  valueAccessor="id"
-                  onSelect={handleProjectSelect}
-                  onClear={handleProjectClear}
-                  disabled={!selectedCompany}
-                  placeholder={selectedCompany ? 'Search project…' : 'No project'}
-                />
+
+              {/* Project picker */}
+              {showProjectPicker ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <AppLabledAutocomplete
+                      label="Project"
+                      options={projectOptions}
+                      value={selectedProject?.id != null ? String(selectedProject.id) : String(NO_PROJECT_ID)}
+                      displayValue={selectedProject?.name ?? 'No project'}
+                      accessor="name"
+                      valueAccessor="id"
+                      onSelect={handleProjectSelect}
+                      onClear={handleProjectClear}
+                      disabled={!selectedCompany}
+                      placeholder="Search project…"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProjectPicker(false)}
+                    className="mt-5 p-1 rounded text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                    title="Done"
+                  >
+                    <LuCheck size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  {selectedProject && selectedProject.id !== NO_PROJECT_ID ? (
+                    <div className="flex items-center gap-2 group">
+                      <AppText variant="caption" className="text-indigo-600 dark:text-indigo-400">
+                        Project: {selectedProject.name}
+                      </AppText>
+                      <button
+                        type="button"
+                        onClick={() => setShowProjectPicker(true)}
+                        className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Change project"
+                      >
+                        <LuPencil size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { if (selectedCompany) setShowProjectPicker(true); }}
+                      className={`text-xs transition-colors ${
+                        selectedCompany
+                          ? 'text-indigo-600 dark:text-indigo-400 hover:underline'
+                          : 'text-slate-400 dark:text-slate-500 cursor-default'
+                      }`}
+                    >
+                      + Base quote on a project
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right: delivery address */}
+            <div>
+              {editingDelivery ? (
                 <div className={groupClass}>
-                  <label htmlFor="customer_vat_number" className={labelClass}>Company VAT #</label>
-                  <input
-                    id="customer_vat_number"
-                    type="text"
-                    value={formData.customer_vat_number || ''}
-                    onChange={(e) => handleChange('customer_vat_number', e.target.value)}
-                    className={inputClass}
-                    placeholder="VAT number"
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label htmlFor="delivery_address" className={labelClass}>Delivery address</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditingDelivery(false)}
+                      className="p-1 rounded text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                      title="Done"
+                    >
+                      <LuCheck size={13} />
+                    </button>
+                  </div>
+                  <textarea
+                    id="delivery_address"
+                    value={formData.delivery_address || ''}
+                    onChange={(e) => handleChange('delivery_address', e.target.value)}
+                    rows={3}
+                    className={`${inputClass} resize-y`}
+                    placeholder="Delivery address"
+                    autoFocus
                   />
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-start gap-2 group">
+                  <div className="flex-1 min-w-0">
+                    <p className={`${labelClass} mb-0.5`}>Delivery address</p>
+                    {formData.delivery_address ? (
+                      <AppText variant="caption" className="whitespace-pre-wrap">{formData.delivery_address}</AppText>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingDelivery(true)}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >
+                        + Add delivery address
+                      </button>
+                    )}
+                  </div>
+                  {formData.delivery_address && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingDelivery(true)}
+                      className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Edit delivery address"
+                    >
+                      <LuPencil size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            <div className={groupClass}>
-              <label htmlFor="delivery_address" className={labelClass}>Delivery address</label>
-              <textarea
-                id="delivery_address"
-                value={formData.delivery_address || ''}
-                onChange={(e) => handleChange('delivery_address', e.target.value)}
-                rows={5}
-                className={`${inputClass} resize-y`}
-                placeholder="Delivery address (if different from billing)"
-              />
-            </div>
+
           </div>
         </div>
 
         {/* ── Line items ── */}
-        <div className="p-4">
-          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
+        <div className="p-3">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-2 block">
             Line items
           </AppText>
           <LineItemsEditor
@@ -578,67 +703,69 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
         </div>
 
         {/* ── Totals ── */}
-        <div className="p-4">
-          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
+        <div className="p-3">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-2 block">
             Totals
           </AppText>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className={groupClass}>
-              <label className={labelClass}>Global discount %</label>
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                max={100}
-                value={globalDiscountPercent || ''}
-                onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
-                className={inputClass}
-              />
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="tax_rate" className={labelClass}>Tax %</label>
-              <input
-                id="tax_rate"
-                type="number"
-                step="0.01"
-                min={0}
-                value={formData.tax_rate || ''}
-                onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
-                className={inputClass}
-              />
-            </div>
-          </div>
-          <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 space-y-1.5">
-            <div className="flex justify-between">
-              <AppText variant="body">Subtotal (lines)</AppText>
-              <AppText variant="body">{formatCurrency(totals.linesSubtotal, formData.currency)}</AppText>
-            </div>
-            {globalDiscountPercent > 0 && (
-              <>
-                <div className="flex justify-between">
-                  <AppText variant="caption">Discount ({globalDiscountPercent}%)</AppText>
-                  <AppText variant="caption">−{formatCurrency(totals.discountAmount, formData.currency)}</AppText>
+          <div className="flex justify-end">
+            <div className="w-full max-w-sm rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-2.5 space-y-1">
+              <div className="flex items-center justify-between gap-3">
+                <AppText variant="caption">Subtotal</AppText>
+                <AppText variant="caption">{formatCurrency(totals.linesSubtotal, formData.currency)}</AppText>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 shrink-0">
+                  Discount
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={100}
+                    value={globalDiscountPercent || ''}
+                    onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
+                    className="w-14 px-1.5 py-0.5 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-400"
+                    placeholder="0"
+                  />
+                  <span>%</span>
+                </label>
+                <AppText variant="caption">
+                  {globalDiscountPercent > 0 ? `−${formatCurrency(totals.discountAmount, formData.currency)}` : '—'}
+                </AppText>
+              </div>
+              {globalDiscountPercent > 0 && (
+                <div className="flex items-center justify-between gap-3">
+                  <AppText variant="caption">After discount</AppText>
+                  <AppText variant="caption">{formatCurrency(totals.subtotalAfterDiscount, formData.currency)}</AppText>
                 </div>
-                <div className="flex justify-between">
-                  <AppText variant="body">Subtotal after discount</AppText>
-                  <AppText variant="body">{formatCurrency(totals.subtotalAfterDiscount, formData.currency)}</AppText>
-                </div>
-              </>
-            )}
-            <div className="flex justify-between">
-              <AppText variant="caption">Tax ({formData.tax_rate ?? 0}%)</AppText>
-              <AppText variant="caption">{formatCurrency(totals.taxAmount, formData.currency)}</AppText>
-            </div>
-            <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
-              <AppText variant="h3">Total</AppText>
-              <AppText variant="h3">{formatCurrency(totals.total, formData.currency)}</AppText>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 shrink-0">
+                  Tax
+                  <input
+                    id="tax_rate"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={formData.tax_rate || ''}
+                    onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
+                    className="w-14 px-1.5 py-0.5 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-400"
+                    placeholder="0"
+                  />
+                  <span>%</span>
+                </label>
+                <AppText variant="caption">{formatCurrency(totals.taxAmount, formData.currency)}</AppText>
+              </div>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                <AppText variant="body" className="font-semibold">Total</AppText>
+                <AppText variant="body" className="font-semibold">{formatCurrency(totals.total, formData.currency)}</AppText>
+              </div>
             </div>
           </div>
         </div>
 
         {/* ── Notes ── */}
-        <div className="p-4">
-          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-3 block">
+        <div className="p-3">
+          <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-2 block">
             Notes
           </AppText>
           <textarea
@@ -651,7 +778,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
         </div>
 
         {/* ── Actions ── */}
-        <div className="flex flex-col-reverse gap-2 px-4 py-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 px-3 py-2.5 sm:flex-row sm:justify-end">
           {onCancel && (
             <button
               type="button"

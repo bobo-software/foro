@@ -21,16 +21,24 @@ export function Register() {
   const error = useAuthStore((s) => s.error);
   const sessionUser = useAuthStore((s) => s.sessionUser);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
   const clearError = useAuthStore((s) => s.clearError);
 
   const isAuthenticated = !!(sessionUser?.accessToken || accessToken);
 
-  // Redirect if already authenticated
+  // Redirect if already signed in (OTP first when verification is still pending)
   useEffect(() => {
-    if (isAuthenticated) {
+    if (requiresOtpVerification && sessionUser?.email) {
+      navigate('/verify-otp', {
+        replace: true,
+        state: { email: sessionUser.email, userId: sessionUser.id },
+      });
+      return;
+    }
+    if (isAuthenticated && !requiresOtpVerification) {
       navigate('/app', { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, requiresOtpVerification, sessionUser, navigate]);
 
   // Clear errors on unmount
   useEffect(() => {

@@ -43,13 +43,22 @@ export function VerifyOtp() {
       toast.error('Please enter the verification code');
       return;
     }
-    
+    if (userId == null || Number.isNaN(Number(userId))) {
+      toast.error('Missing account id. Please register again.');
+      return;
+    }
+
     clearError();
-    
+
     try {
-      const verifiedUser = await authService.verifyOtp(email, otp.trim());
-      toast.success(verifiedUser ? 'Account verified' : 'Account activated');
-      navigate('/onboard', { replace: true });
+      const verifiedUser = await authService.verifyOtp(Number(userId), otp.trim());
+      if (verifiedUser) {
+        toast.success('Account verified');
+        navigate('/onboard', { replace: true });
+      } else {
+        toast.success('Account verified — please sign in');
+        navigate('/login', { replace: true });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Verification failed';
       toast.error(message);

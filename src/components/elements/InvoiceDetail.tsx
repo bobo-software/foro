@@ -1,17 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { LuFileDown } from 'react-icons/lu';
 import type { Invoice, InvoiceItem } from '../../types/invoice';
-import type { BankingDetails } from '../../types/bankingDetails';
 import { ACCOUNT_TYPES } from '../../types/bankingDetails';
-import type { Contact } from '../../types/contact';
-import InvoiceService from '../../services/invoiceService';
-import InvoiceItemService from '../../services/invoiceItemService';
-import BankingDetailsService from '../../services/bankingDetailsService';
-import ContactService from '../../services/contactService';
 import StorageService from '../../services/storageService';
 import { formatCurrency } from '../../utils/currency';
 import { generateInvoicePdf } from '../../utils/invoicePdf';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
+import { useInvoiceStore } from '../../stores/data/InvoiceStore';
+import { useBusinessDocumentContextStore } from '../../stores/data/BusinessDocumentContextStore';
+import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
+import InvoiceService from '../../services/invoiceService';
 import { TEMPLATE_LIST, type DocumentTemplateId } from '../../types/documentTemplate';
 
 interface InvoiceDetailProps {
@@ -26,29 +25,42 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [bankingDetails, setBankingDetails] = useState<BankingDetails[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   const business = useBusinessStore((s) => s.currentBusiness);
+  const bankingDetails = useBusinessDocumentContextStore((s) => s.bankingDetails);
+  const contacts = useBusinessDocumentContextStore((s) => s.contacts);
+  const loadDocumentContext = useBusinessDocumentContextStore((s) => s.loadForCurrentBusiness);
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplateId>(
     (business?.document_template as DocumentTemplateId) || 'classic'
   );
+  const [creditedInvoiceLabel, setCreditedInvoiceLabel] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvoice();
   }, [invoiceId]);
 
+  useEffect(() => {
+    if (!invoice?.credited_invoice_id) {
+      setCreditedInvoiceLabel(null);
+      return;
+    }
+    let cancelled = false;
+    void InvoiceService.findById(invoice.credited_invoice_id).then((src) => {
+      if (!cancelled && src?.invoice_number) setCreditedInvoiceLabel(src.invoice_number);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice?.credited_invoice_id]);
+
   const loadInvoice = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [inv, items] = await Promise.all([
-        InvoiceService.findById(invoiceId),
-        InvoiceItemService.findByInvoiceId(invoiceId),
-      ]);
+      const { invoice: inv, items } = await useInvoiceStore.getState().fetchInvoiceWithItems(invoiceId);
       setInvoice(inv);
-      setLineItems(Array.isArray(items) ? items : []);
+      setLineItems(items);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load invoice');
     } finally {
@@ -58,14 +70,8 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
 
   useEffect(() => {
     if (business?.id == null) return;
-    const fetchBanking = business.user_id != null
-      ? BankingDetailsService.findByUserId(business.user_id)
-      : BankingDetailsService.findByCompanyId(business.id);
-    fetchBanking.then((details) =>
-      setBankingDetails(details.filter((d) => d.is_active !== false))
-    );
-    ContactService.findByCompanyId(business.id).then(setContacts);
-  }, [business?.id, business?.user_id]);
+    void loadDocumentContext();
+  }, [business?.id, loadDocumentContext]);
 
   useEffect(() => {
     if (!business?.logo_url) { setLogoUrl(null); return; }
@@ -85,9 +91,17 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   }, [invoice, lineItems, business, selectedTemplate]);
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this invoice?')) return;
+    if (!invoice) return;
+    if (
+      !confirm(
+        isCreditNoteInvoice(invoice)
+          ? 'Are you sure you want to delete this credit note?'
+          : 'Are you sure you want to delete this invoice?',
+      )
+    )
+      return;
     try {
-      await InvoiceService.delete(invoiceId);
+      await useInvoiceStore.getState().removeInvoice(invoiceId);
       onDelete?.();
     } catch (err: unknown) {
       alert('Failed to delete invoice: ' + (err instanceof Error ? err.message : String(err)));
@@ -141,7 +155,13 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   const vatAmount = (subtotal * vatRate) / 100;
   const total = subtotal + vatAmount;
 
-  const hasPage2 = !!invoice.notes;
+  const isCn = isCreditNoteInvoice(invoice);
+  const hasPage2 = !!invoice.notes || (!!creditedInvoiceLabel && isCn);
+
+  const creditNoteCreateSearch = new URLSearchParams();
+  creditNoteCreateSearch.set('credit_from', String(invoiceId));
+  if (invoice.company_id != null) creditNoteCreateSearch.set('company_id', String(invoice.company_id));
+  if (invoice.project_id != null) creditNoteCreateSearch.set('project_id', String(invoice.project_id));
 
   const thClass = 'px-2 py-1.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide';
 
@@ -151,8 +171,13 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center print:hidden">
         <div>
           <h1 className="m-0 mb-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Invoice {invoice.invoice_number}
+            {isCn ? 'Credit note' : 'Invoice'} {invoice.invoice_number}
           </h1>
+          {isCn && creditedInvoiceLabel && (
+            <p className="m-0 mb-1 text-xs text-gray-500 dark:text-gray-400">
+              Relates to invoice #{creditedInvoiceLabel}
+            </p>
+          )}
           <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusBadgeClass(invoice.status)}`}>
             {invoice.status}
           </span>
@@ -188,6 +213,14 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
               )}
             </button>
           </div>
+          {!isCn && (
+            <Link
+              to={`/app/invoices/create?${creditNoteCreateSearch.toString()}`}
+              className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-violet-600 hover:bg-violet-500 transition-colors no-underline"
+            >
+              Create credit note
+            </Link>
+          )}
           {onEdit && (
             <button onClick={onEdit} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">Edit</button>
           )}
@@ -223,7 +256,9 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
 
           {/* Right: document title / number / status */}
           <div className="flex flex-col items-end gap-0.5 shrink-0">
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-wide uppercase leading-none">Invoice</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 tracking-wide uppercase leading-none">
+              {isCn ? 'Credit note' : 'Invoice'}
+            </p>
             <p className="text-base font-semibold text-gray-700 dark:text-gray-200">{invoice.invoice_number}</p>
             {invoice.order_number && (
               <p className="text-xs text-gray-500 dark:text-gray-400">Order: {invoice.order_number}</p>
@@ -392,6 +427,12 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           <div className="pb-4 mb-4 border-b border-gray-200 dark:border-gray-700">
             <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
             <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
+              {isCn && creditedInvoiceLabel && (
+                <>
+                  This credit note relates to invoice #{creditedInvoiceLabel}.
+                  {invoice.notes?.trim() ? '\n\n' : ''}
+                </>
+              )}
               {invoice.notes}
             </p>
           </div>

@@ -5,6 +5,7 @@
 
 import { skaftinClient } from '../backend';
 import type { Quotation, CreateQuotationDto } from '../types/quotation';
+import InvoiceService from './invoiceService';
 
 const TABLE_NAME = 'quotations';
 
@@ -78,7 +79,7 @@ export class QuotationService {
     const { items: _items, ...row } = data;
     const response = await skaftinClient.put(
       `/app-api/database/tables/${TABLE_NAME}/update`,
-      { where: { id }, data: row }
+      { where: { id }, data: row as Record<string, unknown> }
     );
     const r = response as unknown as Record<string, unknown>;
     return { rowCount: (r?.rowCount as number) ?? 0 };
@@ -101,6 +102,36 @@ export class QuotationService {
     const rr = response as unknown as Record<string, unknown>;
     if (typeof rr?.rowCount === 'number') return rr.rowCount;
     return normalizeRows(response).length;
+  }
+
+  /**
+   * If converted_invoice_id points at a missing invoice, clear the link and set status to accepted
+   * so the quote can be edited or converted again.
+   */
+  static async repairStaleConversionLink(quotationId: number, quo: Quotation): Promise<Quotation> {
+    if (quo.converted_invoice_id == null) return quo;
+    const inv = await InvoiceService.findById(quo.converted_invoice_id);
+    if (inv != null) return quo;
+    await this.update(quotationId, { status: 'accepted', converted_invoice_id: null });
+    return { ...quo, status: 'accepted', converted_invoice_id: undefined };
+  }
+
+  /**
+   * When an invoice created from a quotation is deleted, clear the link and allow converting again.
+   */
+  static async clearConversionForDeletedInvoice(invoiceId: number): Promise<void> {
+    const linked = await this.findAll({
+      where: { converted_invoice_id: invoiceId },
+      limit: 20,
+      offset: 0,
+    });
+    for (const q of linked) {
+      if (q.id == null) continue;
+      await this.update(q.id, {
+        status: 'accepted',
+        converted_invoice_id: null,
+      });
+    }
   }
 
   static async getNextNumber(): Promise<string> {

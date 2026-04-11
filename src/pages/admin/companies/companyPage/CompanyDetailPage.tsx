@@ -245,7 +245,9 @@ export function CompanyDetailPage() {
       {activeTab === 'summary' && <CompanySummaryTab {...tabProps} />}
       {activeTab === 'contacts' && <CompanyContactsTab company={company} />}
       {activeTab === 'quotations' && <CompanyQuotationsTab {...tabProps} />}
-      {activeTab === 'invoices' && <CompanyInvoicesTab {...tabProps} />}
+      {activeTab === 'invoices' && (
+        <CompanyInvoicesTab {...tabProps} onRefresh={() => setDocsRefreshTick((t) => t + 1)} />
+      )}
       {activeTab === 'payments' && <CompanyPaymentsTab {...tabProps} onRefresh={() => setDocsRefreshTick((t) => t + 1)} />}
       {activeTab === 'statements' && <CompanyStatementsTab {...tabProps} />}
       {activeTab === 'edit' && <CompanyEditTab company={company} onCompanyUpdate={handleCompanyUpdate} />}

@@ -93,7 +93,7 @@ export async function generatePreviewPdf(templateId: DocumentTemplateId): Promis
   y = renderNotesSection(doc, 'Thank you for your business! Payment is due within 30 days of the invoice date. Please use the invoice number as your payment reference.', y, config);
 
   // ── Signature ──
-  y = renderSignatureSection(doc, y, config);
+  renderSignatureSection(doc, y, config);
 
   // ── Footer ──
   renderFooter(doc, config);

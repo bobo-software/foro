@@ -4,7 +4,7 @@ import CompanyService from '@/services/companyService';
 import BankingDetailsService from '@/services/bankingDetailsService';
 import AddressService from '@/services/addressService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
-import type { CreateCompanyDto, Company } from '@/types/company';
+import type { CreateCompanyDto } from '@/types/company';
 import type { CreateBankingDetailsDto, BankingDetails } from '@/types/bankingDetails';
 import type { Address, CreateAddressDto } from '@/types/address';
 import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';

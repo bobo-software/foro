@@ -38,8 +38,8 @@ export const SKAFTIN_CONFIG = {
     verifyOtp: '/app-api/auth/auth/verify-otp',
     resendOtp: '/app-api/auth/users/{userId}/resend-otp',
     forgotPassword: '/app-api/auth/auth/forgot-password',
-    verifyForgotPasswordOtp: '/app-api/auth/verify-forgot-password-otp',
-    resetPassword: '/app-api/auth/reset-password',
+    verifyForgotPasswordOtp: '/app-api/auth/auth/verify-forgot-password-otp',
+    resetPassword: '/app-api/auth/auth/reset-password',
     sessionRefresh: '/app-api/auth/session/refresh',
   },
 } as const;

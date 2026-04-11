@@ -1,6 +1,5 @@
-import QuotationService from '../services/quotationService';
-import QuotationLineService from '../services/quotationLineService';
 import type { Quotation, QuotationLine } from '../types/quotation';
+import { useQuotationStore } from '../stores/data/QuotationStore';
 import type { Business } from '../types/business';
 import { getTemplateConfig } from '../types/documentTemplate';
 import { fetchLogoAsBase64 } from './pdfLogoHelper';
@@ -13,14 +12,10 @@ import { useBusinessStore } from '../stores/data/BusinessStore';
 
 /** Fetch quotation + line items by id, then download PDF. Use from list view. */
 export async function downloadQuotationPdfById(quotationId: number): Promise<void> {
-  const [quotation, items] = await Promise.all([
-    QuotationService.findById(quotationId),
-    QuotationLineService.findByQuotationId(quotationId),
-  ]);
+  const { quotation, lines } = await useQuotationStore.getState().fetchQuotationWithLines(quotationId);
   if (!quotation) throw new Error('Quotation not found');
-  const lineItems = Array.isArray(items) ? items : [];
   const business = useBusinessStore.getState().currentBusiness;
-  await generateQuotationPdf(quotation, lineItems, business);
+  await generateQuotationPdf(quotation, lines, business);
 }
 
 export async function generateQuotationPdf(
@@ -114,7 +109,7 @@ export async function generateQuotationPdf(
   }
 
   // ── Signature ──
-  y = renderSignatureSection(doc, y, config);
+  renderSignatureSection(doc, y, config);
 
   // ── Footer ──
   renderFooter(doc, config);

@@ -43,20 +43,9 @@ const AppProfileDetails: React.FC<AppProfileDetailsProps> = ({
   onInputChange,
   onSave,
   showSaveButton = true,
-  onCancel,
   isEditing = true,
-  setIsEditing,
-  showEditButton = true,
   className = '',
 }) => {
-  const handleCancel = () => {
-    if (onCancel) {
-      onCancel();
-    } else if (setIsEditing) {
-      setIsEditing(false);
-    }
-  };
-
   return (
     <div className={`bg-white rounded-lg shadow-sm overflow-hidden ${className}`}>
       <div className="flex items-center justify-between p-4 border-b border-slate-200">

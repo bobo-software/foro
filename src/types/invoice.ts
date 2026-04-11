@@ -2,11 +2,17 @@
  * Invoice Types
  */
 
+export type InvoiceDocumentKind = 'invoice' | 'credit_note';
+
 export interface Invoice {
   id?: number;
   business_id?: number | null;
   company_id?: number | null;
   project_id?: number | null;
+  /** Defaults to `invoice` when absent (legacy rows). */
+  document_kind?: InvoiceDocumentKind;
+  /** Source invoice when this row is a credit note. */
+  credited_invoice_id?: number | null;
   invoice_number: string;
   customer_name: string;
   customer_email?: string;
@@ -49,6 +55,8 @@ export interface CreateInvoiceDto {
   business_id?: number | null;
   company_id?: number | null;
   project_id?: number | null;
+  document_kind?: InvoiceDocumentKind;
+  credited_invoice_id?: number | null;
   invoice_number: string;
   customer_name: string;
   customer_email?: string;

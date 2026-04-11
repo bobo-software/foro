@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { MaterialReactTable, type MRT_ColumnDef } from 'material-react-table';
-import { Box, IconButton, Tooltip } from '@mui/material';
-import { LuEye, LuFilter, LuPencil, LuTrash2 } from 'react-icons/lu';
+import { Link, useNavigate } from 'react-router-dom';
+import { LuEye, LuFilter, LuPackage, LuPencil, LuTrash2 } from 'react-icons/lu';
+import { AppDataTable, type AppDataTableColumn } from '@/components/elements/AppDataTable';
 import { useItemStore } from '../../stores/data/ItemStore';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { useAutoRefresh, useProjectId } from '../../hooks';
-import MRTThemeProvider from '../providers/MRTThemeProvider';
 import type { Item } from '../../types/item';
 import { formatCurrency } from '../../utils/currency';
 
 export function ItemList() {
+  const navigate = useNavigate();
   const { items, loading, error, fetchItems, removeItem } = useItemStore();
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
   const projectId = useProjectId();
@@ -20,7 +19,6 @@ export function ItemList() {
     fetchItems();
   }, [fetchItems, businessId]);
 
-  // Auto-refresh when items table changes (real-time updates)
   useAutoRefresh(projectId, 'items', fetchItems);
 
   const filteredItems = useMemo(() => {
@@ -28,9 +26,9 @@ export function ItemList() {
     const q = search.trim().toLowerCase();
     return items.filter(
       (i) =>
-        (i.name?.toLowerCase().includes(q)) ||
-        (i.sku?.toLowerCase().includes(q)) ||
-        (i.description?.toLowerCase().includes(q))
+        i.name?.toLowerCase().includes(q) ||
+        i.sku?.toLowerCase().includes(q) ||
+        i.description?.toLowerCase().includes(q),
     );
   }, [items, search]);
 
@@ -43,68 +41,100 @@ export function ItemList() {
         alert('Failed to delete item: ' + (err instanceof Error ? err.message : 'Unknown error'));
       }
     },
-    [removeItem]
+    [removeItem],
   );
 
-  const columns = useMemo<MRT_ColumnDef<Item>[]>(
+  const columns = useMemo<AppDataTableColumn<Item>[]>(
     () => [
-      { accessorKey: 'sku', header: 'SKU', enableColumnFilter: true },
-      { accessorKey: 'name', header: 'Name', enableColumnFilter: true },
       {
-        accessorKey: 'quantity',
+        id: 'sku',
+        header: 'SKU',
+        cellClassName: 'text-slate-600 dark:text-slate-300',
+        render: (row) => row.sku ?? '—',
+      },
+      {
+        id: 'item_type',
+        header: 'Type',
+        cellClassName: 'text-slate-600 dark:text-slate-300',
+        render: (row) => (row.item_type === 'manufactured' ? 'Manufactured' : 'Single'),
+      },
+      {
+        id: 'name',
+        header: 'Name',
+        cellClassName: 'font-medium text-slate-800 dark:text-slate-100',
+        render: (row) => row.name,
+      },
+      {
+        id: 'quantity',
         header: 'Quantity',
-        Cell: ({ cell }) => (cell.getValue() as number | null) ?? 0,
-        enableColumnFilter: false,
+        cellClassName: 'text-slate-600 dark:text-slate-300',
+        render: (row) => row.quantity ?? 0,
       },
       {
-        accessorKey: 'unit_price',
+        id: 'unit_price',
         header: 'Selling price',
-        Cell: ({ cell }) => formatCurrency(Number(cell.getValue())),
-        enableColumnFilter: false,
+        align: 'right',
+        cellClassName: 'text-slate-800 dark:text-slate-100',
+        render: (row) => formatCurrency(Number(row.unit_price)),
       },
       {
-        accessorKey: 'tax_rate',
+        id: 'tax_rate',
         header: 'Tax rate',
-        Cell: ({ cell }) => (cell.getValue() != null ? `${cell.getValue()}%` : '—'),
-        enableColumnFilter: false,
+        cellClassName: 'text-slate-600 dark:text-slate-300',
+        render: (row) => (row.tax_rate != null ? `${row.tax_rate}%` : '—'),
       },
       {
         id: 'actions',
         header: 'Actions',
-        enableColumnFilter: false,
-        enableSorting: false,
-        Cell: ({ row }) => (
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title="View">
-              <IconButton component={Link} to={`/app/items/${row.original.id}`} size="small">
-                <LuEye size={18} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Edit">
-              <IconButton component={Link} to={`/app/items/${row.original.id}/edit`} size="small">
-                <LuPencil size={18} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete">
-              <IconButton
-                size="small"
-                color="error"
-                onClick={() => handleDelete(row.original.id!)}
+        headerClassName: 'text-right',
+        cellClassName: 'text-right',
+        render: (row) => {
+          const id = row.id;
+          if (id == null) return null;
+          return (
+            <div
+              className="inline-flex items-center justify-end gap-0.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Link
+                to={`/app/items/${id}`}
+                className="inline-flex rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                title="View"
+                aria-label="View item"
               >
-                <LuTrash2 size={18} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        ),
+                <LuEye className="h-4 w-4" />
+              </Link>
+              <Link
+                to={`/app/items/${id}/edit`}
+                className="inline-flex rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+                title="Edit"
+                aria-label="Edit item"
+              >
+                <LuPencil className="h-4 w-4" />
+              </Link>
+              <button
+                type="button"
+                className="inline-flex rounded-md p-1 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                title="Delete"
+                aria-label="Delete item"
+                onClick={() => handleDelete(id)}
+              >
+                <LuTrash2 className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        },
       },
     ],
-    [handleDelete]
+    [handleDelete],
   );
+
+  const emptyMessage = search.trim() ? 'No items match your search.' : 'No items yet.';
 
   if (loading) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock</h1>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock items</h1>
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 text-center text-slate-500 dark:text-slate-400">
           Loading items…
         </div>
@@ -115,10 +145,9 @@ export function ItemList() {
   return (
     <div className="space-y-4">
       <div className="">
-      <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock Items</h1>
-      <p className="text-slate-500 dark:text-slate-400">Manage your stock items</p>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock items</h1>
+        <p className="text-slate-500 dark:text-slate-400">Manage your stock items</p>
       </div>
-
 
       <div className="flex items-center gap-3">
         <div className="relative min-w-0 flex-1">
@@ -141,20 +170,19 @@ export function ItemList() {
           + Add item
         </Link>
       </div>
-      <MRTThemeProvider>
-        <MaterialReactTable
-          columns={columns}
-          data={filteredItems}
-          state={{ showAlertBanner: !!error }}
-          muiToolbarAlertBannerProps={error ? { color: 'error', children: error } : undefined}
-          enableTopToolbar={false}
-          enableColumnFilters={false}
-          enableGlobalFilter={false}
-          enableColumnOrdering={false}
-          enableColumnResizing={false}
-          initialState={{ density: 'compact' }}
-        />
-      </MRTThemeProvider>
+
+      <AppDataTable<Item>
+        title="Stock items"
+        titleIcon={<LuPackage />}
+        columns={columns}
+        data={filteredItems}
+        getRowKey={(row, index) => row.id ?? `item-${index}`}
+        onRowClick={(row) => {
+          if (row.id != null) navigate(`/app/items/${row.id}`);
+        }}
+        error={error}
+        emptyMessage={emptyMessage}
+      />
     </div>
   );
 }

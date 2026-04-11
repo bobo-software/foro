@@ -5,6 +5,7 @@
 
 import { skaftinClient } from '../backend';
 import type { Invoice, CreateInvoiceDto } from '../types/invoice';
+import { normalizeDocumentKind } from '../utils/invoiceLedger';
 
 export class InvoiceService {
   private static readonly TABLE_NAME = 'invoices';
@@ -63,9 +64,16 @@ export class InvoiceService {
 
   /** Ensure numeric fields are numbers (API may return strings) */
   private static normalizeInvoice(raw: Record<string, unknown>): Invoice {
+    const creditedRaw = raw.credited_invoice_id;
+    let credited_invoice_id: number | null | undefined;
+    if (creditedRaw === null) credited_invoice_id = null;
+    else if (creditedRaw !== undefined && creditedRaw !== '')
+      credited_invoice_id = Number(creditedRaw);
     return {
       ...raw,
       id: raw.id != null ? Number(raw.id) : undefined,
+      document_kind: normalizeDocumentKind(raw.document_kind),
+      credited_invoice_id,
       subtotal: Number(raw.subtotal) || 0,
       tax_rate: raw.tax_rate != null ? Number(raw.tax_rate) : undefined,
       tax_amount: raw.tax_amount != null ? Number(raw.tax_amount) : undefined,
@@ -78,11 +86,18 @@ export class InvoiceService {
    */
   static async create(data: CreateInvoiceDto): Promise<Invoice> {
     const { items: _items, ...invoiceRow } = data;
-    const response = await skaftinClient.post<Invoice>(
+    const response = await skaftinClient.post<unknown>(
       `/app-api/database/tables/${this.TABLE_NAME}/insert`,
       { data: invoiceRow }
     );
-    return response.data;
+    const inner = response.data;
+    const inserted = Array.isArray(inner)
+      ? (inner[0] as Record<string, unknown> | undefined)
+      : (inner as Record<string, unknown> | undefined);
+    if (!inserted || typeof inserted !== 'object') {
+      throw new Error('Invalid response from invoice create: missing inserted row');
+    }
+    return this.normalizeInvoice(inserted);
   }
 
   /**

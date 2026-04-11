@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { LuEye, LuEyeOff } from 'react-icons/lu';
-import { authService } from '../../services/authService';
+import { authPayloadNeedsOtpVerification, authService } from '../../services/authService';
 import useAuthStore from '../../stores/data/AuthStore';
 import { skaftinClient } from '../../backend';
 import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
@@ -21,6 +21,7 @@ interface LoginApiShape {
       email: string;
       phone?: string | null;
       is_active?: boolean;
+      email_verified?: boolean;
       roles?: Array<{
         id?: number;
         role_name?: string;
@@ -72,6 +73,7 @@ function mapNewLoginResponseToSessionUser(raw: LoginApiShape): SessionUser {
     first_name: firstName || undefined,
     phone: user.phone ?? null,
     is_active: user.is_active,
+    email_verified: user.email_verified,
     roles: normalizedRoles?.length ? normalizedRoles : undefined,
     is_admin: payload.is_admin ?? payload.organisation?.is_admin ?? false,
   };
@@ -95,15 +97,24 @@ export function Login() {
   const setLoading = useAuthStore((s) => s.setLoading);
   const setError = useAuthStore((s) => s.setError);
   const loginToStore = useAuthStore((s) => s.login);
+  const setRequiresOtpVerification = useAuthStore((s) => s.setRequiresOtpVerification);
+  const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
 
   const isAuthenticated = !!(sessionUser?.accessToken || accessToken);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (pending OTP → verify screen first)
   useEffect(() => {
-    if (isAuthenticated) {
+    if (requiresOtpVerification && sessionUser?.email) {
+      navigate('/verify-otp', {
+        replace: true,
+        state: { email: sessionUser.email, userId: sessionUser.id },
+      });
+      return;
+    }
+    if (isAuthenticated && !requiresOtpVerification) {
       navigate(from ?? '/app', { replace: true });
     }
-  }, [isAuthenticated, navigate, from]);
+  }, [isAuthenticated, requiresOtpVerification, sessionUser, navigate, from]);
 
   // Clear error on unmount
   useEffect(() => {
@@ -123,13 +134,22 @@ export function Login() {
     clearError();
     
     try {
-      await authService.login({
+      const loggedIn = await authService.login({
         username: email.trim(),
         password,
         method: 'email',
       });
-      toast.success('Welcome back');
-      navigate(from ?? '/app', { replace: true });
+      const pendingOtp = useAuthStore.getState().requiresOtpVerification;
+      if (pendingOtp) {
+        toast.success('Check your email for the verification code');
+        navigate('/verify-otp', {
+          replace: true,
+          state: { email: loggedIn.email, userId: loggedIn.id },
+        });
+      } else {
+        toast.success('Welcome back');
+        navigate(from ?? '/app', { replace: true });
+      }
     } catch (err: unknown) {
       const isInvalidShape = err instanceof Error && err.message === 'Invalid login response';
 
@@ -145,15 +165,25 @@ export function Login() {
         clearError();
         setLoading(true);
         const response = await skaftinClient.post<LoginApiShape['data']>(SKAFTIN_CONFIG.endpoints.login, {
-          username: email.trim(),
+          credential: email.trim(),
           password,
           method: 'email',
         });
         const session = mapNewLoginResponseToSessionUser(response as LoginApiShape);
         loginToStore(session);
+        const inner = (response as LoginApiShape).data ?? {};
+        if (authPayloadNeedsOtpVerification(inner)) {
+          setRequiresOtpVerification(true);
+          toast.success('Check your email for the verification code');
+          navigate('/verify-otp', {
+            replace: true,
+            state: { email: session.email, userId: session.id },
+          });
+        } else {
+          toast.success('Welcome back');
+          navigate(from ?? '/app', { replace: true });
+        }
         setLoading(false);
-        toast.success('Welcome back');
-        navigate(from ?? '/app', { replace: true });
       } catch (fallbackErr: unknown) {
         const fallbackMessage =
           fallbackErr instanceof Error ? fallbackErr.message : 'Login failed';

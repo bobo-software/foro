@@ -49,7 +49,7 @@ export async function apiRequest<T>(
   } = {}
 ): Promise<ApiResponse<T>> {
   try {
-    const { method = 'GET', body, headers } = options;
+    const { method = 'GET', body } = options;
     
     switch (method.toUpperCase()) {
       case 'GET':

@@ -37,7 +37,7 @@ const AppLabledAutocomplete: React.FC<AppAutocompleteProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [filteredOptions, setFilteredOptions] = useState(options);
-  const [selectedOption, setSelectedOption] = useState<any>(null);
+  const [, setSelectedOption] = useState<any>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputId = label.toLowerCase().replace(/\s+/g, '-');
 
@@ -53,7 +53,9 @@ const AppLabledAutocomplete: React.FC<AppAutocompleteProps> = ({
   // Update selectedOption when value changes
   useEffect(() => {
     if (value) {
-      const option = options.find(opt => opt[valueAccessor] === value);
+      const option = options.find(
+        (opt) => String(opt[valueAccessor]) === String(value),
+      );
       setSelectedOption(option || null);
     } else {
       setSelectedOption(null);

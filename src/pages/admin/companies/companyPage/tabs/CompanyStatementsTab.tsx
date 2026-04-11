@@ -4,6 +4,7 @@ import PaymentService from '@/services/paymentService';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '@/utils/currency';
 import { generateStatementPdf, type StatementRow } from '@/utils/statementPdf';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
+import { isCreditNoteInvoice } from '@/utils/invoiceLedger';
 import type { CompanyTabProps } from './types';
 import { formatDate } from './types';
 
@@ -78,14 +79,21 @@ export function CompanyStatementsTab({ company, projects = [], selectedProjectId
       const to = stmtToDate || '9999-12-31';
       const filterByDate = (d: string) => d >= from && d <= to;
 
-      const combined: Array<{ date: string; type: 'invoice' | 'payment'; reference: string; amount: number; currency: string }> = [];
+      const combined: Array<{
+        date: string;
+        type: 'invoice' | 'payment' | 'credit_note';
+        reference: string;
+        amount: number;
+        currency: string;
+      }> = [];
       for (const inv of invList) {
         const d = inv.issue_date?.split('T')[0] ?? inv.issue_date ?? '';
         if (filterByDate(d)) {
+          const isCn = isCreditNoteInvoice(inv);
           combined.push({
             date: d,
-            type: 'invoice',
-            reference: inv.invoice_number ?? `Invoice #${inv.id}`,
+            type: isCn ? 'credit_note' : 'invoice',
+            reference: inv.invoice_number ?? (isCn ? `CN #${inv.id}` : `Invoice #${inv.id}`),
             amount: Number(inv.total) || 0,
             currency: inv.currency || 'ZAR',
           });
@@ -111,13 +119,15 @@ export function CompanyStatementsTab({ company, projects = [], selectedProjectId
         if (!byCurrency.has(c)) byCurrency.set(c, []);
         const list = byCurrency.get(c)!;
         const prevBalance = list.length > 0 ? list[list.length - 1].balance : 0;
-        const balance = item.type === 'invoice' ? prevBalance + item.amount : prevBalance - item.amount;
+        const isDebit = item.type === 'invoice';
+        const isCredit = item.type === 'payment' || item.type === 'credit_note';
+        const balance = isDebit ? prevBalance + item.amount : prevBalance - item.amount;
         list.push({
           date: item.date,
           type: item.type,
           reference: item.reference,
-          debit: item.type === 'invoice' ? item.amount : 0,
-          credit: item.type === 'payment' ? item.amount : 0,
+          debit: isDebit ? item.amount : 0,
+          credit: isCredit ? item.amount : 0,
           balance,
           currency: c,
         });
@@ -306,7 +316,7 @@ export function CompanyStatementsTab({ company, projects = [], selectedProjectId
                 </div>
                 <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3">
                   <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                    Total debits (invoices)
+                    Total debits (invoices only)
                   </p>
                   <p className="mt-0.5 text-base font-semibold text-amber-800 dark:text-amber-200">
                     {formatCurrency(totalDebits, stmtCurrency)}
@@ -314,7 +324,7 @@ export function CompanyStatementsTab({ company, projects = [], selectedProjectId
                 </div>
                 <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-3">
                   <p className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-                    Total credits (payments)
+                    Total credits (payments and credit notes)
                   </p>
                   <p className="mt-0.5 text-base font-semibold text-emerald-800 dark:text-emerald-200">
                     {formatCurrency(totalCredits, stmtCurrency)}
@@ -379,7 +389,11 @@ export function CompanyStatementsTab({ company, projects = [], selectedProjectId
                                 : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
                             }`}
                           >
-                            {row.type === 'invoice' ? 'Invoice' : 'Payment'}
+                            {row.type === 'invoice'
+                              ? 'Invoice'
+                              : row.type === 'credit_note'
+                                ? 'Credit note'
+                                : 'Payment'}
                           </span>
                         </td>
                         <td className="px-4 py-3 font-medium">{row.reference}</td>

@@ -1,6 +1,7 @@
-import InvoiceService from '../services/invoiceService';
-import InvoiceItemService from '../services/invoiceItemService';
 import type { Invoice, InvoiceItem } from '../types/invoice';
+import { useInvoiceStore } from '../stores/data/InvoiceStore';
+import InvoiceService from '../services/invoiceService';
+import { isCreditNoteInvoice } from './invoiceLedger';
 import type { Business } from '../types/business';
 import type { DocumentTemplateId } from '../types/documentTemplate';
 import { getTemplateConfig } from '../types/documentTemplate';
@@ -14,14 +15,10 @@ import { useBusinessStore } from '../stores/data/BusinessStore';
 
 /** Fetch invoice + line items by id, then download PDF. Use from list view. */
 export async function downloadInvoicePdfById(invoiceId: number): Promise<void> {
-  const [invoice, items] = await Promise.all([
-    InvoiceService.findById(invoiceId),
-    InvoiceItemService.findByInvoiceId(invoiceId),
-  ]);
+  const { invoice, items } = await useInvoiceStore.getState().fetchInvoiceWithItems(invoiceId);
   if (!invoice) throw new Error('Invoice not found');
-  const lineItems = Array.isArray(items) ? items : [];
   const business = useBusinessStore.getState().currentBusiness;
-  await generateInvoicePdf(invoice, lineItems, business);
+  await generateInvoicePdf(invoice, items, business);
 }
 
 export async function generateInvoicePdf(
@@ -32,6 +29,17 @@ export async function generateInvoicePdf(
 ): Promise<void> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF();
+
+  const isCn = isCreditNoteInvoice(invoice);
+  let creditedInvoiceNumber: string | null = null;
+  if (invoice.credited_invoice_id != null) {
+    try {
+      const src = await InvoiceService.findById(invoice.credited_invoice_id);
+      if (src?.invoice_number) creditedInvoiceNumber = src.invoice_number;
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Resolve template config — use override if provided, otherwise business preference
   const config = getTemplateConfig(templateOverride ?? business?.document_template);
@@ -57,7 +65,7 @@ export async function generateInvoicePdf(
     businessPhone: business?.phone,
     businessVat: business?.vat_number,
     businessReg: business?.registration_number,
-    documentTitle: 'Invoice',
+    documentTitle: isCn ? 'Credit note' : 'Invoice',
     documentNumber: `#${invoice.invoice_number}`,
     orderNumber: invoice.order_number,
     status: invoice.status,
@@ -108,16 +116,23 @@ export async function generateInvoicePdf(
     bankingDetails: business?.banking_details,
   }, y, config);
 
-  // ── Notes ──
-  if (invoice.notes) {
-    y = renderNotesSection(doc, invoice.notes, y, config);
+  // ── Notes (credit reference + user notes) ──
+  const notesParts: string[] = [];
+  if (isCn && creditedInvoiceNumber) {
+    notesParts.push(`This credit note relates to invoice #${creditedInvoiceNumber}.`);
+  }
+  if (invoice.notes?.trim()) notesParts.push(invoice.notes.trim());
+  const notesCombined = notesParts.join('\n\n');
+  if (notesCombined) {
+    y = renderNotesSection(doc, notesCombined, y, config);
   }
 
   // ── Signature ──
-  y = renderSignatureSection(doc, y, config);
+  renderSignatureSection(doc, y, config);
 
   // ── Footer ──
   renderFooter(doc, config);
 
-  doc.save(`invoice-${invoice.invoice_number}.pdf`);
+  const safeNum = String(invoice.invoice_number).replace(/[^\w.-]+/g, '-');
+  doc.save(isCn ? `credit-note-${safeNum}.pdf` : `invoice-${safeNum}.pdf`);
 }

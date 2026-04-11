@@ -13,6 +13,8 @@ const dateString = (field: string) =>
 export const invoiceSchema = z.object({
   company_id: z.number().int().positive().nullable().optional(),
   project_id: z.number().int().positive().nullable().optional(),
+  document_kind: z.enum(['invoice', 'credit_note']).optional(),
+  credited_invoice_id: z.number().int().positive().nullable().optional(),
   invoice_number: nonEmptyString('Invoice number'),
   customer_name: nonEmptyString('Company name'),
   customer_email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -88,9 +90,42 @@ export const itemSchema = z.object({
   cost_price: z.number().nonnegative('Cost price must be ≥ 0').optional(),
   quantity: z.number().int('Quantity must be whole number').nonnegative().optional(),
   tax_rate: z.number().min(0).max(100).optional(),
+  item_type: z.enum(['single', 'manufactured']).default('single'),
 });
 
 export type ItemInput = z.infer<typeof itemSchema>;
+
+export const bomLineInputSchema = z.object({
+  component_item_id: z.number().int().positive('Component is required'),
+  quantity_per: z.number().positive('Quantity per unit must be > 0'),
+});
+
+export type BomLineInput = z.infer<typeof bomLineInputSchema>;
+
+/** Full stock item form including BOM (manufactured requires ≥ 1 line). */
+export const itemFormWithBomSchema = itemSchema
+  .extend({
+    bom_lines: z.array(bomLineInputSchema).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.item_type === 'manufactured') {
+      if (!data.bom_lines?.length) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Manufactured items require at least one bill of materials line',
+          path: ['bom_lines'],
+        });
+      }
+    } else if (data.bom_lines?.length) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Single items cannot have bill of materials lines',
+        path: ['bom_lines'],
+      });
+    }
+  });
+
+export type ItemFormWithBomInput = z.infer<typeof itemFormWithBomSchema>;
 
 // ── Payment ────────────────────────────────────────────────────────
 export const paymentSchema = z.object({

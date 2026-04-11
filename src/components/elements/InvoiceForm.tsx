@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { LuArrowLeft } from 'react-icons/lu';
 import type { CreateInvoiceDto, InvoiceStatus } from '../../types/invoice';
 import type { Company } from '../../types/company';
-import type { Item } from '../../types/item';
 import type { Project } from '../../types/project';
-import InvoiceService from '../../services/invoiceService';
-import InvoiceItemService from '../../services/invoiceItemService';
-import CompanyService from '../../services/companyService';
-import ItemService from '../../services/itemService';
-import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
+import { useCompanyStore } from '../../stores/data/CompanyStore';
+import { useItemStore } from '../../stores/data/ItemStore';
+import { useProjectStore } from '../../stores/data/ProjectStore';
+import { useInvoiceStore } from '../../stores/data/InvoiceStore';
+import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
@@ -22,18 +22,33 @@ const NO_PROJECT_OPTION: Project = {
 
 interface InvoiceFormProps {
   invoiceId?: number;
+  /** When set (new document only), prefill from this invoice as a credit note. */
+  creditFromInvoiceId?: number;
+  /** New credit note without copying lines from an invoice (`?credit_note=1`). */
+  standaloneCreditNote?: boolean;
   initialCompanyId?: number;
   initialProjectId?: number;
-  onSuccess?: () => void;
+  onSuccess?: (createdId?: number) => void;
   onCancel?: () => void;
 }
 
-export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onSuccess, onCancel }: InvoiceFormProps) {
+export function InvoiceForm({
+  invoiceId,
+  creditFromInvoiceId,
+  standaloneCreditNote,
+  initialCompanyId,
+  initialProjectId,
+  onSuccess,
+  onCancel,
+}: InvoiceFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [stockItems, setStockItems] = useState<Item[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+
+  const fetchCompanies = useCompanyStore((s) => s.fetchCompanies);
+  const fetchItems = useItemStore((s) => s.fetchItems);
+  const companies = useCompanyStore((s) => s.companies);
+  const stockItems = useItemStore((s) => s.items);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(NO_PROJECT_OPTION);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
@@ -44,6 +59,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   const [formData, setFormData] = useState<CreateInvoiceDto>({
     company_id: undefined,
     project_id: undefined,
+    document_kind: 'invoice',
+    credited_invoice_id: undefined,
     invoice_number: '',
     customer_name: '',
     customer_email: '',
@@ -65,32 +82,18 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   });
 
   useEffect(() => {
-    const businessId = useBusinessStore.getState().currentBusiness?.id;
-    const itemWhere = businessId != null ? { business_id: businessId } : undefined;
-    Promise.all([
-      CompanyService.findAll(),
-      ItemService.findAll({ where: itemWhere, orderBy: 'name', orderDirection: 'ASC' }),
-    ]).then(([comps, items]) => {
-      setCompanies(comps);
-      setStockItems(items);
-    });
-  }, []);
+    void fetchCompanies();
+    void fetchItems();
+  }, [fetchCompanies, fetchItems]);
 
   const loadProjectsForCompany = useCallback(async (companyId: number) => {
-    const businessId = useBusinessStore.getState().currentBusiness?.id;
-    const where: Record<string, unknown> = { company_id: companyId };
-    if (businessId != null) where.business_id = businessId;
-    const projectList = await ProjectService.findAll({
-      where,
-      orderBy: 'name',
-      orderDirection: 'ASC',
-      limit: 500,
-    });
+    const projectList = await useProjectStore.getState().fetchProjectsForCompany(companyId);
     setProjects(projectList);
     return projectList;
   }, []);
 
   useEffect(() => {
+    if (creditFromInvoiceId) return;
     if (initialCompanyId && companies.length > 0 && !initialCompanyApplied && !invoiceId) {
       const company = companies.find((c) => c.id === initialCompanyId);
       if (company) {
@@ -111,9 +114,10 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         setInitialCompanyApplied(true);
       }
     }
-  }, [initialCompanyId, companies, initialCompanyApplied, invoiceId, loadProjectsForCompany]);
+  }, [creditFromInvoiceId, initialCompanyId, companies, initialCompanyApplied, invoiceId, loadProjectsForCompany]);
 
   useEffect(() => {
+    if (creditFromInvoiceId) return;
     if (!invoiceId && initialProjectId && projects.length > 0 && !initialProjectApplied) {
       const project = projects.find((p) => p.id === initialProjectId);
       if (project) {
@@ -122,20 +126,121 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         setInitialProjectApplied(true);
       }
     }
-  }, [invoiceId, initialProjectId, projects, initialProjectApplied]);
+  }, [creditFromInvoiceId, invoiceId, initialProjectId, projects, initialProjectApplied]);
 
   useEffect(() => {
-    if (!invoiceId) {
-      InvoiceService.count()
-        .then((count) => {
-          setFormData((prev) => ({
-            ...prev,
-            invoice_number: String(count + 1).padStart(4, '0'),
-          }));
-        })
-        .catch(() => {});
-    }
-  }, [invoiceId]);
+    if (invoiceId || creditFromInvoiceId || standaloneCreditNote) return;
+    useInvoiceStore
+      .getState()
+      .peekNextInvoiceNumber()
+      .then((num) => {
+        setFormData((prev) => ({ ...prev, invoice_number: num }));
+      })
+      .catch(() => {});
+  }, [invoiceId, creditFromInvoiceId, standaloneCreditNote]);
+
+  useEffect(() => {
+    if (!standaloneCreditNote || invoiceId) return;
+    void useInvoiceStore
+      .getState()
+      .peekNextCreditNoteNumber()
+      .then((cn) => {
+        setFormData((prev) => ({
+          ...prev,
+          document_kind: 'credit_note',
+          credited_invoice_id: undefined,
+          invoice_number: cn,
+        }));
+      })
+      .catch(() => {});
+  }, [standaloneCreditNote, invoiceId]);
+
+  const [creditPrefillError, setCreditPrefillError] = useState<string | null>(null);
+  const [creditPrefillDone, setCreditPrefillDone] = useState(false);
+
+  useEffect(() => {
+    if (!creditFromInvoiceId || invoiceId) return;
+    let cancelled = false;
+    setCreditPrefillError(null);
+    setCreditPrefillDone(false);
+    void (async () => {
+      try {
+        const { invoice: src, items } = await useInvoiceStore
+          .getState()
+          .fetchInvoiceWithItems(creditFromInvoiceId);
+        if (cancelled) return;
+        if (!src) {
+          setCreditPrefillError('Source invoice not found.');
+          return;
+        }
+        if (isCreditNoteInvoice(src)) {
+          setCreditPrefillError('Cannot create a credit note from a credit note.');
+          return;
+        }
+        const cn = await useInvoiceStore.getState().peekNextCreditNoteNumber();
+        if (cancelled) return;
+        const companyList = useCompanyStore.getState().companies;
+        const matchedCompany =
+          src.company_id != null ? companyList.find((c) => c.id === src.company_id) ?? null : null;
+        setFormData({
+          company_id: src.company_id,
+          project_id: src.project_id,
+          document_kind: 'credit_note',
+          credited_invoice_id: creditFromInvoiceId,
+          invoice_number: cn,
+          customer_name: src.customer_name,
+          customer_email: src.customer_email || '',
+          customer_address: src.customer_address || '',
+          customer_vat_number: src.customer_vat_number || '',
+          delivery_address: src.delivery_address || matchedCompany?.address || '',
+          delivery_conditions: src.delivery_conditions || '',
+          order_number: src.order_number || '',
+          terms: src.terms || 'C.O.D',
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: new Date().toISOString().split('T')[0],
+          status: 'draft',
+          subtotal: src.subtotal,
+          tax_rate: src.tax_rate || 0,
+          tax_amount: src.tax_amount || 0,
+          total: src.total,
+          currency: src.currency || 'ZAR',
+          notes: src.notes || '',
+        });
+        setSelectedCompany(matchedCompany);
+        if (matchedCompany?.id) {
+          const projectList = await useProjectStore.getState().fetchProjectsForCompany(matchedCompany.id);
+          if (!cancelled && src.project_id != null) {
+            const matchedProject = projectList.find((p) => p.id === src.project_id) ?? null;
+            setSelectedProject(matchedProject ?? NO_PROJECT_OPTION);
+          } else if (!cancelled) {
+            setSelectedProject(NO_PROJECT_OPTION);
+          }
+        } else if (!cancelled) {
+          setSelectedProject(NO_PROJECT_OPTION);
+        }
+        const rows: LineRow[] = (items || []).map((item) => ({
+          id: `line-new-${item.id ?? Math.random()}`,
+          itemId: item.item_id,
+          sku: item.sku || '',
+          description: item.description,
+          quantity: item.quantity || 1,
+          unit_price: Number(item.unit_price) || 0,
+          discountPercent: Number(item.discount_percent ?? 0),
+          unit_type: (item.unit_type as 'qty' | 'hrs') ?? 'qty',
+        }));
+        if (!cancelled) {
+          setLineRows(rows);
+          setGlobalDiscountPercent(Number(src.discount_percent ?? 0));
+          setCreditPrefillDone(true);
+        }
+      } catch {
+        if (!cancelled) setCreditPrefillError('Failed to load source invoice.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [creditFromInvoiceId, invoiceId]);
 
   useEffect(() => {
     if (invoiceId) loadInvoice();
@@ -161,10 +266,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     if (!invoiceId) return;
     try {
       setLoading(true);
-      const [invoice, items] = await Promise.all([
-        InvoiceService.findById(invoiceId),
-        InvoiceItemService.findByInvoiceId(invoiceId),
-      ]);
+      const { invoice, items } = await useInvoiceStore.getState().fetchInvoiceWithItems(invoiceId);
       if (invoice) {
         const matchedCompany = invoice.company_id != null
           ? companies.find((c) => c.id === invoice.company_id) ?? null
@@ -172,6 +274,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         setFormData({
           company_id: invoice.company_id,
           project_id: invoice.project_id,
+          document_kind: invoice.document_kind ?? 'invoice',
+          credited_invoice_id: invoice.credited_invoice_id ?? undefined,
           invoice_number: invoice.invoice_number,
           customer_name: invoice.customer_name,
           customer_email: invoice.customer_email || '',
@@ -201,7 +305,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
             setSelectedProject(NO_PROJECT_OPTION);
           }
         } else if (invoice.project_id != null) {
-          const project = await ProjectService.findById(invoice.project_id);
+          const project = await useProjectStore.getState().findProjectById(invoice.project_id);
           setSelectedProject(project);
         } else {
           setSelectedProject(NO_PROJECT_OPTION);
@@ -322,6 +426,9 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const payload: CreateInvoiceDto = {
       ...formData,
+      document_kind: formData.document_kind ?? 'invoice',
+      credited_invoice_id:
+        formData.document_kind === 'credit_note' ? formData.credited_invoice_id ?? null : null,
       discount_percent: globalDiscountPercent || 0,
       ...(businessId != null && { business_id: businessId }),
       items: items.length ? items : undefined,
@@ -329,15 +436,12 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     try {
       setLoading(true);
       if (invoiceId) {
-        await InvoiceService.update(invoiceId, payload);
-        await InvoiceItemService.deleteByInvoiceId(invoiceId);
-        if (items.length) await InvoiceItemService.insertMany(invoiceId, items);
+        await useInvoiceStore.getState().saveInvoiceWithLines(invoiceId, payload, items);
+        onSuccess?.();
       } else {
-        const created = await InvoiceService.create(payload);
-        const newId = created?.id;
-        if (newId != null && items.length) await InvoiceItemService.insertMany(newId, items);
+        const newId = await useInvoiceStore.getState().createInvoiceWithLines(payload, items);
+        onSuccess?.(newId);
       }
-      onSuccess?.();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save invoice');
     } finally {
@@ -350,6 +454,8 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
   const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
   const groupClass = 'flex flex-col';
 
+  const isCreditNote = formData.document_kind === 'credit_note';
+
   if (loading && invoiceId) {
     return (
       <div className="max-w-[900px] mx-auto px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -358,14 +464,41 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
     );
   }
 
+  if (creditFromInvoiceId && !invoiceId && !creditPrefillDone && !creditPrefillError) {
+    return (
+      <div className="max-w-[900px] mx-auto px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+        Preparing credit note from invoice…
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1200px] mx-auto">
-      <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
-        {invoiceId ? 'Edit Invoice' : 'Create Invoice'}
-      </h2>
-      {error && (
+      <div className="flex items-center gap-3 mb-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex items-center gap-1.5 shrink-0 rounded-lg p-1.5 -ml-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+            aria-label="Back"
+          >
+            <LuArrowLeft className="w-5 h-5" aria-hidden />
+            <span>Back</span>
+          </button>
+        )}
+        <h2 className="m-0 text-xl font-semibold text-gray-900 dark:text-gray-100">
+          {invoiceId
+            ? isCreditNote
+              ? 'Edit Credit Note'
+              : 'Edit Invoice'
+            : isCreditNote
+              ? 'Create Credit Note'
+              : 'Create Invoice'}
+        </h2>
+      </div>
+      {(error || creditPrefillError) && (
         <div className="mb-2 px-3 py-2 text-sm rounded-md bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300">
-          {error}
+          {error || creditPrefillError}
         </div>
       )}
       <form
@@ -375,7 +508,7 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
         <div className="grid grid-cols-1 gap-x-4 gap-y-2 mb-2 md:grid-cols-4">
           <div className={groupClass}>
             <label htmlFor="invoice_number" className={labelClass}>
-              Invoice #
+              {isCreditNote ? 'Credit note #' : 'Invoice #'}
             </label>
             <input
               id="invoice_number"
@@ -665,7 +798,15 @@ export function InvoiceForm({ invoiceId, initialCompanyId, initialProjectId, onS
             disabled={loading}
             className="w-full px-4 py-1.5 text-sm font-medium text-white rounded-md transition-colors sm:w-auto bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {loading ? 'Saving...' : invoiceId ? 'Update Invoice' : 'Create Invoice'}
+            {loading
+              ? 'Saving...'
+              : invoiceId
+                ? isCreditNote
+                  ? 'Update Credit Note'
+                  : 'Update Invoice'
+                : isCreditNote
+                  ? 'Create Credit Note'
+                  : 'Create Invoice'}
           </button>
         </div>
       </form>

@@ -1,5 +1,4 @@
 import type { Business } from '../types/business';
-import type { DocumentTemplateConfig } from '../types/documentTemplate';
 import { getTemplateConfig } from '../types/documentTemplate';
 import { fetchLogoAsBase64 } from './pdfLogoHelper';
 import { formatCurrency } from './currency';
@@ -7,7 +6,7 @@ import { PDF as PdfConst, addLogo } from './pdfTemplates/types';
 
 export interface StatementRow {
   date: string;
-  type: 'invoice' | 'payment';
+  type: 'invoice' | 'payment' | 'credit_note';
   reference: string;
   debit: number;
   credit: number;
@@ -127,7 +126,9 @@ export async function generateStatementPdf(
     doc.setFontSize(9);
     doc.setTextColor(...config.textColor);
     doc.text(dateStr, colDate + 2, y + 5);
-    doc.text(row.type === 'invoice' ? 'Invoice' : 'Payment', colType + 2, y + 5);
+    const typeLabel =
+      row.type === 'invoice' ? 'Invoice' : row.type === 'credit_note' ? 'Credit note' : 'Payment';
+    doc.text(typeLabel, colType + 2, y + 5);
     doc.text(String(row.reference).slice(0, 18), colRef + 2, y + 5);
     doc.text(row.debit > 0 ? formatCurrency(row.debit, currency) : '', colDebit + 2, y + 5);
     doc.text(row.credit > 0 ? formatCurrency(row.credit, currency) : '', colCredit + 2, y + 5);

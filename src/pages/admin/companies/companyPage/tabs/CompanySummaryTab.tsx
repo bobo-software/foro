@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { formatCurrency } from '@/utils/currency';
+import { getInvoiceLedgerAmount, isCreditNoteInvoice } from '@/utils/invoiceLedger';
 import type { CompanyTabProps } from './types';
 import { BUSINESS_TYPE_LABELS } from './types';
 
@@ -8,7 +9,7 @@ export function CompanySummaryTab({ company, invoices, payments, docsLoading }: 
     const byCurrency: Record<string, number> = {};
     for (const inv of invoices) {
       const c = inv.currency || 'ZAR';
-      byCurrency[c] = (byCurrency[c] ?? 0) + Number(inv.total ?? 0);
+      byCurrency[c] = (byCurrency[c] ?? 0) + getInvoiceLedgerAmount(inv);
     }
     for (const pay of payments) {
       const c = pay.currency || 'ZAR';
@@ -19,17 +20,32 @@ export function CompanySummaryTab({ company, invoices, payments, docsLoading }: 
 
   const totalsByCurrency = useMemo(() => {
     const invoicesTotal: Record<string, number> = {};
+    const creditNotesTotal: Record<string, number> = {};
     const paymentsTotal: Record<string, number> = {};
     for (const inv of invoices) {
       const c = inv.currency || 'ZAR';
-      invoicesTotal[c] = (invoicesTotal[c] ?? 0) + Number(inv.total ?? 0);
+      const amt = Number(inv.total ?? 0);
+      if (isCreditNoteInvoice(inv)) {
+        creditNotesTotal[c] = (creditNotesTotal[c] ?? 0) + amt;
+      } else {
+        invoicesTotal[c] = (invoicesTotal[c] ?? 0) + amt;
+      }
     }
     for (const pay of payments) {
       const c = pay.currency || 'ZAR';
       paymentsTotal[c] = (paymentsTotal[c] ?? 0) + Number(pay.amount ?? 0);
     }
-    return { invoicesTotal, paymentsTotal };
+    return { invoicesTotal, creditNotesTotal, paymentsTotal };
   }, [invoices, payments]);
+
+  const invoiceDocCount = useMemo(
+    () => invoices.filter((inv) => !isCreditNoteInvoice(inv)).length,
+    [invoices],
+  );
+  const creditNoteCount = useMemo(
+    () => invoices.filter((inv) => isCreditNoteInvoice(inv)).length,
+    [invoices],
+  );
 
   const hasCredentials =
     company.business_type ||
@@ -130,7 +146,15 @@ export function CompanySummaryTab({ company, invoices, payments, docsLoading }: 
                   ))
                 )}
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
+                  {invoiceDocCount} invoice{invoiceDocCount !== 1 ? 's' : ''}
+                  {creditNoteCount > 0 && (
+                    <span className="block text-slate-500 dark:text-slate-400">
+                      {creditNoteCount} credit note{creditNoteCount !== 1 ? 's' : ''}:{' '}
+                      {Object.entries(totalsByCurrency.creditNotesTotal)
+                        .map(([curr, tot]) => formatCurrency(tot, curr))
+                        .join(' · ')}
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-emerald-50/60 dark:bg-emerald-900/10 border border-emerald-200/60 dark:border-emerald-800/40">

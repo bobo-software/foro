@@ -1,0 +1,32 @@
+---
+description: All Skaftin/database API access goes through Zustand stores, not services in UI
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# API and data fetching — Zustand stores only
+
+## Rule
+
+- **Do not** call `*Service` methods directly from React components, pages, hooks, or shared utilities (except inside `src/stores/**`).
+- **Do** add or extend a Zustand store under `src/stores/data/` (or `src/stores/state/`) and expose **actions** that wrap the service layer.
+- Components and hooks should use `useXxxStore` selectors and/or `useXxxStore.getState().actionName()` for reads and mutations.
+
+## Where services are allowed
+
+- **`src/stores/**`** — stores call `*Service` and encapsulate loading/error/cache logic.
+- **`src/services/**`** — thin HTTP/table clients only; no UI imports required here.
+- **Exceptions** (keep isolated and document in code if needed):
+  - **Storage / file URLs** (e.g. logo download URLs) may use `StorageService` from components when there is no store yet.
+  - **Auth token plumbing** inside `SkaftinClient` / `TokenManager` is not store-mediated.
+
+## Adding a new endpoint
+
+1. If it fits an existing domain store (`InvoiceStore`, `QuotationStore`, `CompanyStore`, etc.), add an action there.
+2. If it is a new domain (e.g. payments detail), add `src/stores/data/<Name>Store.ts` and export it from `src/stores/StoresIndex.ts` when stable.
+3. Refactor any direct `FooService` usage in `src/` (outside stores) to call the new action.
+
+## PDF / export helpers
+
+- Prefer: store action fetches data → pure helper receives DTOs only.
+- `downloadQuotationPdfById` / `downloadInvoicePdfById` may call stores internally to load data before generating PDFs.

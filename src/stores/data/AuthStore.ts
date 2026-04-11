@@ -139,6 +139,7 @@ const useAuthStore = create<AuthState>()(
               roles: user.roles,
               role: user.roles?.[0]?.role_key || sessionUser?.role || '',
               is_active: user.is_active,
+              email_verified: user.email_verified ?? sessionUser?.email_verified,
               association: org?.id || sessionUser?.association || 0,
               association_name: org?.name || sessionUser?.association_name || '',
               is_admin: org?.is_admin || sessionUser?.is_admin || false,
@@ -151,6 +152,8 @@ const useAuthStore = create<AuthState>()(
               accessToken: token,
               isLoading: false,
               error: null,
+              requiresOtpVerification:
+                user.email_verified === true ? false : get().requiresOtpVerification,
             });
             return true;
           }
@@ -163,7 +166,7 @@ const useAuthStore = create<AuthState>()(
             isLoading: false,
           });
           return false;
-        } catch (error) {
+        } catch {
           // Session verification failed
           TokenManager.clearAll();
           set({
@@ -260,6 +263,7 @@ const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         sessionUser: state.sessionUser,
         accessToken: state.accessToken,
+        requiresOtpVerification: state.requiresOtpVerification,
       }),
       // Sync token manager on rehydration
       onRehydrateStorage: () => (state) => {

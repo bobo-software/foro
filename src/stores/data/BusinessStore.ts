@@ -11,7 +11,7 @@ interface BusinessState {
   setCurrentBusiness: (business: Business | null) => void;
 }
 
-export const useBusinessStore = create<BusinessState>((set, get) => ({
+export const useBusinessStore = create<BusinessState>((set) => ({
   currentBusiness: null,
   businesses: [],
   loading: false,
