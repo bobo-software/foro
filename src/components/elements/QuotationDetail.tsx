@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { LuCopy, LuFileDown, LuFileText } from 'react-icons/lu';
+import { LuCopy, LuPrinter, LuFileText } from 'react-icons/lu';
 import { AppModal } from '../modals/AppModal';
 import type { Quotation, QuotationLine, CreateQuotationDto } from '../../types/quotation';
 import type { CreateInvoiceDto } from '../../types/invoice';
@@ -13,7 +13,6 @@ import { useInvoiceStore } from '../../stores/data/InvoiceStore';
 import { useProjectStore } from '../../stores/data/ProjectStore';
 import { useBusinessDocumentContextStore } from '../../stores/data/BusinessDocumentContextStore';
 import { formatCurrency } from '../../utils/currency';
-import { generateQuotationPdf } from '../../utils/quotationPdf';
 
 interface QuotationDetailProps {
   quotationId: number;
@@ -76,10 +75,13 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
       .catch(() => setLogoUrl(null));
   }, [business?.logo_url]);
 
-  const handleDownloadPdf = useCallback(async () => {
+  const handlePrint = useCallback(() => {
     if (!quotation) return;
-    await generateQuotationPdf(quotation, lineItems, business);
-  }, [quotation, lineItems, business]);
+    const prev = document.title;
+    document.title = `quotation-${quotation.quotation_number}`;
+    window.print();
+    document.title = prev;
+  }, [quotation]);
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this quotation?')) return;
@@ -298,9 +300,9 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handleDownloadPdf}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors">
-            <LuFileDown size={15} aria-hidden />Export PDF
+          <button type="button" onClick={handlePrint}
+            className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors">
+            <LuPrinter size={15} aria-hidden />Print / Save PDF
           </button>
           <button
             type="button"
@@ -497,24 +499,6 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
                 <span>Total</span>
                 <span>{formatCurrency(total, quotation.currency)}</span>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Signature ── */}
-        <div className="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex gap-8 text-xs text-gray-500 dark:text-gray-400">
-            <div className="flex items-end gap-2">
-              <span className="whitespace-nowrap">Full Name &amp; Surname:</span>
-              <span className="flex-1 min-w-[120px] border-b border-gray-400 dark:border-gray-500 pb-0.5">&nbsp;</span>
-            </div>
-            <div className="flex items-end gap-2">
-              <span>Date:</span>
-              <span className="min-w-[80px] border-b border-gray-400 dark:border-gray-500 pb-0.5">&nbsp;</span>
-            </div>
-            <div className="flex items-end gap-2">
-              <span>Signature:</span>
-              <span className="flex-1 min-w-[100px] border-b border-gray-400 dark:border-gray-500 pb-0.5">&nbsp;</span>
             </div>
           </div>
         </div>
