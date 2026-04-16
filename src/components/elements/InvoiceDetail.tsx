@@ -370,24 +370,6 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           </div>
         </div>
 
-        {/* ── Signature ── */}
-        <div className="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex gap-8 text-xs text-gray-500 dark:text-gray-400">
-            <div className="flex items-end gap-2">
-              <span className="whitespace-nowrap">Full Name &amp; Surname:</span>
-              <span className="flex-1 min-w-[120px] border-b border-gray-400 dark:border-gray-500 pb-0.5">&nbsp;</span>
-            </div>
-            <div className="flex items-end gap-2">
-              <span>Date:</span>
-              <span className="min-w-[80px] border-b border-gray-400 dark:border-gray-500 pb-0.5">&nbsp;</span>
-            </div>
-            <div className="flex items-end gap-2">
-              <span>Signature:</span>
-              <span className="flex-1 min-w-[100px] border-b border-gray-400 dark:border-gray-500 pb-0.5">&nbsp;</span>
-            </div>
-          </div>
-        </div>
-
         {/* ── Footer ── */}
         <div className="mt-auto pt-6 text-center">
           <p className="text-xs text-gray-300 dark:text-gray-600">Foroman by Bobo Softwares (2026)</p>

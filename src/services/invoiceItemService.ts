@@ -20,6 +20,13 @@ export interface CreateInvoiceItemRow {
 }
 
 export class InvoiceItemService {
+  private static isNoRowsDeletedError(error: unknown): boolean {
+    const maybe = error as { status?: number; data?: { message?: string; error?: string }; message?: string };
+    if (maybe?.status !== 404) return false;
+    const message = maybe?.data?.message ?? maybe?.data?.error ?? maybe?.message ?? '';
+    return /no rows were deleted/i.test(message);
+  }
+
   static async findByInvoiceId(invoiceId: number): Promise<InvoiceItem[]> {
     const response = await skaftinClient.post(
       `/app-api/database/tables/${TABLE_NAME}/select`,
@@ -60,10 +67,16 @@ export class InvoiceItemService {
   }
 
   static async deleteByInvoiceId(invoiceId: number): Promise<void> {
-    await skaftinClient.delete<{ rowCount?: number }>(
-      `/app-api/database/tables/${TABLE_NAME}/delete`,
-      { where: { invoice_id: invoiceId } }
-    );
+    try {
+      await skaftinClient.delete<{ rowCount?: number }>(
+        `/app-api/database/tables/${TABLE_NAME}/delete`,
+        { where: { invoice_id: invoiceId } }
+      );
+    } catch (error) {
+      // Skaftin returns 404 when no rows match delete filter.
+      if (this.isNoRowsDeletedError(error)) return;
+      throw error;
+    }
   }
 }
 

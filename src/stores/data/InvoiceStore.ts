@@ -101,7 +101,6 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
     if (newId == null) {
       throw new Error('Invoice was created but no id was returned');
     }
-    await InvoiceItemService.deleteByInvoiceId(newId);
     if (lines.length) await InvoiceItemService.insertMany(newId, lines);
     return newId;
   },
