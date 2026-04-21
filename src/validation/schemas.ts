@@ -26,7 +26,7 @@ export const invoiceSchema = z.object({
   terms: z.string().optional(),
   issue_date: dateString('Issue date'),
   due_date: dateString('Due date'),
-  status: z.enum(['draft', 'sent', 'paid', 'overdue', 'cancelled']),
+  status: z.enum(['draft', 'accepted', 'sent', 'paid', 'overdue', 'cancelled']),
   subtotal: positiveNumber('Subtotal'),
   tax_rate: z.number().min(0).max(100).optional(),
   tax_amount: z.number().nonnegative().optional(),

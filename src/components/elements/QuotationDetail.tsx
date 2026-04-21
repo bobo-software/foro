@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LuCopy, LuPrinter, LuFileText } from 'react-icons/lu';
-import { AppModal } from '../modals/AppModal';
+import ConverInvoiceModal from '../modals/ConverInvoiceModal';
 import type { Quotation, QuotationLine, CreateQuotationDto } from '../../types/quotation';
-import type { CreateInvoiceDto } from '../../types/invoice';
+import type { CreateInvoiceDto, InvoiceStatus } from '../../types/invoice';
 import type { Project } from '../../types/project';
 import { ACCOUNT_TYPES } from '../../types/bankingDetails';
 import StorageService from '../../services/storageService';
@@ -151,7 +151,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
     }
   }, [quotation, lineItems, navigate, fromCompany]);
 
-  const handleConvertToInvoice = useCallback(async () => {
+  const handleConvertToInvoice = useCallback(async (chosenStatus: InvoiceStatus = 'accepted') => {
     if (convertInFlightRef.current) return;
     if (!quotation) return;
     if (quotation.converted_invoice_id != null) {
@@ -189,7 +189,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
         terms: quotation.terms ?? 'C.O.D',
         issue_date: issueDate,
         due_date: dueDate,
-        status: 'draft',
+        status: chosenStatus,
         subtotal: Number(quotation.subtotal) || 0,
         tax_rate: quotation.tax_rate,
         tax_amount: quotation.tax_amount,
@@ -307,7 +307,9 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           <button
             type="button"
             onClick={() =>
-              quotation.converted_invoice_id != null ? handleConvertToInvoice() : setConvertModalOpen(true)
+              quotation.converted_invoice_id != null
+                ? void handleConvertToInvoice()
+                : setConvertModalOpen(true)
             }
             disabled={converting || duplicating}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
@@ -510,65 +512,20 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
       </div>
 
       {/* ── Convert to Invoice modal ── */}
-      <AppModal
+      <ConverInvoiceModal
         isOpen={convertModalOpen}
         onClose={() => !converting && setConvertModalOpen(false)}
-        title="Convert to Invoice"
-        titleIcon={<LuFileText size={16} />}
-        size="sm"
-        closeOnBackdrop={!converting}
-        showCloseButton={!converting}
-        buttons={[
-          {
-            label: 'Cancel',
-            variant: 'secondary',
-            onClick: () => setConvertModalOpen(false),
-            disabled: converting,
-          },
-          {
-            label: 'Convert',
-            variant: 'primary',
-            onClick: handleConvertToInvoice,
-            loading: converting,
-            loadingLabel: 'Converting…',
-          },
-        ]}
-      >
-        <div className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
-          <p>
-            Create an invoice from{' '}
-            <span className="font-semibold text-slate-800 dark:text-slate-200">
-              {quotation.quotation_number}
-            </span>{' '}
-            for{' '}
-            <span className="font-semibold text-slate-800 dark:text-slate-200">
-              {quotation.customer_name}
-            </span>
-            ?
-          </p>
-          <div className="rounded-lg bg-slate-50 dark:bg-slate-700/50 px-4 py-3 text-xs space-y-1">
-            <div className="flex justify-between">
-              <span className="text-slate-400 dark:text-slate-500">Subtotal</span>
-              <span>{formatCurrency(subtotal, quotation.currency)}</span>
-            </div>
-            {vatRate > 0 && (
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">VAT ({vatRate}%)</span>
-                <span>{formatCurrency(vatAmount, quotation.currency)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-semibold text-slate-800 dark:text-slate-200 pt-1 border-t border-slate-200 dark:border-slate-600">
-              <span>Total</span>
-              <span>{formatCurrency(total, quotation.currency)}</span>
-            </div>
-          </div>
-          {quotation.status !== 'accepted' && quotation.status !== 'sent' && (
-            <p className="text-amber-600 dark:text-amber-400 text-xs">
-              Note: This quotation has status "{quotation.status}". Accepted or sent status is recommended before converting.
-            </p>
-          )}
-        </div>
-      </AppModal>
+        onConfirm={handleConvertToInvoice}
+        converting={converting}
+        quotationNumber={quotation.quotation_number}
+        quotationStatus={quotation.status}
+        customerName={quotation.customer_name}
+        subtotal={subtotal}
+        vatRate={vatRate}
+        vatAmount={vatAmount}
+        total={total}
+        currency={quotation.currency}
+      />
 
       {/* ── Page 2 — notes ── */}
       {hasPage2 && (

@@ -14,6 +14,7 @@ export function ItemList() {
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
   const projectId = useProjectId();
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'single' | 'manufactured'>('all');
 
   useEffect(() => {
     fetchItems();
@@ -22,15 +23,19 @@ export function ItemList() {
   useAutoRefresh(projectId, 'items', fetchItems);
 
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return items;
+    let result = items;
+    if (activeTab !== 'all') {
+      result = result.filter((i) => i.item_type === activeTab);
+    }
+    if (!search.trim()) return result;
     const q = search.trim().toLowerCase();
-    return items.filter(
+    return result.filter(
       (i) =>
         i.name?.toLowerCase().includes(q) ||
         i.sku?.toLowerCase().includes(q) ||
         i.description?.toLowerCase().includes(q),
     );
-  }, [items, search]);
+  }, [items, search, activeTab]);
 
   const handleDelete = useCallback(
     async (id: number) => {
@@ -137,7 +142,13 @@ export function ItemList() {
     [handleDelete],
   );
 
-  const emptyMessage = search.trim() ? 'No items match your search.' : 'No items yet.';
+  const emptyMessage = search.trim()
+    ? 'No items match your search.'
+    : activeTab === 'manufactured'
+    ? 'No manufactured items yet.'
+    : activeTab === 'single'
+    ? 'No single items yet.'
+    : 'No items yet.';
 
   if (loading) {
     return (
@@ -155,6 +166,27 @@ export function ItemList() {
       <div className="">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock items</h1>
         <p className="text-slate-500 dark:text-slate-400">Manage your stock items</p>
+      </div>
+
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
+        {([
+          { key: 'all', label: 'All' },
+          { key: 'single', label: 'Single' },
+          { key: 'manufactured', label: 'Manufactured' },
+        ] as const).map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === key
+                ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="flex items-center gap-3">

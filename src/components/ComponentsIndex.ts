@@ -15,3 +15,4 @@ export { default as DeleteConfirmationModal } from './modals/DeleteConfirmationM
 export { default as AppModalComponent } from './modals/AppModalComponent';
 export { AppModal } from './modals/AppModal';
 export type { AppModalProps, ModalButton, ModalButtonVariant } from './modals/AppModal';
+export { default as ConverInvoiceModal } from './modals/ConverInvoiceModal';

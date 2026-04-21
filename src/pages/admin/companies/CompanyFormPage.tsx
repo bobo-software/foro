@@ -466,16 +466,16 @@ export function CompanyFormPage() {
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-          {isEditMode ? 'Edit company' : 'New company'}
-        </h1>
+      <div className="flex shrink-0 items-center gap-3">
         <Link
           to={isEditMode ? `/app/companies/${id}` : '/app/companies'}
           className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 no-underline"
         >
           ← {isEditMode ? 'Back to company' : 'Back to companies'}
         </Link>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+          {isEditMode ? 'Edit company' : 'Create New company'}
+        </h1>
       </div>
       {hasNoBusiness && !isEditMode && (
         <div className="mt-6 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200">

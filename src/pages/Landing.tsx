@@ -1,7 +1,19 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { LuFileText, LuReceipt, LuWallet, LuClipboardList } from 'react-icons/lu';
+import toast from 'react-hot-toast';
+import useAuthStore from '../stores/data/AuthStore';
 
 export function Landing() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const { sessionUser, accessToken } = useAuthStore.getState();
+    if (sessionUser?.accessToken || accessToken) {
+      toast.success('Session Restored');
+      navigate('/app', { replace: true });
+    }
+  }, [navigate]);
+
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950">
       {/* Background */}

@@ -543,6 +543,7 @@ export function InvoiceForm({
               className={inputClass}
             >
               <option value="draft">Draft</option>
+              <option value="accepted">Accepted</option>
               <option value="sent">Sent</option>
               <option value="paid">Paid</option>
               <option value="overdue">Overdue</option>

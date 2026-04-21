@@ -87,6 +87,7 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   
   // Use store state
   const isLoading = useAuthStore((s) => s.isLoading);
@@ -99,6 +100,7 @@ export function Login() {
   const loginToStore = useAuthStore((s) => s.login);
   const setRequiresOtpVerification = useAuthStore((s) => s.setRequiresOtpVerification);
   const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
+  const setRememberMeStore = useAuthStore((s) => s.setRememberMe);
 
   const isAuthenticated = !!(sessionUser?.accessToken || accessToken);
 
@@ -139,6 +141,10 @@ export function Login() {
         password,
         method: 'email',
       });
+      setRememberMeStore(rememberMe);
+      if (!rememberMe) {
+        window.sessionStorage.setItem('_fm_sess', '1');
+      }
       const pendingOtp = useAuthStore.getState().requiresOtpVerification;
       if (pendingOtp) {
         toast.success('Check your email for the verification code');
@@ -171,6 +177,10 @@ export function Login() {
         });
         const session = mapNewLoginResponseToSessionUser(response as LoginApiShape);
         loginToStore(session);
+        setRememberMeStore(rememberMe);
+        if (!rememberMe) {
+          window.sessionStorage.setItem('_fm_sess', '1');
+        }
         const inner = (response as LoginApiShape).data ?? {};
         if (authPayloadNeedsOtpVerification(inner)) {
           setRequiresOtpVerification(true);
@@ -275,6 +285,23 @@ export function Login() {
                 Forgot password?
               </Link>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="remember-me"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              disabled={isLoading}
+              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer"
+            />
+            <label
+              htmlFor="remember-me"
+              className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none"
+            >
+              Remember me
+            </label>
           </div>
 
           <AppButton

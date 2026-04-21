@@ -14,7 +14,8 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   requiresOtpVerification: boolean;
-  
+  rememberMe: boolean;
+
   // Actions
   login: (userData: SessionUser) => void;
   logout: () => Promise<void>;
@@ -24,6 +25,7 @@ interface AuthState {
   clearError: () => void;
   setRequiresOtpVerification: (requires: boolean) => void;
   setUser: (user: SessionUser | null) => void;
+  setRememberMe: (value: boolean) => void;
   
   // Role helpers
   hasRole: (roleKey: string) => boolean;
@@ -45,6 +47,7 @@ const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
       requiresOtpVerification: false,
+      rememberMe: true,
 
       // ============================================
       // ACTIONS
@@ -75,14 +78,14 @@ const useAuthStore = create<AuthState>()(
        */
       logout: async () => {
         try {
-          // Call logout endpoint to invalidate server session
           await skaftinClient.post(SKAFTIN_CONFIG.endpoints.logout);
         } catch (error) {
-          // Continue with local logout even if server call fails
           console.error('Logout API call failed:', error);
         } finally {
-          // Always clear local state
           TokenManager.clearAll();
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem('_fm_sess');
+          }
           set({
             sessionUser: null,
             accessToken: null,
@@ -204,6 +207,8 @@ const useAuthStore = create<AuthState>()(
        */
       setUser: (user: SessionUser | null) => set({ sessionUser: user }),
 
+      setRememberMe: (value: boolean) => set({ rememberMe: value }),
+
       // ============================================
       // ROLE HELPERS
       // ============================================
@@ -259,17 +264,32 @@ const useAuthStore = create<AuthState>()(
     {
       name: SKAFTIN_CONFIG.authStorageKey,
       storage: createJSONStorage(() => localStorage),
-      // Only persist specific fields
       partialize: (state) => ({
         sessionUser: state.sessionUser,
         accessToken: state.accessToken,
         requiresOtpVerification: state.requiresOtpVerification,
+        rememberMe: state.rememberMe,
       }),
-      // Sync token manager on rehydration
       onRehydrateStorage: () => (state) => {
-        if (state?.accessToken) {
+        if (!state) return;
+
+        // If user did not choose "remember me", only keep session alive while
+        // the browser tab/session is open (sessionStorage marker present).
+        if (state.rememberMe === false) {
+          const hasSession =
+            typeof window !== 'undefined' &&
+            !!window.sessionStorage.getItem('_fm_sess');
+          if (!hasSession) {
+            state.sessionUser = null;
+            state.accessToken = null;
+            TokenManager.clearAll();
+            return;
+          }
+        }
+
+        if (state.accessToken) {
           TokenManager.setAccessToken(state.accessToken);
-        } else if (state?.sessionUser?.accessToken) {
+        } else if (state.sessionUser?.accessToken) {
           TokenManager.setAccessToken(state.sessionUser.accessToken);
         }
       },

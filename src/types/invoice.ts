@@ -36,7 +36,7 @@ export interface Invoice {
   updated_at?: string;
 }
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+export type InvoiceStatus = 'draft' | 'accepted' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 
 export interface InvoiceItem {
   id?: number;
