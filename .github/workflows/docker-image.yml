@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Custom Docker Registry
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login dr.bobosoftware.co.za -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
@@ -30,15 +30,15 @@ jobs:
         run: echo "BRANCH_TAG=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           build-args: |
-            VITE_SKAFTIN_ACCESS_TOKEN=${{ secrets.VITE_SKAFTIN_ACCESS_TOKEN }}
-            VITE_SKAFTIN_API_KEY=${{ secrets.VITE_SKAFTIN_API_KEY }}
-            VITE_SKAFTIN_API_URL=${{ secrets.VITE_SKAFTIN_API_URL }}
-            VITE_GOOGLE_MAPS_API_KEY=${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+            INFISICAL_ENV=prod
+            INFISICAL_DOMAIN=https://app.infisical.com
+          secrets: |
+            infisical_token=${{ secrets.INFISICAL_TOKEN }}
           tags: |
             dr.bobosoftware.co.za/foro:latest
             dr.bobosoftware.co.za/foro:${{ env.VERSION != '' && env.VERSION || env.BRANCH_TAG }}

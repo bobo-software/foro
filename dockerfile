@@ -12,7 +12,7 @@ COPY package*.json ./
 RUN npm install
 
 # Install Infisical CLI for build-time secret injection.
-RUN npm install -g infisical
+RUN npm install -g @infisical/cli
 
 # Copy the rest of the source code
 COPY . .
