@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:sec": "infisical run --env=dev -- npm run dev",
     "build": "npx tsc -b && vite build",
+    "build:sec": "infisical run --env=dev -- npm run build",
     "typecheck": "npx tsc -b",
     "lint": "eslint .",
     "preview": "vite preview",
+    "preview:sec": "infisical run --env=dev -- npm run preview",
     "test": "vitest run",
+    "test:sec": "infisical run --env=dev -- npm run test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

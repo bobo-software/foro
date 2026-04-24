@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Build Stage (Vite/rolldown require Node 20.19+ or 22.12+)
 FROM node:20-alpine AS build
 
@@ -10,23 +11,22 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
+# Install Infisical CLI for build-time secret injection.
+RUN npm install -g infisical
+
 # Copy the rest of the source code
 COPY . .
 
-# Build-time args for Vite env (pass via --build-arg; avoid committing secrets to Dockerfile).
-# Defaults to empty so build succeeds when not provided (e.g. local build).
-ARG VITE_SKAFTIN_ACCESS_TOKEN=""
-ARG VITE_SKAFTIN_API_KEY=""
-ARG VITE_SKAFTIN_API_URL=""
-ARG VITE_GOOGLE_MAPS_API_KEY=""
+# Infisical config for build-time secret injection.
+# Provide INFISICAL_ENV/INFISICAL_DOMAIN via --build-arg and token via BuildKit secret:
+# --secret id=infisical_token,env=INFISICAL_TOKEN
+ARG INFISICAL_ENV=prod
+ARG INFISICAL_DOMAIN=https://app.infisical.com
 
-ENV VITE_SKAFTIN_ACCESS_TOKEN="$VITE_SKAFTIN_ACCESS_TOKEN"
-ENV VITE_SKAFTIN_API_KEY="$VITE_SKAFTIN_API_KEY"
-ENV VITE_SKAFTIN_API_URL="$VITE_SKAFTIN_API_URL"
-ENV VITE_GOOGLE_MAPS_API_KEY="$VITE_GOOGLE_MAPS_API_KEY"
-
-# Build the project and check for any build errors
-RUN npm run build
+# Build with secrets injected at build time (no secrets persisted in image layers).
+RUN --mount=type=secret,id=infisical_token \
+    INFISICAL_TOKEN="$(cat /run/secrets/infisical_token)" && \
+    infisical run --token="$INFISICAL_TOKEN" --domain="$INFISICAL_DOMAIN" --env="$INFISICAL_ENV" -- npm run build
 
 # Production Stage
 FROM nginx:alpine
