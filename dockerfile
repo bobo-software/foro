@@ -20,11 +20,17 @@ COPY . .
 # Infisical config.
 ARG INFISICAL_ENV=prod
 ARG INFISICAL_DOMAIN=https://app.infisical.com
+ARG INFISICAL_TOKEN=
 
 # Build app with Infisical-injected secrets.
-RUN --mount=type=secret,id=infisical_token \
-    INFISICAL_TOKEN="$(cat /run/secrets/infisical_token)" && \
-    infisical run --token="$INFISICAL_TOKEN" --domain="$INFISICAL_DOMAIN" --env="$INFISICAL_ENV" -- npm run build
+# Supports either:
+# 1) BuildKit secret mount: --secret id=infisical_token
+# 2) Build arg fallback: --build-arg INFISICAL_TOKEN=...
+RUN --mount=type=secret,id=infisical_token,required=false \
+    TOKEN="$INFISICAL_TOKEN" && \
+    if [ -f /run/secrets/infisical_token ]; then TOKEN="$(cat /run/secrets/infisical_token)"; fi && \
+    if [ -z "$TOKEN" ]; then echo "Missing Infisical token. Provide BuildKit secret 'infisical_token' or build arg INFISICAL_TOKEN."; exit 1; fi && \
+    infisical run --token="$TOKEN" --domain="$INFISICAL_DOMAIN" --env="$INFISICAL_ENV" -- npm run build
 
 # Production Stage
 FROM nginx:alpine
