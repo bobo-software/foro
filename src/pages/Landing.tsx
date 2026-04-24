@@ -51,7 +51,7 @@ export function Landing() {
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-20 sm:py-28">
         <div className="max-w-3xl mx-auto text-center space-y-8">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white tracking-tight leading-[1.1]">
-            Invoicing, Quotes and statements,{' '}
+            Invoicing and statements,{' '}
             <span className="text-indigo-600 dark:text-indigo-400">simplified</span>
           </h1>
           <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
