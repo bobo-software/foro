@@ -34,3 +34,6 @@ client-sdk
 
 # Cursor
 .mcp.json
+
+# Claude
+.claude/
