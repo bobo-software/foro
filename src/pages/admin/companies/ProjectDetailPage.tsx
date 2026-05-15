@@ -5,12 +5,19 @@ import { AppPageHeader } from '@/components/ComponentsIndex';
 import CompanyService from '@/services/companyService';
 import ProjectService from '@/services/projectService';
 import TaskService from '@/services/taskService';
+import TaskDependencyService from '@/services/taskDependencyService';
+import {
+  notifyTaskMarkedDoneAutomation,
+  notifyTaskCreatedAutomation,
+  notifyTaskStatusChangedAutomation,
+} from '@/services/automationTriggerRunner';
 import TimeEntryService from '@/services/timeEntryService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import useAuthStore from '@/stores/data/AuthStore';
 import type { Company } from '@/types/company';
 import type { Project } from '@/types/project';
 import type { ProjectTask, ProjectTaskPriority, ProjectTaskStatus } from '@/types/task';
+import type { ProjectTaskDependency } from '@/types/taskDependency';
 import { useTeamStore } from '@/stores/data/TeamStore';
 import {
   projectSchema,
@@ -21,9 +28,15 @@ import {
 import { isAssignableUserId } from '@/utils/projectTaskAssignee';
 import type { KanbanPositionUpdate } from '@/utils/projectKanbanReorder';
 import { escapeIlikePattern } from '@/utils/sqlLikePattern';
+import { buildCsvLines, downloadCsvFile } from '@/utils/csvDownload';
+import { buildProjectTimelineCsv } from '@/utils/projectTimelineCsv';
 import type { ProjectTimeEntry } from '@/types/timeEntry';
 import { ProjectTasksKanban } from './ProjectTasksKanban';
 import { ProjectTasksTimeline } from './ProjectTasksTimeline';
+import { ProjectTaskDependenciesCard } from './ProjectTaskDependenciesCard';
+import { ProjectPortalInvitesCard } from './ProjectPortalInvitesCard';
+import { ProjectAutomationRulesCard } from './ProjectAutomationRulesCard';
+import { ProjectInsightsCard } from './ProjectInsightsCard';
 
 type TaskDraft = {
   title: string;
@@ -36,6 +49,7 @@ type TaskDraft = {
 };
 
 const TASK_PAGE_SIZE = 50;
+const TIME_ENTRY_PAGE_SIZE = 50;
 
 function timerStorageKey(projectId: number, businessId: number): string {
   return `foro_project_timer_v1_${projectId}_${businessId}`;
@@ -59,6 +73,21 @@ function mergeTasksById(prev: ProjectTask[], more: ProjectTask[]): ProjectTask[]
       seen.add(t.id);
       out.push(t);
     }
+  }
+  return out;
+}
+
+function mergeTimeEntriesById(prev: ProjectTimeEntry[], more: ProjectTimeEntry[]): ProjectTimeEntry[] {
+  const seen = new Set(
+    prev.map((e) => e.id).filter((id): id is number => id != null)
+  );
+  const out = [...prev];
+  for (const e of more) {
+    if (e.id != null) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+    }
+    out.push(e);
   }
   return out;
 }
@@ -112,6 +141,7 @@ export function ProjectDetailPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
+  const [taskDeps, setTaskDeps] = useState<ProjectTaskDependency[]>([]);
   const [drafts, setDrafts] = useState<Record<number, TaskDraft>>({});
   const [loading, setLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
@@ -135,6 +165,9 @@ export function ProjectDetailPage() {
 
   const [timeEntries, setTimeEntries] = useState<ProjectTimeEntry[]>([]);
   const [timeEntriesLoading, setTimeEntriesLoading] = useState(false);
+  const [timeEntriesLoadingMore, setTimeEntriesLoadingMore] = useState(false);
+  const [hasMoreTimeEntries, setHasMoreTimeEntries] = useState(false);
+  const timeEntryFetchOffsetRef = useRef(0);
   const [logMinutes, setLogMinutes] = useState('');
   const [logBillable, setLogBillable] = useState(true);
   const [logTaskId, setLogTaskId] = useState<string>('');
@@ -145,12 +178,32 @@ export function ProjectDetailPage() {
   const [budgetAmountInput, setBudgetAmountInput] = useState('');
   const [budgetSaving, setBudgetSaving] = useState(false);
 
+  const [billableRollup, setBillableRollup] = useState<{
+    totalMinutes: number;
+    entryCount: number;
+    capped: boolean;
+  } | null>(null);
+  const [billableRollupLoading, setBillableRollupLoading] = useState(false);
+
   const [workTimerStartedAt, setWorkTimerStartedAt] = useState<number | null>(null);
   const [workTimerTick, setWorkTimerTick] = useState(0);
   const [timerSaving, setTimerSaving] = useState(false);
   const [timerBillable, setTimerBillable] = useState(true);
 
   const bid = useMemo(() => effectiveBusinessId(project, storeBusinessId), [project, storeBusinessId]);
+
+  const loadTaskDeps = useCallback(async () => {
+    if (project?.id == null || bid == null) return;
+    try {
+      setTaskDeps(await TaskDependencyService.findByProject(project.id, bid));
+    } catch {
+      setTaskDeps([]);
+    }
+  }, [project?.id, bid]);
+
+  useEffect(() => {
+    void loadTaskDeps();
+  }, [loadTaskDeps]);
 
   const activeTeamMembers = useMemo(
     () => teamMembers.filter((m) => m.status === 'active'),
@@ -175,6 +228,13 @@ export function ProjectDetailPage() {
       ),
     [timeEntries]
   );
+
+  const billableMinutesForBudget = useMemo(() => {
+    if (billableRollup != null && !billableRollupLoading) {
+      return billableRollup.totalMinutes;
+    }
+    return loggedBillableMinutes;
+  }, [billableRollup, billableRollupLoading, loggedBillableMinutes]);
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedTitleQuery(listTitleQuery.trim()), 400);
@@ -260,6 +320,7 @@ export function ProjectDetailPage() {
           setDrafts(d);
           taskFetchOffsetRef.current = data.length;
         }
+        await loadTaskDeps();
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Failed to load tasks';
         setTaskError(msg);
@@ -276,7 +337,7 @@ export function ProjectDetailPage() {
         }
       }
     },
-    [project?.id, bid, listStatusFilter, debouncedTitleQuery]
+    [project?.id, bid, listStatusFilter, debouncedTitleQuery, loadTaskDeps]
   );
 
   useEffect(() => {
@@ -318,27 +379,76 @@ export function ProjectDetailPage() {
     void loadTasks('reset');
   }, [project?.id, bid, listStatusFilter, debouncedTitleQuery, loadTasks]);
 
-  const loadTimeEntries = useCallback(async () => {
+  const loadTimeEntries = useCallback(
+    async (mode: 'reset' | 'append' = 'reset') => {
+      if (project?.id == null || bid == null) return;
+      if (mode === 'reset') {
+        setTimeEntriesLoading(true);
+      } else {
+        setTimeEntriesLoadingMore(true);
+      }
+      try {
+        if (mode === 'reset') {
+          timeEntryFetchOffsetRef.current = 0;
+        }
+        const offset = timeEntryFetchOffsetRef.current;
+        const rows = await TimeEntryService.findAll({
+          where: { project_id: project.id, business_id: bid },
+          orderBy: 'logged_at',
+          orderDirection: 'DESC',
+          limit: TIME_ENTRY_PAGE_SIZE,
+          offset,
+        });
+        setHasMoreTimeEntries(rows.length === TIME_ENTRY_PAGE_SIZE);
+        if (mode === 'append') {
+          setTimeEntries((prev) => mergeTimeEntriesById(prev, rows));
+          timeEntryFetchOffsetRef.current += rows.length;
+        } else {
+          setTimeEntries(rows);
+          timeEntryFetchOffsetRef.current = rows.length;
+        }
+      } catch (e) {
+        if (mode === 'reset') {
+          setTimeEntries([]);
+          timeEntryFetchOffsetRef.current = 0;
+          setHasMoreTimeEntries(false);
+        } else {
+          toast.error(e instanceof Error ? e.message : 'Could not load more time entries');
+        }
+      } finally {
+        if (mode === 'reset') {
+          setTimeEntriesLoading(false);
+        } else {
+          setTimeEntriesLoadingMore(false);
+        }
+      }
+    },
+    [project?.id, bid]
+  );
+
+  useEffect(() => {
+    void loadTimeEntries('reset');
+  }, [loadTimeEntries]);
+
+  const loadBillableRollup = useCallback(async () => {
     if (project?.id == null || bid == null) return;
-    setTimeEntriesLoading(true);
+    setBillableRollupLoading(true);
     try {
-      const rows = await TimeEntryService.findAll({
-        where: { project_id: project.id, business_id: bid },
-        orderBy: 'logged_at',
-        orderDirection: 'DESC',
-        limit: 50,
+      const r = await TimeEntryService.sumBillableMinutesForProject({
+        project_id: project.id,
+        business_id: bid,
       });
-      setTimeEntries(rows);
+      setBillableRollup(r);
     } catch {
-      setTimeEntries([]);
+      setBillableRollup(null);
     } finally {
-      setTimeEntriesLoading(false);
+      setBillableRollupLoading(false);
     }
   }, [project?.id, bid]);
 
   useEffect(() => {
-    void loadTimeEntries();
-  }, [loadTimeEntries]);
+    void loadBillableRollup();
+  }, [loadBillableRollup]);
 
   useEffect(() => {
     if (project?.id == null || bid == null) {
@@ -436,7 +546,8 @@ export function ProjectDetailPage() {
       setLogNotes('');
       setLogTaskId('');
       setLogBillable(true);
-      await loadTimeEntries();
+      await loadTimeEntries('reset');
+      void loadBillableRollup();
       toast.success('Time logged');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not log time');
@@ -499,7 +610,8 @@ export function ProjectDetailPage() {
     try {
       await TimeEntryService.create(parsed.data);
       clearWorkTimerStorage();
-      await loadTimeEntries();
+      await loadTimeEntries('reset');
+      void loadBillableRollup();
       toast.success('Timer saved as a time entry');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save timer');
@@ -547,6 +659,7 @@ export function ProjectDetailPage() {
     setTaskError(null);
     try {
       await TaskService.create(parsed.data);
+      void notifyTaskCreatedAutomation({ businessId: bid, projectId: project.id });
       setNewTitle('');
       setNewDescription('');
       setNewPriority('');
@@ -589,7 +702,22 @@ export function ProjectDetailPage() {
     }
     setTaskError(null);
     try {
+      const prevTask = tasks.find((x) => x.id === taskId);
+      const previousStatus = String(prevTask?.status ?? 'todo');
       await TaskService.update(taskId, parsed.data);
+      const newStatus = String(parsed.data.status ?? draft.status);
+      void notifyTaskMarkedDoneAutomation({
+        businessId: bid,
+        projectId: project.id,
+        previousStatus,
+        newStatus,
+      });
+      void notifyTaskStatusChangedAutomation({
+        businessId: bid,
+        projectId: project.id,
+        previousStatus,
+        newStatus,
+      });
       await loadTasks('reset');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update task';
@@ -624,10 +752,25 @@ export function ProjectDetailPage() {
     const ts = new Date().toISOString();
     try {
       for (const u of filtered) {
+        const t = tasks.find((x) => x.id === u.taskId);
+        const previousStatus = String(t?.status ?? 'todo');
         await TaskService.update(u.taskId, {
           position: u.position,
           status: u.status,
           updated_at: ts,
+        });
+        const newStatus = String(u.status);
+        void notifyTaskMarkedDoneAutomation({
+          businessId: bid,
+          projectId: project.id,
+          previousStatus,
+          newStatus,
+        });
+        void notifyTaskStatusChangedAutomation({
+          businessId: bid,
+          projectId: project.id,
+          previousStatus,
+          newStatus,
         });
       }
       await loadTasks('reset');
@@ -636,6 +779,73 @@ export function ProjectDetailPage() {
       await loadTasks('reset');
     }
   };
+
+  const exportLoadedTasksCsv = useCallback(() => {
+    if (project?.id == null) return;
+    const rows = tasks.filter((t) => t.id != null);
+    if (rows.length === 0) {
+      toast.error('No tasks loaded to export');
+      return;
+    }
+    const headers = [
+      'id',
+      'title',
+      'status',
+      'priority',
+      'due_on',
+      'position',
+      'assigned_to_user_id',
+      'description',
+    ];
+    const body = buildCsvLines(
+      headers,
+      rows.map((t) => [
+        t.id,
+        t.title,
+        t.status ?? '',
+        t.priority ?? '',
+        t.due_on?.slice(0, 10) ?? '',
+        t.position ?? '',
+        t.assigned_to_user_id ?? '',
+        t.description ?? '',
+      ])
+    );
+    downloadCsvFile(`project-${project.id}-tasks-loaded.csv`, body);
+    toast.success('Tasks CSV downloaded');
+  }, [tasks, project?.id]);
+
+  const exportTimelineCsv = useCallback(() => {
+    if (project?.id == null) return;
+    if (tasks.filter((t) => t.id != null).length === 0) {
+      toast.error('No tasks loaded to export');
+      return;
+    }
+    downloadCsvFile(`project-${project.id}-timeline.csv`, buildProjectTimelineCsv(tasks, taskDeps));
+    toast.success('Timeline CSV downloaded');
+  }, [tasks, taskDeps, project?.id]);
+
+  const exportLoadedTimeEntriesCsv = useCallback(() => {
+    if (project?.id == null) return;
+    if (timeEntries.length === 0) {
+      toast.error('No time entries loaded to export');
+      return;
+    }
+    const headers = ['id', 'logged_at', 'duration_minutes', 'billable', 'task_id', 'user_id', 'notes'];
+    const body = buildCsvLines(
+      headers,
+      timeEntries.map((e: ProjectTimeEntry) => [
+        e.id ?? '',
+        e.logged_at ?? '',
+        e.duration_minutes,
+        e.billable ? 'yes' : 'no',
+        e.task_id ?? '',
+        e.user_id,
+        e.notes ?? '',
+      ])
+    );
+    downloadCsvFile(`project-${project.id}-time-entries-loaded.csv`, body);
+    toast.success('Time entries CSV downloaded');
+  }, [timeEntries, project?.id]);
 
   if (loading) {
     return <div className="text-slate-500 dark:text-slate-400">Loading…</div>;
@@ -689,6 +899,14 @@ export function ProjectDetailPage() {
         <p className="text-xs text-slate-500 dark:text-slate-400">Status: {project.status ?? '—'}</p>
       </div>
 
+      <ProjectInsightsCard
+        tasks={tasks}
+        timeEntries={timeEntries}
+        project={project}
+        onExportTasksCsv={exportLoadedTasksCsv}
+        onExportTimeEntriesCsv={exportLoadedTimeEntriesCsv}
+      />
+
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-4">
         <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Budget and time</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -739,20 +957,29 @@ export function ProjectDetailPage() {
               Number.isFinite(Number(project.budget_hours)) &&
               Number(project.budget_hours) > 0 && (
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                Billable time (last {timeEntries.length} entries shown):{' '}
+                <span className="font-medium text-slate-700 dark:text-slate-300">Billable vs budget</span>
+                {billableRollupLoading ? ' (loading full rollup…)' : null}
+                {!billableRollupLoading && billableRollup?.capped ? ' (capped rollup)' : null}:{' '}
                 <span className="font-medium text-slate-800 dark:text-slate-200">
-                  {(loggedBillableMinutes / 60).toFixed(1)} h
+                  {(billableMinutesForBudget / 60).toFixed(1)} h
                 </span>{' '}
                 of {Number(project.budget_hours)} h budget
-                {loggedBillableMinutes / 60 > Number(project.budget_hours) ? (
-                  <span className="text-amber-700 dark:text-amber-300"> (over budget in loaded entries)</span>
+                {billableMinutesForBudget / 60 > Number(project.budget_hours) ? (
+                  <span className="text-amber-700 dark:text-amber-300">
+                    {' '}
+                    (over budget
+                    {billableRollup != null && !billableRollupLoading && !billableRollup.capped ? '' : ' — may be incomplete'}
+                    )
+                  </span>
                 ) : null}
               </p>
             )}
           </div>
           <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400 border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-700 pt-3 sm:pt-0 sm:pl-4">
             <p>
-              Logged (loaded window):{' '}
+              Logged ({timeEntries.length}{' '}
+              {timeEntries.length === 1 ? 'entry' : 'entries'} in memory{hasMoreTimeEntries ? ', not all loaded' : ''}
+              ):{' '}
               <span className="font-medium text-slate-800 dark:text-slate-200">
                 {(loggedTotalMinutes / 60).toFixed(1)} h
               </span>{' '}
@@ -762,7 +989,30 @@ export function ProjectDetailPage() {
               </span>{' '}
               billable.
             </p>
+            {billableRollupLoading && (
+              <p data-testid="billable-rollup-loading" className="text-slate-500 dark:text-slate-500">
+                Full billable rollup: loading…
+              </p>
+            )}
+            {!billableRollupLoading && billableRollup != null && (
+              <p data-testid="billable-rollup-summary" className="text-slate-600 dark:text-slate-400">
+                Full billable rollup (same scan as invoice billable line):{' '}
+                <span className="font-medium text-slate-800 dark:text-slate-200">
+                  {(billableRollup.totalMinutes / 60).toFixed(1)} h
+                </span>{' '}
+                from {billableRollup.entryCount} billable row{billableRollup.entryCount === 1 ? '' : 's'}
+                {billableRollup.capped ? ' — scan hit safety cap; total may be low.' : '.'}
+              </p>
+            )}
+            {!billableRollupLoading && billableRollup == null && (
+              <p data-testid="billable-rollup-unavailable" className="text-amber-800/90 dark:text-amber-200/80">
+                Full billable rollup unavailable; budget line above falls back to loaded entries only.
+              </p>
+            )}
             {timeEntriesLoading && <p className="text-slate-500">Loading time entries…</p>}
+            {timeEntriesLoadingMore && (
+              <p className="text-slate-500">Loading older time entries…</p>
+            )}
           </div>
         </div>
 
@@ -931,6 +1181,18 @@ export function ProjectDetailPage() {
                 ))}
               </tbody>
             </table>
+            {hasMoreTimeEntries && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  disabled={timeEntriesLoadingMore}
+                  onClick={() => void loadTimeEntries('append')}
+                  className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {timeEntriesLoadingMore ? 'Loading…' : 'Load more time entries'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1110,7 +1372,12 @@ export function ProjectDetailPage() {
         ) : taskView === 'board' ? (
           <ProjectTasksKanban tasks={tasks} onReorder={handleKanbanReorder} />
         ) : taskView === 'timeline' ? (
-          <ProjectTasksTimeline tasks={tasks} />
+          <ProjectTasksTimeline
+            tasks={tasks}
+            dependencies={taskDeps}
+            showGanttBars
+            onExportCsv={exportTimelineCsv}
+          />
         ) : (
           <div className="space-y-3">
             <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/30 p-3">
@@ -1369,6 +1636,18 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      <ProjectTaskDependenciesCard
+        projectId={project.id}
+        businessId={bid}
+        tasks={tasks}
+        dependencies={taskDeps}
+        onChanged={() => void loadTaskDeps()}
+      />
+
+      <ProjectPortalInvitesCard projectId={project.id} businessId={bid} projectName={project.name} />
+
+      <ProjectAutomationRulesCard projectId={project.id} businessId={bid} />
     </div>
   );
 }

@@ -10,12 +10,23 @@ const hoisted = vi.hoisted(() => ({
   projectUpdate: vi.fn(),
   taskFindAll: vi.fn(),
   timeFindAll: vi.fn(),
+  sumBillableRollup: vi.fn(),
 }));
 
 vi.mock('react-hot-toast', () => ({
   __esModule: true,
   default: { success: vi.fn(), error: vi.fn() },
 }));
+
+const downloadCsvFileMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/utils/csvDownload', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/csvDownload')>();
+  return {
+    ...actual,
+    downloadCsvFile: downloadCsvFileMock,
+  };
+});
 
 vi.mock('./ProjectTasksKanban', () => ({
   ProjectTasksKanban: () => <div data-testid="kanban-mock" />,
@@ -51,8 +62,36 @@ vi.mock('@/services/timeEntryService', () => ({
   default: {
     findAll: hoisted.timeFindAll,
     create: vi.fn(),
-    sumBillableMinutesForProject: vi.fn(),
+    sumBillableMinutesForProject: hoisted.sumBillableRollup,
   },
+}));
+
+vi.mock('@/services/taskDependencyService', () => ({
+  __esModule: true,
+  default: {
+    findByProject: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('@/services/portalInviteService', () => ({
+  __esModule: true,
+  default: {
+    findByProject: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('@/services/automationRuleService', () => ({
+  __esModule: true,
+  default: {
+    findByProject: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('@/services/automationTriggerRunner', () => ({
+  __esModule: true,
+  notifyTaskMarkedDoneAutomation: vi.fn().mockResolvedValue(undefined),
+  notifyTaskCreatedAutomation: vi.fn().mockResolvedValue(undefined),
+  notifyTaskStatusChangedAutomation: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/stores/data/AuthStore', () => ({
@@ -88,11 +127,14 @@ function renderAtProject(path = '/app/companies/10/projects/20') {
 
 describe('ProjectDetailPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     hoisted.companyFindById.mockReset();
     hoisted.projectFindById.mockReset();
     hoisted.projectUpdate.mockReset();
     hoisted.taskFindAll.mockReset();
     hoisted.timeFindAll.mockReset();
+    hoisted.sumBillableRollup.mockReset();
+    downloadCsvFileMock.mockReset();
 
     hoisted.companyFindById.mockResolvedValue({ id: 10, name: 'North Ltd' });
     hoisted.projectFindById.mockResolvedValue({
@@ -105,6 +147,7 @@ describe('ProjectDetailPage', () => {
     });
     hoisted.taskFindAll.mockResolvedValue([]);
     hoisted.timeFindAll.mockResolvedValue([]);
+    hoisted.sumBillableRollup.mockResolvedValue({ totalMinutes: 0, entryCount: 0, capped: false });
   });
 
   afterEach(() => {
@@ -115,7 +158,83 @@ describe('ProjectDetailPage', () => {
     renderAtProject();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Roadmap' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^insights$/i })).toBeInTheDocument();
+    expect(await screen.findByTestId('billable-rollup-summary')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /budget and time/i })).toBeInTheDocument();
+  });
+
+  it('exports loaded tasks as CSV when Export tasks is clicked', async () => {
+    hoisted.taskFindAll.mockResolvedValue([
+      {
+        id: 1,
+        business_id: 7,
+        project_id: 20,
+        title: 'Alpha',
+        status: 'todo',
+        position: 0,
+      },
+    ]);
+    renderAtProject();
+    await screen.findByRole('heading', { level: 1, name: 'Roadmap' });
+    await userEvent.click(await screen.findByRole('button', { name: /export tasks \(csv\)/i }));
+    expect(downloadCsvFileMock).toHaveBeenCalledWith(
+      'project-20-tasks-loaded.csv',
+      expect.stringContaining('Alpha')
+    );
+  });
+
+  it('shows Load more time entries when the first page is full', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({
+      id: i + 1,
+      business_id: 7,
+      project_id: 20,
+      user_id: 42,
+      duration_minutes: 30,
+      billable: true,
+      logged_at: '2026-01-15T10:00:00Z',
+    }));
+    hoisted.timeFindAll.mockResolvedValue(many);
+    renderAtProject();
+    await screen.findByRole('heading', { level: 1, name: 'Roadmap' });
+    expect(await screen.findByRole('button', { name: /load more time entries/i })).toBeInTheDocument();
+  });
+
+  it('requests the next time-entry offset when Load more is clicked', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => ({
+      id: i + 1,
+      business_id: 7,
+      project_id: 20,
+      user_id: 42,
+      duration_minutes: 30,
+      billable: true,
+      logged_at: '2026-01-15T10:00:00Z',
+    }));
+    hoisted.timeFindAll
+      .mockResolvedValueOnce(page1)
+      .mockResolvedValueOnce([
+        {
+          id: 99,
+          business_id: 7,
+          project_id: 20,
+          user_id: 42,
+          duration_minutes: 15,
+          billable: false,
+          logged_at: '2025-12-01T10:00:00Z',
+        },
+      ]);
+    renderAtProject();
+    await screen.findByRole('heading', { level: 1, name: 'Roadmap' });
+    const btn = await screen.findByRole('button', { name: /load more time entries/i });
+    await userEvent.click(btn);
+    await waitFor(() => {
+      expect(hoisted.timeFindAll).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          offset: 50,
+          limit: 50,
+          where: { project_id: 20, business_id: 7 },
+        })
+      );
+    });
   });
 
   it('debounces list title search into TaskService where.ilike', async () => {
@@ -136,6 +255,8 @@ describe('ProjectDetailPage', () => {
     renderAtProject();
 
     await screen.findByRole('heading', { level: 1, name: 'Roadmap' });
+
+    await user.click(await screen.findByRole('button', { name: /^list$/i }));
 
     await waitFor(() => {
       expect(hoisted.taskFindAll).toHaveBeenCalledWith(
@@ -186,6 +307,8 @@ describe('ProjectDetailPage', () => {
     renderAtProject();
 
     await screen.findByRole('heading', { level: 1, name: 'Roadmap' });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^list$/i }));
 
     const statusSelect = await waitFor(() => {
       const el = document.getElementById('task-list-status-filter');

@@ -53,4 +53,19 @@ describe('ProjectTasksTimeline', () => {
     expect(screen.getByText('Today')).toBeInTheDocument();
     expect(screen.getByText('Due today')).toBeInTheDocument();
   });
+
+  it('shows blocked-by when an open predecessor exists', () => {
+    vi.useFakeTimers({ now: new Date('2026-06-01T12:00:00') });
+
+    const tasks = [
+      { id: 1, business_id: 1, project_id: 1, title: 'Blocker', status: 'todo', due_on: '2026-06-10', position: 0 },
+      { id: 2, business_id: 1, project_id: 1, title: 'Blocked', status: 'in_progress', due_on: '2026-06-15', position: 1 },
+    ] as const;
+    const deps = [{ business_id: 1, project_id: 1, predecessor_task_id: 1, successor_task_id: 2 }];
+
+    render(<ProjectTasksTimeline tasks={[...tasks]} dependencies={deps} />);
+
+    expect(screen.getByText(/Blocked by:/)).toBeInTheDocument();
+    expect(screen.getByText('Blocked')).toBeInTheDocument();
+  });
 });

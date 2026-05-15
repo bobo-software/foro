@@ -30,6 +30,9 @@ const CompanyDetailPage = lazy(() => import('@/pages/admin/companies/companyPage
 const CompanyProjectsPage = lazy(() => import('@/pages/admin/companies/CompanyProjectsPage').then((m) => ({ default: m.CompanyProjectsPage })));
 const ProjectDetailPage = lazy(() => import('@/pages/admin/companies/ProjectDetailPage').then((m) => ({ default: m.ProjectDetailPage })));
 const MyTasksPage = lazy(() => import('@/pages/admin/tasks/MyTasksPage').then((m) => ({ default: m.MyTasksPage })));
+const ProjectsOverviewPage = lazy(() =>
+  import('@/pages/admin/projects/ProjectsOverviewPage').then((m) => ({ default: m.ProjectsOverviewPage }))
+);
 const CompanyFormPage = lazy(() => import('@/pages/admin/companies/CompanyFormPage').then((m) => ({ default: m.CompanyFormPage })));
 const ItemsPage = lazy(() => import('@pages/admin/ItemsPage').then((m) => ({ default: m.ItemsPage })));
 const ItemDetailPage = lazy(() => import('@pages/admin/ItemDetailPage').then((m) => ({ default: m.ItemDetailPage })));
@@ -49,6 +52,7 @@ const TeamSettingsTab = lazy(() => import('@pages/admin/settings/tabs').then((m)
 const InviteAccept = lazy(() => import('@pages/team/InviteAccept').then((m) => ({ default: m.InviteAccept })));
 const InvitePostAuth = lazy(() => import('@pages/team/InvitePostAuth').then((m) => ({ default: m.InvitePostAuth })));
 const PortalLandingPage = lazy(() => import('@pages/portal/PortalLandingPage').then((m) => ({ default: m.PortalLandingPage })));
+const PortalProjectViewPage = lazy(() => import('@pages/portal/PortalProjectViewPage').then((m) => ({ default: m.PortalProjectViewPage })));
 
 /**
  * Auth and WebSocket hooks wrapper component
@@ -116,6 +120,7 @@ function App() {
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
             <Route path="/invite/:token" element={<InviteAccept />} />
             <Route path="/invite/:token/accept" element={<InvitePostAuth />} />
+            <Route path="/portal/v/:portalToken" element={<PortalProjectViewPage />} />
             <Route path="/portal" element={<PortalLandingPage />} />
 
             {/* Onboarding - requires auth but no role check */}
@@ -126,6 +131,7 @@ function App() {
               <Route index element={<Navigate to="/app/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="tasks" element={<MyTasksPage />} />
+              <Route path="projects" element={<ProjectsOverviewPage />} />
               <Route path="companies" element={<Outlet />}>
                 <Route index element={<CompaniesPage />} />
                 <Route path="create" element={<CompanyFormPage />} />

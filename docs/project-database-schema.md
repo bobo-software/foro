@@ -157,3 +157,10 @@ Deleting a **project** cascades to its `project_tasks` rows (`ON DELETE CASCADE`
 
 Apply both scripts on each environment before using the project detail **Budget and time** card or invoice **billable time** summary.
 
+## 11) Phase 8 — task dependencies, automation rules, portal invites
+
+- **Task dependencies (Gantt edge):** [project-task-dependencies-schema-contract.md](03-database/project-task-dependencies-schema-contract.md), DDL [sql/project-task-dependencies.sql](03-database/sql/project-task-dependencies.sql). Deletes cascade from `projects` / `project_tasks`.
+- **Automation rules (stored triggers):** [automation-rules-schema-contract.md](03-database/automation-rules-schema-contract.md), DDL [sql/automation-rules.sql](03-database/sql/automation-rules.sql). Execution is app-defined later; the SPA stores rules per project.
+- **Portal invites (hashed tokens):** [portal-invites-schema-contract.md](03-database/portal-invites-schema-contract.md), DDL [sql/portal-invites.sql](03-database/sql/portal-invites.sql). Public read view: route `/portal/v/:token` in the SPA.
+
+Re-apply DDL on new environments and run MCP `get_table_schema` for each table name after migration.

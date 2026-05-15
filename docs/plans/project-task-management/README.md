@@ -17,8 +17,9 @@ Work is split into **sequential implementation phases**. Complete and merge each
 | 5 | [phase-05-kanban.md](./phase-05-kanban.md) | Status columns, drag-and-drop, server sync | Done |
 | 6 | [phase-06-polish.md](./phase-06-polish.md) | Assignment UX, a11y, mobile, tests | Done |
 | 7+ | [phase-07-time-budgets-billing.md](./phase-07-time-budgets-billing.md) | Time entries, budgets, invoice billable summary (MVP shipped) | **MVP done** |
-| 8+ | [phase-08-portal-gantt-automation.md](./phase-08-portal-gantt-automation.md) | Timeline + `/portal` shell; portal/automation forward architecture | **8a–8b done** (scoped portal + full Gantt + automation still open) |
-| 9+ | [phase-09-analytics.md](./phase-09-analytics.md) | Post-MVP wave (dashboards, insights) | Planning |
+| 8 | [phase-08-portal-gantt-automation.md](./phase-08-portal-gantt-automation.md) | Portal, timeline/Gantt slice, automation | **Done (frontend)** — server items in [BACKEND-WISHLIST-SKAFTIN.md](./BACKEND-WISHLIST-SKAFTIN.md) |
+| 9+ | [phase-09-analytics.md](./phase-09-analytics.md) | Insights, CSV export, dashboards | **9a–9c done** (`/app/projects` overview) |
+| — | [BACKEND-WISHLIST-SKAFTIN.md](./BACKEND-WISHLIST-SKAFTIN.md) | Deferred Skaftin/server work | Wishlist (not scheduled) |
 
 ## Goals (all phases)
 
@@ -37,8 +38,10 @@ Use **`list_tables`** and **`get_table_schema`** before and after migrations. Fo
 | Project detail | `/app/companies/:id/projects/:projectId`, [`ProjectDetailPage`](../../../src/pages/admin/companies/ProjectDetailPage.tsx) |
 | Documents | Optional `project_id` on invoices and quotations |
 | DB notes | [project-database-schema.md](../../project-database-schema.md), [project-tasks-schema-contract.md](../../03-database/project-tasks-schema-contract.md) |
-| Tasks | `TaskService`, **List \| Board \| Timeline** on [`ProjectDetailPage`](../../../src/pages/admin/companies/ProjectDetailPage.tsx) ([`ProjectTasksTimeline`](../../../src/pages/admin/companies/ProjectTasksTimeline.tsx)); **My tasks** [`/app/tasks`](../../../src/App.tsx); paged list; server **status** + **debounced title** filters; **`position`** on board drag |
-| Phase 8 hub | [project-phase8-portal-gantt-automation.md](../../02-modules/project-phase8-portal-gantt-automation.md) — **`/portal`** stub + portal / full Gantt / automation forward plan |
+| Tasks | `TaskService`, **List \| Board \| Timeline** on [`ProjectDetailPage`](../../../src/pages/admin/companies/ProjectDetailPage.tsx) ([`ProjectTasksTimeline`](../../../src/pages/admin/companies/ProjectTasksTimeline.tsx)); **deps / portal invites / automation rules** cards; **My tasks** [`/app/tasks`](../../../src/App.tsx); paged list; server **status** + **debounced title** filters; **`position`** on board drag |
+| Phase 8 hub | [project-phase8-portal-gantt-automation.md](../../02-modules/project-phase8-portal-gantt-automation.md) — **`/portal`** + **`/portal/v/:token`**, task deps, automation rules + **task-done toast MVP**, forward plan |
+| Insights (9a–9b) | [project-insights-analytics.md](../../02-modules/project-insights-analytics.md) — in-page card + **loaded-data CSV export** |
+| Backend (later) | [BACKEND-WISHLIST-SKAFTIN.md](./BACKEND-WISHLIST-SKAFTIN.md) — portal RLS, aggregates, automation workers, email |
 | Time & budgets | `project_time_entries` + optional `budget_hours` / `budget_amount` on `projects`; UI + [`TimeEntryService`](../../../src/services/timeEntryService.ts) on project detail; billable rollup on [`InvoiceForm`](../../../src/components/elements/InvoiceForm.tsx) |
 
 ## Open questions (resolve before or during early phases)

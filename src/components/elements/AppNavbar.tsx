@@ -24,6 +24,11 @@ function useBreadcrumbs() {
     const label =
       segment === 'dashboard' ? 'Dashboard' :
       segment === 'tasks' ? 'My tasks' :
+      segment === 'projects'
+        ? i === 0
+          ? 'Projects overview'
+          : 'Projects'
+        :
       segment === 'invoices' ? 'Invoices' :
       segment === 'companies' ? 'Companies' :
       segment === 'items' ? 'Stock' :

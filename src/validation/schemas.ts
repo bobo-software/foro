@@ -197,6 +197,33 @@ export const projectTaskUpdateSchema = z.object({
 
 export type ProjectTaskUpdateInput = z.infer<typeof projectTaskUpdateSchema>;
 
+// ── Task dependencies (project_task_dependencies) ───────────────────
+export const projectTaskDependencyCreateSchema = z
+  .object({
+    business_id: z.number().int().positive(),
+    project_id: z.number().int().positive(),
+    predecessor_task_id: z.number().int().positive(),
+    successor_task_id: z.number().int().positive(),
+  })
+  .refine((d) => d.predecessor_task_id !== d.successor_task_id, {
+    message: 'Predecessor and successor must be different tasks',
+    path: ['successor_task_id'],
+  });
+
+export type ProjectTaskDependencyCreateInput = z.infer<typeof projectTaskDependencyCreateSchema>;
+
+// ── Automation rules (automation_rules) ───────────────────────────────
+export const automationRuleCreateSchema = z.object({
+  business_id: z.number().int().positive(),
+  project_id: z.number().int().positive(),
+  name: z.string().min(1, 'Name is required').max(200),
+  trigger_key: z.string().min(1, 'Trigger is required').max(64),
+  definition: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+});
+
+export type AutomationRuleCreateInput = z.infer<typeof automationRuleCreateSchema>;
+
 // ── Project time entry (project_time_entries) ───────────────────────
 export const projectTimeEntryCreateSchema = z.object({
   business_id: z.number().int().positive(),

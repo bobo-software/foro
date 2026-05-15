@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
+import { usePortalNoIndex } from '@/hooks/usePortalNoIndex';
 
 /**
- * Public entry for the future **client portal** (magic links / scoped project read).
- * No portal auth or data yet — see docs/02-modules/project-phase8-portal-gantt-automation.md.
+ * Public entry for the **client portal** (information + team sign-in).
+ * Project sharing uses `/portal/v/:token` — see docs/02-modules/project-phase8-portal-gantt-automation.md.
  */
 export function PortalLandingPage() {
+  usePortalNoIndex();
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950">
       <div className="fixed inset-0 -z-10 overflow-hidden">
@@ -34,8 +36,9 @@ export function PortalLandingPage() {
           for your customers — timelines, approvals, and shared files — without giving them full Foro access.
         </p>
         <p className="mt-4 text-sm text-slate-500 dark:text-slate-500 leading-relaxed">
-          Access will use a secure link (for example a magic link or short-lived token) scoped to one company and project.
-          That flow is not enabled yet; it will ship after schema and permissions work validated against Skaftin.
+          If your provider sent a project link, it looks like{' '}
+          <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">/portal/v/…</code> — open that
+          URL directly (this page is only general information).
         </p>
         <ul className="mt-8 space-y-3 text-sm text-slate-600 dark:text-slate-400">
           <li className="flex gap-2">

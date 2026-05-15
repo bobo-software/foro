@@ -10,40 +10,47 @@ This module doc is the **architecture and product hub** for work that extends be
 
 - **Timeline view** on [ProjectDetailPage](../../src/pages/admin/companies/ProjectDetailPage.tsx) via [ProjectTasksTimeline](../../src/pages/admin/companies/ProjectTasksTimeline.tsx): read-only ordering by **`due_on`**, month sub-headings, **Unscheduled** bucket for tasks without a due date. Uses the **same loaded task pages** as List/Board (filters + Load more still apply before switching views).
 
-This is intentionally **not** a full Gantt (no dependencies, no drag-resize, no critical path).
+This is intentionally **not** a full Gantt (no drag-resize bars, no critical path).
 
 ### Phase 8b — portal URL + timeline polish
 
-- **Public `/portal`** route in [App.tsx](../../src/App.tsx) → [PortalLandingPage](../../src/pages/portal/PortalLandingPage.tsx): explains future client access; **no authentication or project data** yet.
+- **Public `/portal`** route in [App.tsx](../../src/App.tsx) → [PortalLandingPage](../../src/pages/portal/PortalLandingPage.tsx).
 - **Timeline:** **Overdue** section (open tasks whose `due_on` is before the viewer’s local calendar date) and a **Today** label when the due date equals today; tasks marked **done** stay in the main dated list even if the due date is in the past.
 
-## Workstream 1: Client portal (not shipped)
+### Phase 8c — dependencies, automation storage, portal read
+
+- **Tables (MCP-validated):** `project_task_dependencies`, `automation_rules`, `portal_invites` — see [project-database-schema.md](../project-database-schema.md) §11 and per-table contracts in [docs/03-database/](../03-database/).
+- **Task dependencies:** CRUD on project detail ([ProjectTaskDependenciesCard](../../src/pages/admin/companies/ProjectTaskDependenciesCard.tsx)); [TaskDependencyService](../../src/services/taskDependencyService.ts). Timeline shows **After: …** predecessor hints when edges exist.
+- **Automation rules:** per-project list + create + enable/disable + delete on project detail ([ProjectAutomationRulesCard](../../src/pages/admin/companies/ProjectAutomationRulesCard.tsx)); [AutomationRuleService](../../src/services/automationRuleService.ts). **MVP execution (8d-lite):** toasts from [automationTriggerRunner](../../src/services/automationTriggerRunner.ts) — `notifyTaskMarkedDoneAutomation` when a task becomes **done** (list save or board drag) for `task_status_done` + `action: "toast"`; `notifyTaskCreatedAutomation` when a task is **created** for `task_created` + toast. Other triggers and actions remain future work.
+- **Portal invites:** create (14-day expiry, copy link), list, revoke on project detail ([ProjectPortalInvitesCard](../../src/pages/admin/companies/ProjectPortalInvitesCard.tsx)); [PortalInviteService](../../src/services/portalInviteService.ts); tokens hashed with [sha256Hex](../../src/utils/sha256Hex.ts).
+- **Public project view:** [`/portal/v/:portalToken`](../../src/App.tsx) → [PortalProjectViewPage](../../src/pages/portal/PortalProjectViewPage.tsx) — read-only company/project header + timeline (up to 200 tasks). Uses the **same Skaftin API credentials** as the bundled SPA; treat as MVP until RLS or scoped keys exist ([portal-invites-schema-contract.md](../03-database/portal-invites-schema-contract.md)). **Client-side hardening:** trimmed/decoded token, generic error copy on unexpected failures, loading skeleton, isolated company fetch failure, [`usePortalNoIndex`](../../src/hooks/usePortalNoIndex.ts) (`noindex, nofollow`) on `/portal` and `/portal/v/…`.
+
+## Workstream 1: Client portal (MVP shipped; hardening open)
 
 Goals: scoped **read** (and later **approve**) access for customers without full app accounts.
 
-**Likely building blocks (future):**
+**Shipped (8c + SPA hardening):** `portal_invites` rows + `/portal/v/:token` read-only timeline; `usePortalNoIndex`, safer errors/loading on [PortalProjectViewPage](../../src/pages/portal/PortalProjectViewPage.tsx).
 
-- **Identity:** magic links, short-lived JWTs, or OAuth-style “portal session” bound to `company_id` + `project_id`.
-- **Data scope:** server-side row filters (never rely on UI-only hiding); optional `portal_invites` / `portal_sessions` tables after MCP + contract pass.
-- **Surface:** route prefix **`/portal`** (landing stub shipped); later `/portal/:token` or subdomain; minimal UI bundle for real sessions.
+**Still open:** dedicated portal auth, RLS / scoped API keys, email delivery, approvals, file exchange.
 
-**Roles:** see [Client portal access (planned)](../01-roles/teams-permissions-model.md#client-portal-access-planned) in the teams model doc.
+**Roles:** see [Client portal access (planned)](../01-roles/teams-permissions-model.md#client-portal-access-planned).
 
-## Workstream 2: Gantt / timeline (partial)
+## Workstream 2: Gantt / timeline (frontend complete)
 
-**Done (MVP):** Timeline by due date, **Overdue** / **Today** / **Unscheduled** (see Phase 8a–8b above).
+**Done:** Timeline by due date, Overdue / Today / Unscheduled, **`project_task_dependencies`** with “After: …” and **“Blocked by: …”** (open predecessors), month **Gantt markers**, **Export timeline (CSV)**.
 
-**Later:** dependency edges (`task_dependencies` or similar), duration-based bars, resource lanes, export — each needs schema + MCP validation before implementation.
+**Later (backend/schema):** drag-resize durations, critical path, richer graph layout.
 
-## Workstream 3: Automation (not shipped)
+## Workstream 3: Automation (frontend toast runner complete)
 
-Goals: “when **X** happens, do **Y**” (e.g. task → `done` → notify assignee; quotation accepted → seed tasks).
+**Done:** `automation_rules` table + project-detail CRUD; in-browser toasts for **`task_status_done`**, **`task_status_changed`**, and **`task_created`** via [`automationTriggerRunner.ts`](../../src/services/automationTriggerRunner.ts); definition presets on the automation card.
 
-**Likely building blocks:**
+**Later (backend):** email/webhook actions, Skaftin cron, stricter per-trigger `definition` schemas.
 
-- **Triggers:** app events today; durable execution may need Skaftin **cron**, webhooks, or an external job worker.
-- **Storage:** `automation_rules` (JSON conditions/actions) after contract pass — **do not invent** table shapes until MCP + `client-sdk` patterns are checked.
+## Phase 8 frontend — closed
+
+All planned **SPA** work for Phase 8 is shipped. Remaining portal/Gantt/automation capabilities that need **Skaftin or email infrastructure** are tracked in [BACKEND-WISHLIST-SKAFTIN.md](../plans/project-task-management/BACKEND-WISHLIST-SKAFTIN.md). Proceed to **Phase 9c** (business overview) or backend picks from that wishlist.
 
 ## Verification workflow
 
-Same as other phases: [skaftin-docs-and-schema-verification.mdc](../../.cursor/rules/skaftin-docs-and-schema-verification.mdc) before any new tables or auth flows land in code.
+Same as other phases: [skaftin-docs-and-schema-verification.mdc](../../.cursor/rules/skaftin-docs-and-schema-verification.mdc) before new tables or auth flows land in code.

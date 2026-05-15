@@ -9,6 +9,8 @@ import {
   projectSchema,
   projectTaskCreateSchema,
   projectTaskUpdateSchema,
+  projectTaskDependencyCreateSchema,
+  automationRuleCreateSchema,
   projectTimeEntryCreateSchema,
   lineItemSchema,
   loginSchema,
@@ -281,6 +283,42 @@ describe('projectTaskCreateSchema', () => {
   it('rejects malformed due_on', () => {
     const result = projectTaskCreateSchema.safeParse({ ...valid, due_on: '06-01-2026' });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('projectTaskDependencyCreateSchema', () => {
+  it('rejects identical predecessor and successor', () => {
+    const r = projectTaskDependencyCreateSchema.safeParse({
+      business_id: 1,
+      project_id: 2,
+      predecessor_task_id: 5,
+      successor_task_id: 5,
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts distinct tasks', () => {
+    const r = projectTaskDependencyCreateSchema.safeParse({
+      business_id: 1,
+      project_id: 2,
+      predecessor_task_id: 5,
+      successor_task_id: 6,
+    });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('automationRuleCreateSchema', () => {
+  it('accepts minimal rule', () => {
+    expect(
+      automationRuleCreateSchema.safeParse({
+        business_id: 1,
+        project_id: 2,
+        name: 'Notify',
+        trigger_key: 'task_status_done',
+        definition: { channel: 'email' },
+      }).success
+    ).toBe(true);
   });
 });
 
