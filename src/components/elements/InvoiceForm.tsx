@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { LuArrowLeft } from 'react-icons/lu';
+import toast from 'react-hot-toast';
 import type { CreateInvoiceDto, InvoiceStatus } from '../../types/invoice';
 import type { Company } from '../../types/company';
 import type { Project } from '../../types/project';
+import TimeEntryService, { MAX_BILLABLE_ROLLUP_ROWS } from '../../services/timeEntryService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { useCompanyStore } from '../../stores/data/CompanyStore';
 import { useItemStore } from '../../stores/data/ItemStore';
@@ -55,6 +57,17 @@ export function InvoiceForm({
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
   const [initialProjectApplied, setInitialProjectApplied] = useState(false);
+
+  const currentBusinessId = useBusinessStore((s) => s.currentBusiness?.id);
+  const [billableSummary, setBillableSummary] = useState<{
+    loading: boolean;
+    totalMinutes: number;
+    entryCount: number;
+    capped: boolean;
+  }>({ loading: false, totalMinutes: 0, entryCount: 0, capped: false });
+  /** Matches `billableRollupKey` after the latest rollup response for that key (avoids empty copy before the first fetch runs). */
+  const [billableLoadedKey, setBillableLoadedKey] = useState<string | null>(null);
+  const [appendingBillableLine, setAppendingBillableLine] = useState(false);
 
   const [formData, setFormData] = useState<CreateInvoiceDto>({
     company_id: undefined,
@@ -341,6 +354,103 @@ export function InvoiceForm({
   }, [lineRows, globalDiscountPercent, formData.tax_rate]);
 
   const projectOptions = useMemo(() => [NO_PROJECT_OPTION, ...projects], [projects]);
+
+  const billableRollupKey = useMemo(() => {
+    const projectId = formData.project_id;
+    const sid = selectedProject?.id;
+    if (projectId == null || sid == null || sid === NO_PROJECT_ID || !Number.isFinite(Number(projectId))) {
+      return null;
+    }
+    const businessId = selectedProject?.business_id ?? currentBusinessId;
+    if (businessId == null || !Number.isFinite(Number(businessId))) {
+      return null;
+    }
+    return `${Number(projectId)}:${Number(businessId)}`;
+  }, [formData.project_id, selectedProject?.id, selectedProject?.business_id, currentBusinessId]);
+
+  useEffect(() => {
+    if (billableRollupKey == null) {
+      setBillableSummary({ loading: false, totalMinutes: 0, entryCount: 0, capped: false });
+      setBillableLoadedKey(null);
+      return;
+    }
+    const [projectIdStr, businessIdStr] = billableRollupKey.split(':');
+    const project_id = Number(projectIdStr);
+    const business_id = Number(businessIdStr);
+    let cancelled = false;
+    setBillableSummary((prev) => ({ ...prev, loading: true }));
+    void TimeEntryService.sumBillableMinutesForProject({ project_id, business_id })
+      .then(({ totalMinutes, entryCount, capped }) => {
+        if (cancelled) return;
+        setBillableSummary({ loading: false, totalMinutes, entryCount, capped });
+        setBillableLoadedKey(billableRollupKey);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBillableSummary({ loading: false, totalMinutes: 0, entryCount: 0, capped: false });
+          setBillableLoadedKey(billableRollupKey);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [billableRollupKey]);
+
+  const handleAppendBillableTimeLine = useCallback(async () => {
+    if (selectedProject?.id == null || selectedProject.id === NO_PROJECT_ID) return;
+    const businessId = selectedProject.business_id ?? currentBusinessId;
+    if (businessId == null || !Number.isFinite(Number(businessId))) {
+      toast.error('Select an active business to roll up billable time.');
+      return;
+    }
+    setAppendingBillableLine(true);
+    try {
+      const { totalMinutes, entryCount, capped } = await TimeEntryService.sumBillableMinutesForProject({
+        project_id: Number(selectedProject.id),
+        business_id: Number(businessId),
+      });
+      if (entryCount === 0 || totalMinutes <= 0) {
+        toast.error('No billable time to add as a line.');
+        return;
+      }
+      const hours = Math.round((totalMinutes / 60) * 100) / 100;
+      const bh = selectedProject.budget_hours;
+      const ba = selectedProject.budget_amount;
+      let unitPrice = 0;
+      if (bh != null && ba != null) {
+        const h = Number(bh);
+        const a = Number(ba);
+        if (Number.isFinite(h) && Number.isFinite(a) && h > 0 && a >= 0) {
+          unitPrice = Math.round((a / h) * 10000) / 10000;
+        }
+      }
+      let desc = `Billable time — ${selectedProject.name} (${hours} h`;
+      if (capped) {
+        desc += `; rollup stopped at ~${MAX_BILLABLE_ROLLUP_ROWS.toLocaleString()} rows`;
+      }
+      desc += ')';
+      if (unitPrice === 0) {
+        desc += ' — set unit price (or set project budget hours and amount for a suggested rate)';
+      }
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `line-${Date.now()}`;
+      setLineRows((prev) => [
+        ...prev,
+        {
+          id,
+          description: desc,
+          quantity: hours,
+          unit_price: unitPrice,
+          discountPercent: 0,
+          unit_type: 'hrs',
+        },
+      ]);
+      toast.success('Added a billable time line — review hours and unit price.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load billable time');
+    } finally {
+      setAppendingBillableLine(false);
+    }
+  }, [selectedProject, currentBusinessId]);
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -667,6 +777,36 @@ export function InvoiceForm({
                     disabled={!selectedCompany}
                     placeholder={selectedCompany ? 'Search project...' : 'No project'}
                   />
+                  {formData.project_id != null &&
+                    selectedProject?.id != null &&
+                    selectedProject.id !== NO_PROJECT_ID && (
+                      <>
+                        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400" data-testid="invoice-billable-summary">
+                          {billableSummary.loading ||
+                          (billableRollupKey != null && billableLoadedKey !== billableRollupKey)
+                            ? 'Loading billable time summary…'
+                            : selectedProject.business_id == null && currentBusinessId == null
+                              ? 'Select an active business in the app to load billable time for this project.'
+                              : billableLoadedKey === billableRollupKey && billableSummary.entryCount === 0
+                                ? 'No billable time entries for this project.'
+                                : `Billable time: ${(billableSummary.totalMinutes / 60).toFixed(1)} h across ${billableSummary.entryCount} billable ${billableSummary.entryCount === 1 ? 'entry' : 'entries'}${billableSummary.capped ? ` (scan limited — may be incomplete beyond ~${MAX_BILLABLE_ROLLUP_ROWS.toLocaleString()} rows).` : '.'}`}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={
+                            billableSummary.loading ||
+                            (billableRollupKey != null && billableLoadedKey !== billableRollupKey) ||
+                            appendingBillableLine ||
+                            billableSummary.entryCount === 0 ||
+                            (selectedProject?.business_id == null && currentBusinessId == null)
+                          }
+                          onClick={() => void handleAppendBillableTimeLine()}
+                          className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-40 disabled:no-underline"
+                        >
+                          {appendingBillableLine ? 'Adding…' : 'Add billable time as line item'}
+                        </button>
+                      </>
+                    )}
                 </div>
                 <div className={`${groupClass} mt-2 flex-1`}>
                   <label htmlFor="customer_vat_number" className={labelClass}>

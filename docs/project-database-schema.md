@@ -139,3 +139,21 @@ CREATE INDEX IF NOT EXISTS idx_stock_item_bom_lines_parent ON stock_item_bom_lin
 - **`item_type`**: `'single'` (default) or `'manufactured'`. Only manufactured items should have BOM rows; the app clears BOM when switching to single.
 - **`stock_item_bom_lines`**: one row per component; `quantity_per` is the amount of that component required **per one** parent unit (supports decimals).
 
+## 9) Project tasks
+
+Operational tasks under a project (list/Kanban). See:
+
+- Contract: [docs/03-database/project-tasks-schema-contract.md](03-database/project-tasks-schema-contract.md)
+- DDL: [docs/03-database/sql/project-tasks.sql](03-database/sql/project-tasks.sql)
+
+Deleting a **project** cascades to its `project_tasks` rows (`ON DELETE CASCADE` on `project_id`).
+
+**Skaftin / Foro note:** The live project schema may not define a `businesses` table; `business_id` is still used as a tenant integer on `projects` and related tables. The `project_tasks` DDL in [sql/project-tasks.sql](03-database/sql/project-tasks.sql) follows that pattern (no FK on `business_id`). Validate with MCP `list_tables` / `get_table_schema` before assuming older `businesses`-FK documentation elsewhere in this file.
+
+## 10) Project time entries and budgets (Phase 7)
+
+- **Time entries:** [docs/03-database/project-time-entries-schema-contract.md](03-database/project-time-entries-schema-contract.md), DDL [docs/03-database/sql/project-time-entries.sql](03-database/sql/project-time-entries.sql). Rows tie **`project_id`** (and **`business_id`**) to optional **`task_id`**, **`user_id`**, **`duration_minutes`**, **`billable`**, etc.
+- **Project budgets:** optional **`budget_hours`** / **`budget_amount`** on `projects` — [project-budget-columns-contract.md](03-database/project-budget-columns-contract.md), DDL [docs/03-database/sql/project-budget-columns.sql](03-database/sql/project-budget-columns.sql).
+
+Apply both scripts on each environment before using the project detail **Budget and time** card or invoice **billable time** summary.
+

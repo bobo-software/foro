@@ -109,9 +109,18 @@ export function LineItemsEditor({ rows, stockItems, currency, onChange }: LineIt
               <div className="flex gap-1">
                 <input
                   type="number"
-                  min={1}
-                  value={row.quantity || ''}
-                  onChange={(e) => updateLine(row.id, { quantity: parseInt(e.target.value, 10) || 0 })}
+                  min={row.unit_type === 'hrs' ? 0.01 : 1}
+                  step={row.unit_type === 'hrs' ? '0.01' : '1'}
+                  value={row.quantity === 0 ? '' : row.quantity}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (row.unit_type === 'hrs') {
+                      const n = parseFloat(raw);
+                      updateLine(row.id, { quantity: Number.isFinite(n) ? n : 0 });
+                    } else {
+                      updateLine(row.id, { quantity: parseInt(raw, 10) || 0 });
+                    }
+                  }}
                   className={`${inputClass} flex-1`}
                 />
                 <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600 text-xs font-medium shrink-0">

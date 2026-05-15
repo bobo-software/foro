@@ -3,7 +3,7 @@
 | Document | Purpose |
 |----------|---------|
 | **This file** | Product vision, integrated ERP/PM ideas, long-term roadmap, and library notes |
-| [project-task-management/](./project-task-management/README.md) | **Phased action plan** for project/task management (phases 1–6 + 7–9 stubs; [one-page summary](./project-task-management.md)) |
+| [project-task-management/](./project-task-management/README.md) | **Phased action plan** for project/task management (phases 1–6 + 7–9 stubs; [one-page summary](./project-task-management.md); [progress log](./project-task-management/PROGRESS.md)) |
 
 ---
 

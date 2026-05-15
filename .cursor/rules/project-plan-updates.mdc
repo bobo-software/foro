@@ -1,0 +1,49 @@
+---
+description: Keep project/task management plans and progress docs in sync when changing PM features
+globs: docs/plans/project-task-management/**,docs/plans/project-task-management.md,docs/03-database/project-tasks*.md,docs/02-modules/project-tasks.md,src/pages/**/Project*.tsx,src/services/taskService.ts,src/types/task.ts
+alwaysApply: false
+---
+
+# Updating project & task management plans
+
+When you add, change, or ship **project tasks**, **project detail**, **Kanban**, or related **Skaftin `project_tasks`** behaviour:
+
+## 1. Rolling progress log (required)
+
+Edit **[docs/plans/project-task-management/PROGRESS.md](../../docs/plans/project-task-management/PROGRESS.md)**:
+
+- Bump the **Last reviewed** date if material work changed.
+- Update the **Summary** table (phase status: Done / Mostly done / Not started / Planning).
+- Add a **Changelog** bullet with date: what shipped or what gap was closed.
+- Adjust **Next actions** so the queue matches reality.
+
+## 2. Phase spec checklists (required when a phase moves)
+
+Open the matching **[docs/plans/project-task-management/phase-*.md](../../docs/plans/project-task-management/)** file(s):
+
+- Set **`Status:`** line at the top (e.g. Done, Mostly done, Not started).
+- Tick **`[x]`** / leave **`[ ]`** on deliverables to match the codebase.
+- If scope moved (e.g. list + board shipped on one page), say so in the phase doc so the written plan matches implementation.
+
+## 3. Hub and indexes (when scope or status shifts)
+
+- **[docs/plans/project-task-management/README.md](../../docs/plans/project-task-management/README.md)** — phase table **Status** column should match PROGRESS.
+- **[docs/plans/README.md](../../docs/plans/README.md)** — keep the row pointing at the hub + progress log accurate.
+- **[docs/README.md](../../docs/README.md)** — if new module docs were added, link them.
+
+## 4. Schema and module docs (when DB or API contract changes)
+
+- **[docs/03-database/project-tasks-schema-contract.md](../../docs/03-database/project-tasks-schema-contract.md)** and **[docs/03-database/sql/project-tasks.sql](../../docs/03-database/sql/project-tasks.sql)** — update when columns, constraints, or indexes change; re-run **Skaftin MCP** (`list_tables`, `get_table_schema`) when possible before editing shapes.
+- **[docs/02-modules/project-tasks.md](../../docs/02-modules/project-tasks.md)** — routes, UI entry points, and service overview.
+
+## 5. Do not edit by default
+
+- Do **not** change **[docs/plans/README.md](../../docs/plans/README.md)** vision sections (long roadmap narrative) unless the product vision itself changed.
+- Do **not** edit auto-generated **`.cursor/plans/*.plan.md`** snapshot files from the IDE; the repo source of truth is **`docs/plans/project-task-management/`**.
+
+## Quick checklist before merging PM work
+
+- [ ] PROGRESS.md updated (summary + changelog).
+- [ ] Relevant `phase-*.md` deliverables / status lines updated.
+- [ ] Hub README phase table aligned.
+- [ ] Schema or `docs/02-modules/project-tasks.md` touched if behaviour or routes changed.

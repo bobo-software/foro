@@ -1,5 +1,7 @@
 # Phase 3: Project detail shell
 
+**Status:** Done (2026-05-14); shipped together with phase 4 on one page. **Progress:** [PROGRESS.md](./PROGRESS.md).
+
 **Prerequisite:** [phase-02-access-layer.md](./phase-02-access-layer.md) (tasks callable from code); can overlap end of phase 2 if types are stable.
 
 **Blocks:** [phase-04-task-list.md](./phase-04-task-list.md) (tasks UI lives under this shell).
@@ -10,18 +12,17 @@ Give each project a **dedicated URL** and layout so task features nest naturally
 
 ## Deliverables
 
-- [ ] Route(s), e.g. `/app/companies/:companyId/projects/:projectId` (exact pattern to match `App.tsx` conventions).
-- [ ] Lazy-loaded page component (same pattern as other admin pages).
-- [ ] Load project by id; verify `company_id` matches route param (guard against cross-company ids); show 404 or safe empty state if mismatch.
-- [ ] Display core project fields (name, code, description, status, dates) reusing existing typography/layout primitives.
-- [ ] Navigation: from `CompanyProjectsPage`, each project row links into this detail page; back link to company projects list.
-- [ ] Placeholder section or tab label **Tasks** (empty state until phase 4).
+- [x] Route `/app/companies/:companyId/projects/:projectId` in `App.tsx` (more specific route before `projects` index).
+- [x] Lazy-loaded [`ProjectDetailPage`](../../../src/pages/admin/companies/ProjectDetailPage.tsx).
+- [x] Load project by id; verify `company_id` matches route param (guard against cross-company ids); show safe empty state if mismatch.
+- [x] Display core project fields (name, code, description, status) reusing existing layout primitives.
+- [x] Navigation: from `CompanyProjectsPage`, **Open project** link; back via `AppPageHeader` to company projects list.
+- [x] Tasks section on same page (phase 4 merged here rather than an empty placeholder).
 
 ## Exit criteria
 
 - Deep-linking to a project works for authenticated users with access to that business.
-- No task table required yet; “Tasks coming next” or empty shell is acceptable.
 
 ## Out of scope
 
-- Task CRUD UI (phase 4), Kanban (phase 5).
+- Kanban (phase 5).

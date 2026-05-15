@@ -7,6 +7,7 @@ import {
   LuFileText,
   LuWallet,
   LuSettings,
+  LuListChecks,
 } from 'react-icons/lu';
 import AppText from '@/components/text/AppText';
 import useThemeStore from '../../stores/state/ThemeStore';
@@ -76,6 +77,7 @@ const AppSidebar = () => {
       </div>
       <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5">
         {navLink('/app/dashboard', 'Dashboard', <LuLayoutDashboard className="w-4 h-4" />)}
+        {navLink('/app/tasks', 'My tasks', <LuListChecks className="w-4 h-4" />)}
         {navLink('/app/companies', 'Companies', <LuBuilding2 className="w-4 h-4" />)}
         {navLink('/app/items', 'Stock', <LuPackage className="w-4 h-4" />)}
         {navLink('/app/quotations', 'Quotations', <LuFileText className="w-4 h-4" />)}

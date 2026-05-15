@@ -1,5 +1,7 @@
 # Phase 4: Task list MVP
 
+**Status:** Done (2026-05-14). **Progress:** [PROGRESS.md](./PROGRESS.md).
+
 **Prerequisite:** [phase-03-project-detail.md](./phase-03-project-detail.md).
 
 **Blocks:** [phase-05-kanban.md](./phase-05-kanban.md).
@@ -10,16 +12,16 @@ Ship daily-usable **list** task management: create, read, update, delete tasks f
 
 ## Deliverables
 
-- [ ] Tasks panel on project detail: fetch via `TaskService` scoped by `project_id` + `business_id`.
-- [ ] Create task: minimal form (title required; optional description, due date, status, priority per phase 1 contract).
-- [ ] Edit/delete task with confirmation for destructive action.
-- [ ] List/table UI: follow [ui-data-tables.md](../../02-modules/ui-data-tables.md) patterns where applicable (sorting, empty state, loading/error).
-- [ ] Basic filters: at least by `status`; optional text search on title if cheap.
-- [ ] Resolve **open question** #2 enough for UI: fixed status enum in code matching DB check constraint or varchar policy.
+- [x] Tasks panel on project detail: fetch via `TaskService` scoped by `project_id` + `business_id`.
+- [x] Create task: minimal form (title required; optional due date; default status `todo`). **Description** and **priority** on create and list edit are **shipped** ([`ProjectDetailPage`](../../../src/pages/admin/companies/ProjectDetailPage.tsx)).
+- [x] Edit/delete task with confirmation for destructive action.
+- [x] List/table UI (simple HTML table; not yet full [ui-data-tables.md](../../02-modules/ui-data-tables.md) / MRT patterns).
+- [x] Basic filters: **status** (All + each enum) and **title** substring search on the **list** view only; Board still shows all loaded tasks. Clear filters control when either filter is active.
+- [x] Fixed status enum in code matching DB CHECK (`projectTaskCreateSchema` / `projectTaskUpdateSchema`).
 
 ## Documentation
 
-- [ ] `docs/02-modules/` short note: task list module, routes, service entry points.
+- [x] `docs/02-modules/` — [project-tasks.md](../../02-modules/project-tasks.md).
 
 ## Exit criteria
 

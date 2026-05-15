@@ -1,5 +1,7 @@
 # Phase 9: Analytics & insights
 
+**Status:** Planning. **Progress:** [PROGRESS.md](./PROGRESS.md).
+
 **Prerequisite:** Enough historical data pipelines from tasks, time, and invoices—usually **after** phases 7–8 or partial 7.
 
 **Vision reference:** [../README.md](../README.md) — project dashboard, business insights, AI-assisted summaries (later “Phase 4”).
