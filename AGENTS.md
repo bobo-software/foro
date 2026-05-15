@@ -39,7 +39,7 @@ The project uses Vitest + React Testing Library. Tests live alongside source fil
 
 ### Architecture notes
 
-- **Code splitting**: All authenticated routes are lazy-loaded via `React.lazy` in `App.tsx`. The landing page, login, and register routes are eagerly loaded.
+- **Code splitting**: Authenticated `/app/*` routes are lazy-loaded via `React.lazy` in `App.tsx`. The landing page, login, and register routes are eagerly loaded. Notable lazy app routes: **`/app/projects`** (business projects overview), **`/app/tasks`**. Other **public** lazy routes include invites, **`/portal`**, and **`/portal/v/:portalToken`** (read-only project view for invite tokens).
 - **Error Boundary**: `src/components/ErrorBoundary.tsx` wraps the entire app in `App.tsx`. It shows a recovery UI with "Try again" and "Go to Dashboard" buttons.
 - **Environment validation**: `src/config/env.ts` uses Zod to validate `VITE_*` env vars at startup. In dev mode it falls back to defaults; in production it throws on invalid config.
 - **Validation schemas**: `src/validation/schemas.ts` exports Zod schemas for all entities (invoice, quotation, company, item, payment, auth). Import and use `schema.safeParse(data)` in forms/services.

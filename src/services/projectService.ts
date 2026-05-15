@@ -17,6 +17,8 @@ function normalizeProject(raw: Record<string, unknown>): Project {
     id: raw.id != null ? Number(raw.id) : undefined,
     business_id: raw.business_id != null ? Number(raw.business_id) : undefined,
     company_id: Number(raw.company_id),
+    budget_hours: raw.budget_hours != null && raw.budget_hours !== '' ? Number(raw.budget_hours) : undefined,
+    budget_amount: raw.budget_amount != null && raw.budget_amount !== '' ? Number(raw.budget_amount) : undefined,
   } as Project;
 }
 

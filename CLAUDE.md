@@ -9,6 +9,17 @@ Before implementing any backend request feature, always check:
 
 Do not invent or assume request shapes — consult these sources first.
 
+## Form Inputs
+
+Always use the shared form components from `src/components/forms/` for all user inputs. Never use raw `<input>`, `<select>`, or `<textarea>` elements directly in pages or modals.
+
+| Need | Component |
+|------|-----------|
+| Text, number, date, email input | `AppLabledInput` (`AppLabledInput.tsx`) |
+| Single-select dropdown | `AppLabeledSelectInput` (`AppLabledSelectInput.tsx`) |
+| Searchable autocomplete | `AppLabledAutocomplete` (`AppLabledAutocomplete.tsx`) |
+| Multi-line text | `AppLabeledAreaInput` (`AppLabledAreaInput.tsx`) |
+
 ## Documentation Updates
 
 After adding or modifying a feature, always update the relevant docs in the `docs/` folder:

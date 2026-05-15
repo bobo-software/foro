@@ -1,0 +1,39 @@
+---
+description: Enforce use of shared form components for all user inputs
+globs: ["src/**/*.tsx", "src/**/*.ts"]
+alwaysApply: true
+---
+
+# Form Input Components
+
+Always use the shared form components from `src/components/forms/` for all user inputs. Never write raw `<input>`, `<select>`, or `<textarea>` elements directly in pages or modals.
+
+## Component Map
+
+| Need | Component | File |
+|------|-----------|------|
+| Text, number, date, email, password | `AppLabledInput` | `AppLabledInput.tsx` |
+| Single-select dropdown | `AppLabeledSelectInput` | `AppLabledSelectInput.tsx` |
+| Searchable autocomplete | `AppLabledAutocomplete` | `AppLabledAutocomplete.tsx` |
+| Multi-line text | `AppLabeledAreaInput` | `AppLabledAreaInput.tsx` |
+
+## Examples
+
+```tsx
+// ✅ correct
+<AppLabledInput label="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+<AppLabeledSelectInput label="Status" value={status} options={STATUS_LABELS} onChange={(e) => setStatus(e.target.value)} />
+<AppLabledAutocomplete label="Project" options={projects} accessor="name" valueAccessor="id" onSelect={setProject} />
+<AppLabeledAreaInput label="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
+
+// ❌ wrong — raw HTML elements
+<input type="text" value={title} onChange={...} />
+<select value={status} onChange={...}>...</select>
+<textarea value={desc} onChange={...} />
+```
+
+## Notes
+
+- `AppLabeledSelectInput` accepts `options: string[]`. If your options have separate values and labels, define a label→value map and store the label in state, converting on submit.
+- `AppLabledAutocomplete` uses `accessor` (display field) and `valueAccessor` (id field) to work with object arrays.
+- If none of the existing components fit a new use case, add a new component to `src/components/forms/` rather than using a raw element inline.

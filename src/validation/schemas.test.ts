@@ -7,6 +7,11 @@ import {
   itemFormWithBomSchema,
   paymentSchema,
   projectSchema,
+  projectTaskCreateSchema,
+  projectTaskUpdateSchema,
+  projectTaskDependencyCreateSchema,
+  automationRuleCreateSchema,
+  projectTimeEntryCreateSchema,
   lineItemSchema,
   loginSchema,
   registerSchema,
@@ -232,6 +237,125 @@ describe('projectSchema', () => {
 
   it('rejects empty project name', () => {
     const result = projectSchema.safeParse({ ...valid, name: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts optional budget fields', () => {
+    expect(
+      projectSchema.safeParse({ ...valid, budget_hours: 10, budget_amount: 5000 }).success
+    ).toBe(true);
+    expect(projectSchema.safeParse({ ...valid, budget_hours: null, budget_amount: null }).success).toBe(true);
+  });
+});
+
+describe('projectTaskCreateSchema', () => {
+  const valid = {
+    business_id: 1,
+    project_id: 2,
+    title: 'Wire task API',
+  };
+
+  it('accepts minimal valid task', () => {
+    expect(projectTaskCreateSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects empty title', () => {
+    const result = projectTaskCreateSchema.safeParse({ ...valid, title: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid status', () => {
+    const result = projectTaskCreateSchema.safeParse({ ...valid, status: 'backlog' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts all allowed statuses', () => {
+    for (const status of ['todo', 'in_progress', 'review', 'blocked', 'done']) {
+      expect(projectTaskCreateSchema.safeParse({ ...valid, status }).success).toBe(true);
+    }
+  });
+
+  it('accepts due_on YYYY-MM-DD', () => {
+    const result = projectTaskCreateSchema.safeParse({ ...valid, due_on: '2026-06-01' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects malformed due_on', () => {
+    const result = projectTaskCreateSchema.safeParse({ ...valid, due_on: '06-01-2026' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('projectTaskDependencyCreateSchema', () => {
+  it('rejects identical predecessor and successor', () => {
+    const r = projectTaskDependencyCreateSchema.safeParse({
+      business_id: 1,
+      project_id: 2,
+      predecessor_task_id: 5,
+      successor_task_id: 5,
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts distinct tasks', () => {
+    const r = projectTaskDependencyCreateSchema.safeParse({
+      business_id: 1,
+      project_id: 2,
+      predecessor_task_id: 5,
+      successor_task_id: 6,
+    });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('automationRuleCreateSchema', () => {
+  it('accepts minimal rule', () => {
+    expect(
+      automationRuleCreateSchema.safeParse({
+        business_id: 1,
+        project_id: 2,
+        name: 'Notify',
+        trigger_key: 'task_status_done',
+        definition: { channel: 'email' },
+      }).success
+    ).toBe(true);
+  });
+});
+
+describe('projectTimeEntryCreateSchema', () => {
+  const valid = {
+    business_id: 7,
+    project_id: 20,
+    user_id: 42,
+    duration_minutes: 30,
+  };
+
+  it('accepts minimal valid time entry', () => {
+    expect(projectTimeEntryCreateSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects zero duration', () => {
+    const result = projectTimeEntryCreateSchema.safeParse({ ...valid, duration_minutes: 0 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duration over 24h', () => {
+    const result = projectTimeEntryCreateSchema.safeParse({ ...valid, duration_minutes: 2000 });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('projectTaskUpdateSchema', () => {
+  it('accepts empty object', () => {
+    expect(projectTaskUpdateSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts partial title', () => {
+    expect(projectTaskUpdateSchema.safeParse({ title: 'Updated' }).success).toBe(true);
+  });
+
+  it('rejects empty title when provided', () => {
+    const result = projectTaskUpdateSchema.safeParse({ title: '' });
     expect(result.success).toBe(false);
   });
 });

@@ -45,3 +45,14 @@ Every role or membership mutation writes `membership_events` with:
 - timestamp
 
 This enables incident investigation and rollback support.
+
+## Client portal access (planned)
+
+Phase 8 may introduce **external** users who are not normal `owner` / `admin` / `member` / `viewer` business members. Until that product is specified, treat the following as **design constraints**:
+
+- Portal users must **not** receive the same bearer tokens as internal users unless tokens are strictly scoped (e.g. read-only project + document subset).
+- Any `viewer`-like portal role should be **deny-by-default** on mutations; promotions to internal roles stay on the invite / membership flows above.
+- Authorization for portal routes must be enforced **server-side** (Skaftin or edge rules), not only in the SPA.
+- The app currently exposes a **public** landing page at **`/portal`** with product copy only (no sessions, no scoped data); treat it as a URL placeholder until real portal auth exists.
+
+See [project-phase8-portal-gantt-automation.md](../02-modules/project-phase8-portal-gantt-automation.md).

@@ -1,0 +1,37 @@
+# Project tasks (MVP)
+
+Task **list** and **Kanban board** under each company project, plus **My tasks** for the current business ([`/app/tasks`](../../src/App.tsx)). **Progress log:** [PROGRESS.md](../plans/project-task-management/PROGRESS.md). **Plan updates (agents):** [`.cursor/rules/project-plan-updates.mdc`](../../.cursor/rules/project-plan-updates.mdc).
+
+## Routes
+
+| Path | Page |
+|------|------|
+| `/app/tasks` | [MyTasksPage](../../src/pages/admin/tasks/MyTasksPage.tsx) — tasks assigned to you in the **active** business (deep-links into each project) |
+| `/app/companies/:companyId/projects` | [CompanyProjectsPage](../../src/pages/admin/companies/CompanyProjectsPage.tsx) — project list, document shortcuts |
+| `/app/companies/:companyId/projects/:projectId` | [ProjectDetailPage](../../src/pages/admin/companies/ProjectDetailPage.tsx) — project summary, **Insights** (loaded tasks/time, Phase 9a), **budget and time** (manual log, **browser timer**), **List \| Board \| Timeline** tasks, **dependencies**, **portal invites**, **automation rules** |
+| `/portal` | [PortalLandingPage](../../src/pages/portal/PortalLandingPage.tsx) — public portal information |
+| `/portal/v/:portalToken` | [PortalProjectViewPage](../../src/pages/portal/PortalProjectViewPage.tsx) — read-only shared project timeline (hashed invite token) |
+
+Register the detail route **before** the projects index route so `:projectId` is not captured as a literal segment ([App.tsx](../../src/App.tsx)).
+
+## UI
+
+- **List:** inline edit (title, **description**, **priority**, status, due, **assignee**), Save / Delete. **Filters (list view):** **status** uses Skaftin `where` (All = no status filter); case-insensitive **title** substring is sent to the server on a **debounced** `where.title` + `ilike` pattern (see [project-tasks-select-filters.md](../03-database/project-tasks-select-filters.md)); “Clear filters” when active. **Load more** fetches the next page (**50** rows) so large projects can be browsed; the **Board** shows every task loaded so far. Assignee options: **Unassigned** plus **active** `team_memberships` for the business; invalid ids are rejected before save. Table uses accessible captions/labels and `role="alert"` for task-level errors.
+- **Board:** [ProjectTasksKanban](../../src/pages/admin/companies/ProjectTasksKanban.tsx) — columns = task statuses; **sortable** cards (`@dnd-kit/sortable`). Dropping a card updates **`status`** and/or **`position`** (0-based order within each column) via batched `TaskService.update` calls; parent refetches after success. View mode is stored in `localStorage` per project id (`foro_project_tasks_view_<projectId>`). Reorder logic is covered by Vitest in [`projectKanbanReorder.test.ts`](../../src/utils/projectKanbanReorder.test.ts).
+- **Timeline (Phase 8):** [ProjectTasksTimeline](../../src/pages/admin/companies/ProjectTasksTimeline.tsx) — read-only **due date** schedule, **Overdue** / **Today** / **Unscheduled**, optional **After: …** predecessor hints from `project_task_dependencies`. Planning doc: [project-phase8-portal-gantt-automation.md](../02-modules/project-phase8-portal-gantt-automation.md).
+- **Dependencies / portal / rules (Phase 8c):** cards on [ProjectDetailPage](../../src/pages/admin/companies/ProjectDetailPage.tsx) — [ProjectTaskDependenciesCard](../../src/pages/admin/companies/ProjectTaskDependenciesCard.tsx), [ProjectPortalInvitesCard](../../src/pages/admin/companies/ProjectPortalInvitesCard.tsx), [ProjectAutomationRulesCard](../../src/pages/admin/companies/ProjectAutomationRulesCard.tsx); services in repo `src/services/`. **Automation toasts:** [automationTriggerRunner](../../src/services/automationTriggerRunner.ts) — `task_status_done` when a task becomes **done**; **`task_created`** when a new task is saved.
+- **Insights (Phase 9a):** [ProjectInsightsCard](../../src/pages/admin/companies/ProjectInsightsCard.tsx) — read-only metrics from loaded tasks and time entries; see [project-insights-analytics.md](./project-insights-analytics.md).
+- **Budget and time:** optional project budgets; manual time entries + **browser timer** (stored in `localStorage` per project + business); **Recent entries** loads **50 rows** at a time (`logged_at` DESC) with **Load more time entries** to append older rows. **Full billable rollup** on the same page uses [`TimeEntryService.sumBillableMinutesForProject`](../../src/services/timeEntryService.ts) (same paged scan as invoice billable line) for budget comparison and summary copy. Invoicing with a project uses [InvoiceForm](../../src/components/elements/InvoiceForm.tsx) for a **paged billable rollup** and optional **“add billable time as line item”** (hours line; suggested rate from budget hours/amount when both are set).
+
+## Data
+
+- **Tables:** `project_tasks` — [project-tasks-schema-contract.md](../03-database/project-tasks-schema-contract.md), [sql/project-tasks.sql](../03-database/sql/project-tasks.sql). **Time:** `project_time_entries` — [project-time-entries-schema-contract.md](../03-database/project-time-entries-schema-contract.md), [sql/project-time-entries.sql](../03-database/sql/project-time-entries.sql); optional **budget** columns on `projects` — [project-budget-columns-contract.md](../03-database/project-budget-columns-contract.md), [sql/project-budget-columns.sql](../03-database/sql/project-budget-columns.sql). **Phase 8:** `project_task_dependencies`, `portal_invites`, `automation_rules` — see [project-database-schema.md](../project-database-schema.md) §11 and linked contracts.
+- **Services:** [TaskService](../../src/services/taskService.ts), [TimeEntryService](../../src/services/timeEntryService.ts), [TaskDependencyService](../../src/services/taskDependencyService.ts), [PortalInviteService](../../src/services/portalInviteService.ts), [AutomationRuleService](../../src/services/automationRuleService.ts) — same Skaftin table API pattern as `ProjectService`.
+- **Validation:** `projectTaskCreateSchema` / `projectTaskUpdateSchema` / `projectTimeEntryCreateSchema`, `projectTaskDependencyCreateSchema`, `automationRuleCreateSchema` in [schemas.ts](../../src/validation/schemas.ts).
+- **Fetch / pagination:** project detail **tasks** use **`limit: 50`** with **`offset`**; **Load more** appends the next page. **Time entries** on the same page use the same page size and **Load more time entries** for the recent table (no extra filters). **Status** and **title** filters apply to task loads only (title debounced in the UI).
+
+## Behaviour notes
+
+- `business_id` on tasks is **not** FK-enforced in the database; the UI derives it from the parent `projects` row or `useBusinessStore` so `TaskService.findAll` can scope by `{ project_id, business_id }`.
+- Updates send `updated_at` from the client so the row reflects edits when the API persists it.
+- **Assignee:** [`projectTaskAssignee`](../../src/utils/projectTaskAssignee.ts) centralises “assignable = active membership user id or null”.

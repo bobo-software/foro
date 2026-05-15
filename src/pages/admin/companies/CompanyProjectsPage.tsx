@@ -250,15 +250,25 @@ export function CompanyProjectsPage() {
                     {project.description ? ` · ${project.description}` : ''}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (project.id != null) setSelectedScope(project.id);
-                  }}
-                  className="rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-                >
-                  Use this project
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {project.id != null && (
+                    <Link
+                      to={`/app/companies/${company.id}/projects/${project.id}`}
+                      className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white no-underline hover:bg-indigo-500"
+                    >
+                      Open project
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (project.id != null) setSelectedScope(project.id);
+                    }}
+                    className="rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  >
+                    Use this project
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

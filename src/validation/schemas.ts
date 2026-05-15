@@ -152,9 +152,95 @@ export const projectSchema = z.object({
   status: z.string().optional(),
   starts_on: dateString('Start date').optional(),
   ends_on: dateString('End date').optional(),
+  budget_hours: z.number().nonnegative('Budget hours must be ≥ 0').nullable().optional(),
+  budget_amount: z.number().nonnegative('Budget amount must be ≥ 0').nullable().optional(),
 });
 
 export type ProjectInput = z.infer<typeof projectSchema>;
+
+// ── Project task (project_tasks table) ─────────────────────────────
+export const projectTaskStatusSchema = z.enum(['todo', 'in_progress', 'review', 'blocked', 'done']);
+export const projectTaskPrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
+
+export const projectTaskCreateSchema = z.object({
+  business_id: z.number({ message: 'Business is required' }).int().positive('Business is required'),
+  project_id: z.number({ message: 'Project is required' }).int().positive('Project is required'),
+  title: z.string({ message: 'Title is required' }).min(1, 'Title is required').max(500, 'Title must be ≤ 500 characters'),
+  description: z.string().max(2000, 'Description must be ≤ 2000 characters').nullable().optional(),
+  status: projectTaskStatusSchema.optional(),
+  priority: projectTaskPrioritySchema.nullable().optional(),
+  due_on: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Due date must be YYYY-MM-DD')
+    .nullable()
+    .optional(),
+  assigned_to_user_id: z.number().int().positive().nullable().optional(),
+  position: z.number().int().nonnegative().optional(),
+});
+
+export type ProjectTaskCreateInput = z.infer<typeof projectTaskCreateSchema>;
+
+export const projectTaskUpdateSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(500, 'Title must be ≤ 500 characters').optional(),
+  description: z.string().max(2000, 'Description must be ≤ 2000 characters').nullable().optional(),
+  status: projectTaskStatusSchema.optional(),
+  priority: projectTaskPrioritySchema.nullable().optional(),
+  due_on: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Due date must be YYYY-MM-DD')
+    .nullable()
+    .optional(),
+  assigned_to_user_id: z.number().int().positive().nullable().optional(),
+  position: z.number().int().nonnegative().optional(),
+  updated_at: z.string().optional(),
+});
+
+export type ProjectTaskUpdateInput = z.infer<typeof projectTaskUpdateSchema>;
+
+// ── Task dependencies (project_task_dependencies) ───────────────────
+export const projectTaskDependencyCreateSchema = z
+  .object({
+    business_id: z.number().int().positive(),
+    project_id: z.number().int().positive(),
+    predecessor_task_id: z.number().int().positive(),
+    successor_task_id: z.number().int().positive(),
+  })
+  .refine((d) => d.predecessor_task_id !== d.successor_task_id, {
+    message: 'Predecessor and successor must be different tasks',
+    path: ['successor_task_id'],
+  });
+
+export type ProjectTaskDependencyCreateInput = z.infer<typeof projectTaskDependencyCreateSchema>;
+
+// ── Automation rules (automation_rules) ───────────────────────────────
+export const automationRuleCreateSchema = z.object({
+  business_id: z.number().int().positive(),
+  project_id: z.number().int().positive(),
+  name: z.string().min(1, 'Name is required').max(200),
+  trigger_key: z.string().min(1, 'Trigger is required').max(64),
+  definition: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+});
+
+export type AutomationRuleCreateInput = z.infer<typeof automationRuleCreateSchema>;
+
+// ── Project time entry (project_time_entries) ───────────────────────
+export const projectTimeEntryCreateSchema = z.object({
+  business_id: z.number().int().positive(),
+  project_id: z.number().int().positive(),
+  task_id: z.number().int().positive().nullable().optional(),
+  user_id: z.number().int().positive(),
+  logged_at: z.string().optional(),
+  duration_minutes: z
+    .number({ message: 'Duration is required' })
+    .int()
+    .min(1, 'Enter at least 1 minute')
+    .max(1440, 'Max 1440 minutes (24h) per entry'),
+  billable: z.boolean().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type ProjectTimeEntryCreateInput = z.infer<typeof projectTimeEntryCreateSchema>;
 
 // ── Line Items ─────────────────────────────────────────────────────
 export const lineItemSchema = z.object({
