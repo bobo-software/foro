@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LuFolderPlus } from 'react-icons/lu';
 import { AppPageHeader } from '@/components/ComponentsIndex';
+import { AppModal } from '@/components/modals/AppModal';
 import CompanyService from '@/services/companyService';
 import ProjectService from '@/services/projectService';
 import TaskService from '@/services/taskService';
+import TaskCategoryService from '@/services/taskCategoryService';
 import TimeEntryService from '@/services/timeEntryService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
-import type { Project } from '@/types/project';
+import type { Project, ProjectStatus } from '@/types/project';
 import type { ProjectTask } from '@/types/task';
 import {
   aggregateTasksByProjectId,
@@ -59,6 +62,7 @@ export function ProjectsOverviewPage() {
   const [billableLoading, setBillableLoading] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('overdue');
   const [sortDesc, setSortDesc] = useState(true);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const loadOverview = useCallback(async () => {
     if (bid == null) return;
@@ -161,6 +165,11 @@ export function ProjectsOverviewPage() {
 
   const totals = useMemo(() => sumRollups(rows), [rows]);
 
+  const companies = useMemo(
+    () => Array.from(companyNameById.entries()).map(([id, name]) => ({ id, name })),
+    [companyNameById]
+  );
+
   const exportOverviewCsv = useCallback(() => {
     if (sortedRows.length === 0) return;
     const headers = [
@@ -223,12 +232,29 @@ export function ProjectsOverviewPage() {
   return (
     <div className="space-y-6">
       <AppPageHeader
-        title="Projects overview"
-        subtitle={businessName ? `${businessName} · cross-project health` : 'Cross-project health'}
-        showBackButton
-        backButtonText="Dashboard"
-        onBackClick={() => navigate('/app/dashboard')}
+        title="Projects Overview"
+        subtitle={businessName}
+        showButton
+        buttonText="New Project"
+        buttonIcon={<LuFolderPlus size={14} />}
+        onButtonClick={() => setNewProjectOpen(true)}
       />
+
+      {newProjectOpen && (
+        <NewProjectModal
+          isOpen={newProjectOpen}
+          onClose={() => setNewProjectOpen(false)}
+          businessId={bid!}
+          companies={companies}
+          onCreated={(project) => {
+            setNewProjectOpen(false);
+            void loadOverview();
+            if (project.id != null && project.company_id != null) {
+              navigate(`/app/companies/${project.company_id}/projects/${project.id}`);
+            }
+          }}
+        />
+      )}
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
         Task counts come from up to {TASK_PAGE_SIZE * MAX_TASK_PAGES} tasks in this business
@@ -389,5 +415,165 @@ function OverviewTableRow({ row, billableLoading }: { row: ProjectOverviewRow; b
         {budgetHours != null ? `${budgetHours} h` : '—'}
       </td>
     </tr>
+  );
+}
+
+const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'on_hold', label: 'On Hold' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+interface NewProjectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  businessId: number;
+  companies: { id: number; name: string }[];
+  onCreated: (project: Project) => void;
+}
+
+function NewProjectModal({ isOpen, onClose, businessId, companies, onCreated }: NewProjectModalProps) {
+  const nameId = useId();
+  const codeId = useId();
+  const companyId = useId();
+  const statusId = useId();
+  const startsId = useId();
+  const endsId = useId();
+  const budgetId = useId();
+  const descId = useId();
+
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fields, setFields] = useState({
+    name: '',
+    code: '',
+    company_id: companies[0]?.id ?? 0,
+    status: 'active' as ProjectStatus,
+    starts_on: '',
+    ends_on: '',
+    budget_hours: '',
+    description: '',
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormError(null);
+      setSaving(false);
+      setFields({
+        name: '',
+        code: '',
+        company_id: companies[0]?.id ?? 0,
+        status: 'active',
+        starts_on: '',
+        ends_on: '',
+        budget_hours: '',
+        description: '',
+      });
+    }
+  }, [isOpen, companies]);
+
+  const set = (key: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const handleSubmit = async () => {
+    if (!fields.name.trim()) { setFormError('Project name is required.'); return; }
+    if (!fields.company_id) { setFormError('Please select a company.'); return; }
+    setSaving(true);
+    setFormError(null);
+    try {
+      const project = await ProjectService.create({
+        business_id: businessId,
+        company_id: Number(fields.company_id),
+        name: fields.name.trim(),
+        code: fields.code.trim() || undefined,
+        status: fields.status,
+        starts_on: fields.starts_on || undefined,
+        ends_on: fields.ends_on || undefined,
+        budget_hours: fields.budget_hours !== '' ? Number(fields.budget_hours) : undefined,
+        description: fields.description.trim() || undefined,
+      });
+      if (project.id != null) {
+        void TaskCategoryService.seedDefaults(project.id, businessId);
+      }
+      onCreated(project);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to create project.');
+      setSaving(false);
+    }
+  };
+
+  const inputCls = 'w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50';
+  const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1';
+
+  return (
+    <AppModal
+      isOpen={isOpen}
+      onClose={() => !saving && onClose()}
+      title="New Project"
+      titleIcon={<LuFolderPlus size={16} />}
+      size="lg"
+      closeOnBackdrop={!saving}
+      showCloseButton={!saving}
+      buttons={[
+        { label: 'Cancel', variant: 'secondary', onClick: onClose, disabled: saving },
+        { label: 'Create Project', variant: 'primary', onClick: () => void handleSubmit(), loading: saving, loadingLabel: 'Creating…' },
+      ]}
+    >
+      <div className="space-y-4 text-sm">
+        {formError && (
+          <p className="text-red-600 dark:text-red-400 text-xs">{formError}</p>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label htmlFor={nameId} className={labelCls}>Project name <span className="text-red-500">*</span></label>
+            <input id={nameId} type="text" value={fields.name} onChange={set('name')} disabled={saving} placeholder="e.g. Website Redesign" className={inputCls} />
+          </div>
+
+          <div>
+            <label htmlFor={companyId} className={labelCls}>Company <span className="text-red-500">*</span></label>
+            <select id={companyId} value={fields.company_id} onChange={set('company_id')} disabled={saving} className={inputCls}>
+              {companies.length === 0 && <option value="">No companies found</option>}
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor={statusId} className={labelCls}>Status</label>
+            <select id={statusId} value={fields.status} onChange={set('status')} disabled={saving} className={inputCls}>
+              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor={codeId} className={labelCls}>Project code</label>
+            <input id={codeId} type="text" value={fields.code} onChange={set('code')} disabled={saving} placeholder="e.g. PROJ-001" className={inputCls} />
+          </div>
+
+          <div>
+            <label htmlFor={budgetId} className={labelCls}>Budget (hours)</label>
+            <input id={budgetId} type="number" min="0" step="0.5" value={fields.budget_hours} onChange={set('budget_hours')} disabled={saving} placeholder="e.g. 40" className={inputCls} />
+          </div>
+
+          <div>
+            <label htmlFor={startsId} className={labelCls}>Start date</label>
+            <input id={startsId} type="date" value={fields.starts_on} onChange={set('starts_on')} disabled={saving} className={inputCls} />
+          </div>
+
+          <div>
+            <label htmlFor={endsId} className={labelCls}>End date</label>
+            <input id={endsId} type="date" value={fields.ends_on} onChange={set('ends_on')} disabled={saving} className={inputCls} />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label htmlFor={descId} className={labelCls}>Description</label>
+            <textarea id={descId} rows={3} value={fields.description} onChange={set('description')} disabled={saving} placeholder="Optional project description…" className={`${inputCls} resize-none`} />
+          </div>
+        </div>
+      </div>
+    </AppModal>
   );
 }

@@ -15,10 +15,6 @@ export type KanbanPositionUpdate = {
   status: ProjectTaskStatus;
 };
 
-function isColumnId(id: string): id is ProjectTaskStatus {
-  return (KANBAN_COLUMN_IDS as readonly string[]).includes(id);
-}
-
 export function taskDndId(taskId: number): string {
   return `task-${taskId}`;
 }
@@ -41,13 +37,17 @@ function sortedInColumn(tasks: ProjectTask[], col: ProjectTaskStatus): ProjectTa
 
 /**
  * Computes normalized `{ taskId, position, status }` updates after a Kanban drag.
- * Returns `null` when nothing changes. Caller should diff against server rows to skip no-op PATCHes.
+ * Returns `null` when nothing changes.
+ * Pass `columnIds` to support dynamic categories; falls back to the static default list.
  */
 export function computeKanbanDragUpdates(
   tasks: ProjectTask[],
   activeDndId: string,
-  overDndId: string
+  overDndId: string,
+  columnIds: readonly string[] = KANBAN_COLUMN_IDS
 ): KanbanPositionUpdate[] | null {
+  const isColId = (id: string) => columnIds.includes(id);
+
   const activeId = parseTaskDndId(activeDndId);
   if (activeId == null) return null;
 
@@ -59,7 +59,7 @@ export function computeKanbanDragUpdates(
   let overCol: ProjectTaskStatus;
   let overTaskId: number | null = null;
 
-  if (isColumnId(overDndId)) {
+  if (isColId(overDndId)) {
     overCol = overDndId;
   } else {
     const oid = parseTaskDndId(overDndId);
@@ -77,7 +77,7 @@ export function computeKanbanDragUpdates(
     if (oldIndex < 0) return null;
 
     let newIndex: number;
-    if (isColumnId(overDndId)) {
+    if (isColId(overDndId)) {
       newIndex = Math.max(0, col.length - 1);
     } else {
       newIndex = col.findIndex((t) => t.id === overTaskId);
@@ -102,7 +102,7 @@ export function computeKanbanDragUpdates(
   const newSource = sourceCol.filter((_, i) => i !== oldIndex);
 
   let insertAt: number;
-  if (isColumnId(overDndId)) {
+  if (isColId(overDndId)) {
     insertAt = targetCol.length;
   } else {
     const idx = targetCol.findIndex((t) => t.id === overTaskId);

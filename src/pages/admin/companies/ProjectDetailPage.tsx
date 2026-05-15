@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { AppPageHeader } from '@/components/ComponentsIndex';
+import { AppPageHeader, NewTaskModal, EditTaskModal } from '@/components/ComponentsIndex';
+import { ManageCategoriesModal } from '@/components/modals/ManageCategoriesModal';
+import { LuPlus, LuCircleDot, LuCircleCheck, LuCircleAlert, LuSettings2 } from 'react-icons/lu';
+import TaskCategoryService from '@/services/taskCategoryService';
+import type { TaskCategory } from '@/types/taskCategory';
 import CompanyService from '@/services/companyService';
 import ProjectService from '@/services/projectService';
 import TaskService from '@/services/taskService';
@@ -106,7 +110,8 @@ function taskRowToDraft(t: ProjectTask): TaskDraft {
   };
 }
 
-type TaskViewMode = 'list' | 'board' | 'timeline';
+type TaskViewMode = 'list' | 'timeline';
+type PageTab = 'kanban' | 'details';
 
 const VIEW_STORAGE_PREFIX = 'foro_project_tasks_view_';
 
@@ -156,6 +161,11 @@ export function ProjectDetailPage() {
   const [newAssigneeUserId, setNewAssigneeUserId] = useState<string>('');
   const [creating, setCreating] = useState(false);
   const [taskView, setTaskView] = useState<TaskViewMode>('list');
+  const [pageTab, setPageTab] = useState<PageTab>('kanban');
+  const [kanbanAddOpen, setKanbanAddOpen] = useState(false);
+  const [editTask, setEditTask] = useState<ProjectTask | null>(null);
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
+  const [manageCatsOpen, setManageCatsOpen] = useState(false);
   /** List view only: empty string = all statuses (server does not filter by status) */
   const [listStatusFilter, setListStatusFilter] = useState<'' | ProjectTaskStatus>('');
   const [listTitleQuery, setListTitleQuery] = useState('');
@@ -205,6 +215,20 @@ export function ProjectDetailPage() {
     void loadTaskDeps();
   }, [loadTaskDeps]);
 
+  const loadCategories = useCallback(async () => {
+    if (project?.id == null || bid == null) return;
+    try {
+      const cats = await TaskCategoryService.findOrSeedByProject(project.id, bid);
+      setCategories(cats);
+    } catch {
+      setCategories([]);
+    }
+  }, [project?.id, bid]);
+
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
+
   const activeTeamMembers = useMemo(
     () => teamMembers.filter((m) => m.status === 'active'),
     [teamMembers]
@@ -250,7 +274,7 @@ export function ProjectDetailPage() {
     if (!Number.isFinite(projectId)) return;
     try {
       const raw = localStorage.getItem(`${VIEW_STORAGE_PREFIX}${projectId}`);
-      if (raw === 'list' || raw === 'board' || raw === 'timeline') setTaskView(raw);
+      if (raw === 'list' || raw === 'timeline') setTaskView(raw as TaskViewMode);
     } catch {
       /* ignore */
     }
@@ -893,13 +917,158 @@ export function ProjectDetailPage() {
         onBackClick={() => navigate(`/app/companies/${company.id}/projects`)}
       />
 
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm text-slate-600 dark:text-slate-300 space-y-1">
-        {project.code && <p>Code: {project.code}</p>}
-        {project.description && <p>{project.description}</p>}
-        <p className="text-xs text-slate-500 dark:text-slate-400">Status: {project.status ?? '—'}</p>
+      {/* ── Page tab bar ── */}
+      <div
+        className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 p-0.5"
+        role="tablist"
+        aria-label="Project view"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === 'kanban'}
+          onClick={() => setPageTab('kanban')}
+          className={`rounded-md px-4 py-2 text-xs font-medium min-h-9 ${
+            pageTab === 'kanban'
+              ? 'bg-indigo-600 text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+          }`}
+        >
+          Kanban
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pageTab === 'details'}
+          onClick={() => setPageTab('details')}
+          className={`rounded-md px-4 py-2 text-xs font-medium min-h-9 ${
+            pageTab === 'details'
+              ? 'bg-indigo-600 text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+          }`}
+        >
+          Details
+        </button>
       </div>
 
-      <ProjectInsightsCard
+      {/* ── Kanban tab ── */}
+      {pageTab === 'kanban' && (() => {
+        const total = tasks.length;
+        const doneCat = categories.find((c) => c.slug === 'done');
+        const doneSlug = doneCat?.slug ?? 'done';
+        const open = tasks.filter((t) => t.status !== doneSlug).length;
+        const done = tasks.filter((t) => t.status === doneSlug).length;
+        const today = new Date().toDateString();
+        const overdue = tasks.filter(
+          (t) => t.status !== doneSlug && t.due_on != null && new Date(String(t.due_on)) < new Date(today)
+        ).length;
+        const taskCountBySlug = tasks.reduce<Record<string, number>>((acc, t) => {
+          const s = String(t.status ?? 'todo');
+          acc[s] = (acc[s] ?? 0) + 1;
+          return acc;
+        }, {});
+        return (
+          <div className="space-y-3">
+            {/* Summary strip */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+                <LuCircleDot size={13} className="text-slate-400" />
+                {total} task{total !== 1 ? 's' : ''}
+              </div>
+              <div className="flex items-center gap-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+                <LuCircleDot size={13} />
+                {open} open
+              </div>
+              <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <LuCircleCheck size={13} />
+                {done} done
+              </div>
+              {overdue > 0 && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-300">
+                  <LuCircleAlert size={13} />
+                  {overdue} overdue
+                </div>
+              )}
+              {taskError && (
+                <p role="alert" className="text-xs text-red-600 dark:text-red-400 ml-1">
+                  {taskError}
+                </p>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setManageCatsOpen(true)}
+                  title="Manage categories"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                >
+                  <LuSettings2 size={13} />
+                  Categories
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKanbanAddOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
+                >
+                  <LuPlus size={14} />
+                  Add task
+                </button>
+              </div>
+            </div>
+
+            <NewTaskModal
+              isOpen={kanbanAddOpen}
+              onClose={() => setKanbanAddOpen(false)}
+              businessId={bid}
+              defaultProjectId={project.id}
+              categories={categories}
+              onCreated={() => {
+                setKanbanAddOpen(false);
+                void loadTasks('reset');
+              }}
+            />
+
+            <EditTaskModal
+              isOpen={editTask != null}
+              onClose={() => setEditTask(null)}
+              task={editTask}
+              categories={categories}
+              onSaved={() => {
+                setEditTask(null);
+                void loadTasks('reset');
+              }}
+            />
+
+            <ManageCategoriesModal
+              isOpen={manageCatsOpen}
+              onClose={() => setManageCatsOpen(false)}
+              projectId={project.id}
+              businessId={bid}
+              categories={categories}
+              taskCountBySlug={taskCountBySlug}
+              onSaved={(updated) => {
+                setCategories(updated);
+                setManageCatsOpen(false);
+              }}
+            />
+
+            {tasksLoading ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Loading tasks…</p>
+            ) : (
+              <ProjectTasksKanban
+                tasks={tasks}
+                categories={categories}
+                onReorder={handleKanbanReorder}
+                onTaskClick={(task) => setEditTask(task)}
+              />
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── Details tab ── */}
+      {pageTab === 'details' && (
+        <>
+          <ProjectInsightsCard
         tasks={tasks}
         timeEntries={timeEntries}
         project={project}
@@ -1219,18 +1388,6 @@ export function ProjectDetailPage() {
             </button>
             <button
               type="button"
-              onClick={() => setTaskViewPersisted('board')}
-              aria-pressed={taskView === 'board'}
-              className={`rounded-md px-3 py-2.5 text-xs font-medium min-h-10 ${
-                taskView === 'board'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
-            >
-              Board
-            </button>
-            <button
-              type="button"
               onClick={() => setTaskViewPersisted('timeline')}
               aria-pressed={taskView === 'timeline'}
               className={`rounded-md px-3 py-2.5 text-xs font-medium min-h-10 ${
@@ -1252,11 +1409,11 @@ export function ProjectDetailPage() {
         <form onSubmit={handleCreateTask} className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
-              <label htmlFor="new-task-title" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              <label htmlFor="new-task-title-d" className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 New task title
               </label>
               <input
-                id="new-task-title"
+                id="new-task-title-d"
                 type="text"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
@@ -1266,11 +1423,11 @@ export function ProjectDetailPage() {
               />
             </div>
             <div className="flex flex-col gap-1 flex-1 min-w-[12rem] max-w-xl">
-              <label htmlFor="new-task-desc" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              <label htmlFor="new-task-desc-d" className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 Description (optional)
               </label>
               <textarea
-                id="new-task-desc"
+                id="new-task-desc-d"
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
                 rows={2}
@@ -1279,11 +1436,11 @@ export function ProjectDetailPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="new-task-priority" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              <label htmlFor="new-task-priority-d" className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 Priority
               </label>
               <select
-                id="new-task-priority"
+                id="new-task-priority-d"
                 value={newPriority}
                 onChange={(e) => setNewPriority(e.target.value as '' | 'low' | 'normal' | 'high' | 'urgent')}
                 className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm min-w-[8rem]"
@@ -1297,11 +1454,11 @@ export function ProjectDetailPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="new-task-due" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              <label htmlFor="new-task-due-d" className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 Due (optional)
               </label>
               <input
-                id="new-task-due"
+                id="new-task-due-d"
                 type="date"
                 value={newDueOn}
                 onChange={(e) => setNewDueOn(e.target.value)}
@@ -1309,11 +1466,11 @@ export function ProjectDetailPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="new-task-assignee" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+              <label htmlFor="new-task-assignee-d" className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 Assignee (optional)
               </label>
               <select
-                id="new-task-assignee"
+                id="new-task-assignee-d"
                 value={newAssigneeUserId}
                 onChange={(e) => setNewAssigneeUserId(e.target.value)}
                 className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm min-w-[10rem]"
@@ -1369,8 +1526,6 @@ export function ProjectDetailPage() {
               'No tasks yet.'
             )}
           </p>
-        ) : taskView === 'board' ? (
-          <ProjectTasksKanban tasks={tasks} onReorder={handleKanbanReorder} />
         ) : taskView === 'timeline' ? (
           <ProjectTasksTimeline
             tasks={tasks}
@@ -1637,17 +1792,19 @@ export function ProjectDetailPage() {
         )}
       </div>
 
-      <ProjectTaskDependenciesCard
-        projectId={project.id}
-        businessId={bid}
-        tasks={tasks}
-        dependencies={taskDeps}
-        onChanged={() => void loadTaskDeps()}
-      />
+          <ProjectTaskDependenciesCard
+            projectId={project.id}
+            businessId={bid}
+            tasks={tasks}
+            dependencies={taskDeps}
+            onChanged={() => void loadTaskDeps()}
+          />
 
-      <ProjectPortalInvitesCard projectId={project.id} businessId={bid} projectName={project.name} />
+          <ProjectPortalInvitesCard projectId={project.id} businessId={bid} projectName={project.name} />
 
-      <ProjectAutomationRulesCard projectId={project.id} businessId={bid} />
+          <ProjectAutomationRulesCard projectId={project.id} businessId={bid} />
+        </>
+      )}
     </div>
   );
 }

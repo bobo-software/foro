@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { AppPageHeader } from '@/components/ComponentsIndex';
+import { Link } from 'react-router-dom';
+import { LuListPlus } from 'react-icons/lu';
+import { AppPageHeader, NewTaskModal } from '@/components/ComponentsIndex';
 import ProjectService from '@/services/projectService';
 import TaskService from '@/services/taskService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
@@ -18,7 +19,6 @@ function statusLabel(s: ProjectTaskStatus): string {
 }
 
 export function MyTasksPage() {
-  const navigate = useNavigate();
   const sessionUser = useAuthStore((s) => s.sessionUser);
   const bid = useBusinessStore((s) => s.currentBusiness?.id);
   const userId = sessionUser?.id != null ? Number(sessionUser.id) : NaN;
@@ -27,6 +27,7 @@ export function MyTasksPage() {
   const [projectsById, setProjectsById] = useState<Record<number, Project>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(userId) || bid == null) {
@@ -102,11 +103,22 @@ export function MyTasksPage() {
   return (
     <div className="space-y-6">
       <AppPageHeader
-        title="My tasks"
-        subtitle="Work assigned to you in this business (open the project to edit)"
-        showBackButton
-        backButtonText="Dashboard"
-        onBackClick={() => navigate('/app/dashboard')}
+        title="My Tasks"
+        showButton
+        buttonText="Add Task"
+        buttonIcon={<LuListPlus size={14} />}
+        onButtonClick={() => setNewTaskOpen(true)}
+      />
+
+      <NewTaskModal
+        isOpen={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
+        businessId={bid}
+        assignedToUserId={userId}
+        onCreated={(task: ProjectTask) => {
+          setNewTaskOpen(false);
+          setTasks((prev) => [task, ...prev]);
+        }}
       />
 
       {tasks.length === 0 ? (
@@ -121,18 +133,10 @@ export function MyTasksPage() {
               <caption className="sr-only">Tasks assigned to you in the current business</caption>
               <thead className="border-b border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400">
                 <tr>
-                  <th scope="col" className="py-2 px-3 font-medium">
-                    Task
-                  </th>
-                  <th scope="col" className="py-2 px-3 font-medium">
-                    Project
-                  </th>
-                  <th scope="col" className="py-2 px-3 font-medium">
-                    Status
-                  </th>
-                  <th scope="col" className="py-2 px-3 font-medium">
-                    Due
-                  </th>
+                  <th scope="col" className="py-2 px-3 font-medium">Task</th>
+                  <th scope="col" className="py-2 px-3 font-medium">Project</th>
+                  <th scope="col" className="py-2 px-3 font-medium">Status</th>
+                  <th scope="col" className="py-2 px-3 font-medium">Due</th>
                 </tr>
               </thead>
               <tbody>
