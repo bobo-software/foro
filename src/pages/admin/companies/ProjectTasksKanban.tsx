@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -28,6 +28,11 @@ import {
   computeKanbanDragUpdates,
   taskDndId,
 } from '@/utils/projectKanbanReorder';
+import { localDateISO } from '@/utils/localDateISO';
+import {
+  flattenKanbanDueDateGroups,
+  groupKanbanColumnTasksByDueDate,
+} from '@/utils/kanbanDueDateGroups';
 
 // ── Column styling from category color ───────────────────────────────────────
 
@@ -64,7 +69,8 @@ const PRIORITY_CONFIG: Record<string, { badge: string; icon: string; label: stri
 
 function isOverdue(due_on: string | null | undefined): boolean {
   if (!due_on) return false;
-  return new Date(due_on) < new Date(new Date().toDateString());
+  const due = String(due_on).slice(0, 10);
+  return due < localDateISO();
 }
 
 function formatDue(due_on: string): string {
@@ -137,6 +143,18 @@ function SortableKanbanCard({ task, onEdit }: { task: ProjectTask; onEdit?: (t: 
   );
 }
 
+function KanbanDateSeparator({ label }: { label: string }) {
+  return (
+    <div
+      className="sticky top-0 z-[1] -mx-0.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-sm border-y border-slate-200/80 dark:border-slate-700/80 first:border-t-0"
+      role="separator"
+      aria-label={label}
+    >
+      {label}
+    </div>
+  );
+}
+
 // ── Column ────────────────────────────────────────────────────────────────────
 
 function KanbanColumn({
@@ -150,7 +168,9 @@ function KanbanColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: category.slug });
   const { header, dot } = colStyle(category.color);
-  const itemIds = tasks.map((t) => taskDndId(t.id!));
+  const dueGroups = useMemo(() => groupKanbanColumnTasksByDueDate(tasks), [tasks]);
+  const orderedTasks = useMemo(() => flattenKanbanDueDateGroups(dueGroups), [dueGroups]);
+  const itemIds = orderedTasks.map((t) => taskDndId(t.id!));
 
   return (
     <div className="flex min-w-[min(100%,15rem)] w-60 shrink-0 flex-col rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 snap-start">
@@ -169,8 +189,13 @@ function KanbanColumn({
             isOver ? 'bg-indigo-50/60 dark:bg-indigo-900/20 ring-2 ring-inset ring-indigo-400/60' : ''
           }`}
         >
-          {tasks.map((t) => (
-            <SortableKanbanCard key={t.id} task={t} onEdit={onTaskClick} />
+          {dueGroups.map((group) => (
+            <div key={group.key} className="flex flex-col gap-2">
+              <KanbanDateSeparator label={group.label} />
+              {group.tasks.map((t) => (
+                <SortableKanbanCard key={t.id} task={t} onEdit={onTaskClick} />
+              ))}
+            </div>
           ))}
 
           {tasks.length === 0 && (

@@ -22,6 +22,7 @@ On project detail, the Insights card offers **Export tasks (CSV)** and **Export 
 
 [`ProjectsOverviewPage`](../../src/pages/admin/projects/ProjectsOverviewPage.tsx) at **`/app/projects`** lists all projects for the current business with:
 
+- **Your company and clients** — includes internal projects (`company_id` = current business) and client projects; **New Project** can assign either (owner company listed as “Your company”).
 - **Task rollups** from a paged scan of `project_tasks` (up to 3000 rows); overdue uses [`localDateISO`](../../src/utils/localDateISO.ts).
 - **Billable hours** per project via `TimeEntryService.sumBillableMinutesForProject` (loads after the table; may show `…` while fetching).
 - **Summary tiles**, sortable table, links to `/app/companies/:companyId/projects/:projectId`, and **Export overview (CSV)**.

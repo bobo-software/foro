@@ -6,7 +6,7 @@ Authoritative column list and behavior for the `project_tasks` table. Applicatio
 
 **DDL source:** [sql/project-tasks.sql](./sql/project-tasks.sql)
 
-**Related:** [project-database-schema.md](../project-database-schema.md) (`projects`, financial `project_id` links). **Title filter / `where` shape:** [project-tasks-select-filters.md](./project-tasks-select-filters.md).
+**Related:** [project-database-schema.md](../project-database-schema.md) (`projects`, financial `project_id` links). **Title filter / `where` shape:** [project-tasks-select-filters.md](./project-tasks-select-filters.md). **Per-task checklists:** [project-task-checklists-schema-contract.md](./project-task-checklists-schema-contract.md).
 
 ## MCP-validated baseline (Foro production schema)
 

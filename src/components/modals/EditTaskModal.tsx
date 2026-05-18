@@ -8,6 +8,7 @@ import TaskService from '@/services/taskService';
 import type { ProjectTask, ProjectTaskPriority, ProjectTaskStatus } from '@/types/task';
 import type { TaskCategory } from '@/types/taskCategory';
 import { DEFAULT_TASK_CATEGORIES } from '@/types/taskCategory';
+import { TaskChecklistsSection } from '@/components/tasks/TaskChecklistsSection';
 
 const PRIORITY_LABELS = ['None', 'Low', 'Normal', 'High', 'Urgent'];
 const PRIORITY_VALUE: Record<string, ProjectTaskPriority | null> = {
@@ -92,7 +93,7 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
       onClose={() => !saving && onClose()}
       title="Edit Task"
       titleIcon={<LuPencil size={16} />}
-      size="lg"
+      size="xl"
       closeOnBackdrop={!saving}
       showCloseButton={!saving}
       buttons={[
@@ -152,6 +153,10 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
           rows={3}
           disabled={saving}
         />
+
+        {task != null && (
+          <TaskChecklistsSection task={task} businessId={task.business_id} disabled={saving} />
+        )}
       </div>
     </AppModal>
   );
