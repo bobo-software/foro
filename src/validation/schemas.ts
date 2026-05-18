@@ -212,6 +212,45 @@ export const projectTaskDependencyCreateSchema = z
 
 export type ProjectTaskDependencyCreateInput = z.infer<typeof projectTaskDependencyCreateSchema>;
 
+// ── Task checklists (project_task_checklists / project_task_checklist_items) ──
+export const projectTaskChecklistCreateSchema = z.object({
+  business_id: z.number().int().positive(),
+  project_id: z.number().int().positive(),
+  task_id: z.number().int().positive(),
+  title: z.string().min(1, 'Title is required').max(200, 'Title must be ≤ 200 characters'),
+  position: z.number().int().nonnegative().optional(),
+});
+
+export type ProjectTaskChecklistCreateInput = z.infer<typeof projectTaskChecklistCreateSchema>;
+
+export const projectTaskChecklistUpdateSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200, 'Title must be ≤ 200 characters').optional(),
+  position: z.number().int().nonnegative().optional(),
+  updated_at: z.string().optional(),
+});
+
+export type ProjectTaskChecklistUpdateInput = z.infer<typeof projectTaskChecklistUpdateSchema>;
+
+export const projectTaskChecklistItemCreateSchema = z.object({
+  business_id: z.number().int().positive(),
+  project_id: z.number().int().positive(),
+  checklist_id: z.number().int().positive(),
+  label: z.string().min(1, 'Label is required').max(500, 'Label must be ≤ 500 characters'),
+  is_done: z.boolean().optional(),
+  position: z.number().int().nonnegative().optional(),
+});
+
+export type ProjectTaskChecklistItemCreateInput = z.infer<typeof projectTaskChecklistItemCreateSchema>;
+
+export const projectTaskChecklistItemUpdateSchema = z.object({
+  label: z.string().min(1, 'Label is required').max(500, 'Label must be ≤ 500 characters').optional(),
+  is_done: z.boolean().optional(),
+  position: z.number().int().nonnegative().optional(),
+  updated_at: z.string().optional(),
+});
+
+export type ProjectTaskChecklistItemUpdateInput = z.infer<typeof projectTaskChecklistItemUpdateSchema>;
+
 // ── Automation rules (automation_rules) ───────────────────────────────
 export const automationRuleCreateSchema = z.object({
   business_id: z.number().int().positive(),

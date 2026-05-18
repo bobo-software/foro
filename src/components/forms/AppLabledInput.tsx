@@ -16,6 +16,8 @@ interface AppInputProps {
   pattern?: string;
   autoComplete?: string;
   name?: string;
+  onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
+  onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 const AppInputLabeled: React.FC<AppInputProps> = ({
@@ -32,7 +34,9 @@ const AppInputLabeled: React.FC<AppInputProps> = ({
   max,
   step,
   pattern,
-  autoComplete
+  autoComplete,
+  onBlur,
+  onKeyDown,
 }) => {
   const inputId = label.toLowerCase().replace(/\s+/g, '-');
 
@@ -67,6 +71,8 @@ const AppInputLabeled: React.FC<AppInputProps> = ({
         type={type}
         value={formattedValue}
         onChange={onChange}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
         placeholder={placeholder || label}
         required={required}
         disabled={disabled}

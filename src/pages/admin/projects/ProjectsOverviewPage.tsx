@@ -43,6 +43,34 @@ async function loadTasksForBusiness(businessId: number): Promise<{ tasks: Projec
   return { tasks, capped };
 }
 
+function mergeProjectsById(primary: Project[], extra: Project[]): Project[] {
+  const byId = new Map<number, Project>();
+  for (const p of primary) {
+    if (p.id != null) byId.set(p.id, p);
+  }
+  for (const p of extra) {
+    if (p.id != null && !byId.has(p.id)) byId.set(p.id, p);
+  }
+  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Owner company first, then clients — for New Project company picker. */
+export function buildOverviewCompanies(
+  bid: number | null | undefined,
+  businessName: string | undefined,
+  companyNameById: Map<number, string>
+): { id: number; name: string }[] {
+  const clients = [...companyNameById.entries()]
+    .filter(([id]) => id !== bid)
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (bid == null) return clients;
+  const ownerLabel = businessName
+    ? `${businessName} (Your company)`
+    : `Company #${bid} (Your company)`;
+  return [{ id: bid, name: ownerLabel }, ...clients];
+}
+
 type SortKey = 'name' | 'overdue' | 'open' | 'company';
 
 export function ProjectsOverviewPage() {
@@ -70,9 +98,15 @@ export function ProjectsOverviewPage() {
     setError(null);
     setBillableByProjectId(new Map());
     try {
-      const [projectRows, companyRows, taskResult] = await Promise.all([
+      const [projectByBusiness, projectByCompany, companyRows, taskResult] = await Promise.all([
         ProjectService.findAll({
           where: { business_id: bid },
+          orderBy: 'name',
+          orderDirection: 'ASC',
+          limit: PROJECT_LIST_LIMIT,
+        }),
+        ProjectService.findAll({
+          where: { company_id: bid },
           orderBy: 'name',
           orderDirection: 'ASC',
           limit: PROJECT_LIST_LIMIT,
@@ -85,10 +119,12 @@ export function ProjectsOverviewPage() {
         }),
         loadTasksForBusiness(bid),
       ]);
+      const projectRows = mergeProjectsById(projectByBusiness, projectByCompany);
       const names = new Map<number, string>();
       for (const c of companyRows) {
         if (c.id != null) names.set(c.id, c.name || c.company_name || `Company #${c.id}`);
       }
+      names.set(bid, businessName || `Company #${bid}`);
       setCompanyNameById(names);
       setProjects(projectRows);
       setTaskRollups(aggregateTasksByProjectId(taskResult.tasks));
@@ -100,7 +136,7 @@ export function ProjectsOverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, [bid]);
+  }, [bid, businessName]);
 
   useEffect(() => {
     void loadOverview();
@@ -166,8 +202,8 @@ export function ProjectsOverviewPage() {
   const totals = useMemo(() => sumRollups(rows), [rows]);
 
   const companies = useMemo(
-    () => Array.from(companyNameById.entries()).map(([id, name]) => ({ id, name })),
-    [companyNameById]
+    () => buildOverviewCompanies(bid, businessName, companyNameById),
+    [bid, businessName, companyNameById]
   );
 
   const exportOverviewCsv = useCallback(() => {

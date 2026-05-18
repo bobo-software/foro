@@ -4,7 +4,7 @@ Single place to see **what shipped**, **what is in progress**, and **what is nex
 
 How to update this doc when shipping PM work: see repo rule **[`.cursor/rules/project-plan-updates.mdc`](../../../.cursor/rules/project-plan-updates.mdc)**.
 
-| Last reviewed | 2026-05-15 |
+| Last reviewed | 2026-05-18 |
 |---------------|------------|
 
 ## Summary
@@ -92,6 +92,12 @@ How to update this doc when shipping PM work: see repo rule **[`.cursor/rules/pr
 - **Skaftin MCP:** created `project_task_dependencies`, `automation_rules`, `portal_invites` (+ indexes); verified `get_table_schema`.
 - **Code:** services + project detail cards + [`/portal/v/:portalToken`](../../../src/App.tsx) [`PortalProjectViewPage`](../../../src/pages/portal/PortalProjectViewPage.tsx); timeline **After** hints; Zod + Vitest for new schemas / [`sha256Hex`](../../../src/utils/sha256Hex.ts).
 - **Docs:** SQL + contracts; [project-database-schema.md](../../../docs/project-database-schema.md) §11; phase-08 + hub updates.
+
+### 2026-05-18 (task checklists)
+
+- **Schema:** `project_task_checklists`, `project_task_checklist_items` — [project-task-checklists-schema-contract.md](../../../docs/03-database/project-task-checklists-schema-contract.md); applied on connected Skaftin via MCP.
+- **Code:** [`TaskChecklistService`](../../../src/services/taskChecklistService.ts), [`TaskChecklistsSection`](../../../src/components/tasks/TaskChecklistsSection.tsx) in [`EditTaskModal`](../../../src/components/modals/EditTaskModal.tsx); Vitest for service + section.
+- **Docs:** [project-tasks.md](../../../docs/02-modules/project-tasks.md) UI + data sections.
 
 ### 2026-05-15 (phase 9c — business projects overview)
 
