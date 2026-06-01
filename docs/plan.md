@@ -119,7 +119,7 @@ flowchart LR
 
 ## Data model assumptions (Skaftin)
 
-- **companies:** id, user_id (or app_user_id), name, address, tax_id, logo_url, created_at, updated_at.
+- **companies:** id, user_id (or app_user_id), name, address, tax_id, logo_url (MinIO path in bucket `foroman` — see [storage module](02-modules/storage.md)), created_at, updated_at.
 - **items (products):** id, company_id (optional), name, sku, description, unit_price, tax_rate, created_at, updated_at.
 - **quotations:** id, company_id, customer_*, issue_date, valid_until, status, subtotal, tax, total, created_at, updated_at.
 - **quotation_lines:** id, quotation_id, item_id, description, quantity, unit_price, total.

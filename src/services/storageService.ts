@@ -9,7 +9,8 @@ import { skaftinClient } from '../backend';
 import { SKAFTIN_CONFIG } from '../config/skaftin.config';
 import { TokenManager } from './TokenManager';
 
-const BUCKET_NAME = 'foro';
+/** MinIO bucket registered in Skaftin for this project (see list_project_buckets). */
+const BUCKET_NAME = 'foroman';
 
 export class StorageService {
   /**
@@ -51,7 +52,7 @@ export class StorageService {
       etag: string;
       url: string;
     }>(`/app-api/storage/${BUCKET_NAME}/upload`, {
-      fileName,
+      filePath: fileName,
       fileContent,
       ...(contentType && { contentType }),
       ...(metadata && { metadata }),

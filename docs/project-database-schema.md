@@ -164,3 +164,10 @@ Apply both scripts on each environment before using the project detail **Budget 
 - **Portal invites (hashed tokens):** [portal-invites-schema-contract.md](03-database/portal-invites-schema-contract.md), DDL [sql/portal-invites.sql](03-database/sql/portal-invites.sql). Public read view: route `/portal/v/:token` in the SPA.
 
 Re-apply DDL on new environments and run MCP `get_table_schema` for each table name after migration.
+
+## 12) Company logos (MinIO, not SQL migration)
+
+Logo binaries live in Skaftin MinIO bucket **`foroman`**. The `companies.logo_url` column stores the **object path** only (e.g. `13/company_logo.png` or `companies/42/logo.png`), not a presigned URL.
+
+- Module behavior: [docs/02-modules/storage.md](02-modules/storage.md)
+- Column contract: [docs/03-database/storage-and-logos-schema-contract.md](03-database/storage-and-logos-schema-contract.md)

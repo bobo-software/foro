@@ -66,13 +66,19 @@ const AppSidebar = () => {
       <div className={`px-4 py-3 border-b ${borderCls}`}>
         <Link
           to="/app/dashboard"
-          className={`flex items-center gap-2 no-underline ${logoCls}`}
+          className={`no-underline w-full ${logoCls} ${
+            currentBusiness?.logo_url
+              ? 'grid w-full grid-cols-1 gap-2 text-center'
+              : 'block'
+          }`}
         >
-          {logoUrl ? (
-            <img src={logoUrl} alt={businessName} className="h-7 w-7 rounded-md object-contain shrink-0" />
-          ) : (
-            <img src="/favicon.png" alt="" className="h-7 w-7 rounded-md object-contain shrink-0" />
-          )}
+          {currentBusiness?.logo_url && logoUrl ? (
+            <img
+              src={logoUrl}
+              alt=""
+              className="w-full h-auto max-h-20 rounded-md object-contain object-center"
+            />
+          ) : null}
           <AppText variant="brand">{businessName}</AppText>
         </Link>
       </div>
