@@ -209,8 +209,8 @@ export function CompanyEditTab({ company, onCompanyUpdate, onCompanyDelete }: Co
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Logo must be smaller than 2MB');
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Logo must be smaller than 5MB');
       return;
     }
 
@@ -422,7 +422,7 @@ export function CompanyEditTab({ company, onCompanyUpdate, onCompanyDelete }: Co
             Company Logo
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            Upload a logo for this company. Recommended size: 300x100px. Max 2MB.
+            Upload a logo for this company. Recommended size: 300x100px. Max 5MB.
           </p>
           <div className="flex items-start gap-6">
             {/* Logo Preview */}

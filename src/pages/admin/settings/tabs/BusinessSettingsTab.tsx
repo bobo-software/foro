@@ -134,9 +134,9 @@ export function BusinessSettingsTab() {
       return;
     }
 
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Logo must be smaller than 2MB');
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Logo must be smaller than 5MB');
       return;
     }
 
@@ -307,7 +307,7 @@ export function BusinessSettingsTab() {
             Company Logo
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-            This logo will appear on your invoices, quotations, and other documents. Recommended size: 300x100px. Max 2MB.
+            This logo will appear on your invoices, quotations, and other documents. Recommended size: 300x100px. Max 5MB.
           </p>
           <div className="flex items-start gap-6">
             {/* Logo Preview */}
