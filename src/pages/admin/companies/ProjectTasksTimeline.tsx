@@ -3,6 +3,7 @@ import type { ProjectTask, ProjectTaskStatus } from '@/types/task';
 import type { ProjectTaskDependency } from '@/types/taskDependency';
 import { localDateISO } from '@/utils/localDateISO';
 import { blockedByLabelBySuccessorId } from '@/utils/projectTaskBlockedBy';
+import { withIds } from '@/utils/withIds';
 
 function formatStatusLabel(s: ProjectTaskStatus | string | undefined): string {
   return String(s ?? 'todo')
@@ -98,7 +99,7 @@ export function ProjectTasksTimeline({
   );
 
   const { dated, overdue, unscheduled } = useMemo(() => {
-    const withId = tasks.filter((t) => t.id != null);
+    const withId = withIds(tasks);
     const sorted = [...withId].sort(sortTasksForTimeline);
     const unsched: ProjectTask[] = [];
     const sched: ProjectTask[] = [];
@@ -185,7 +186,7 @@ export function ProjectTasksTimeline({
   );
 
   const hasAnyDated = dated.length > 0 || overdue.length > 0;
-  const withIdCount = tasks.filter((t) => t.id != null).length;
+  const withIdCount = withIds(tasks).length;
   const hasDeps = (dependencies?.length ?? 0) > 0;
 
   const canExport = onExportCsv != null && withIdCount > 0;

@@ -9,6 +9,8 @@ import type { CreateItemDto, Item, StockItemType } from '@/types/item';
 import { itemFormWithBomSchema } from '@/validation/schemas';
 import { wouldIntroduceBomCycle } from '@/utils/bomGraph';
 import AppLabledAutocomplete from '@/components/forms/AppLabledAutocomplete';
+import AppInputLabeled from '@/components/forms/AppLabledInput';
+import AppLabeledAreaInput from '@/components/forms/AppLabledAreaInput';
 import AppText from '@/components/text/AppText';
 import { formatCurrency } from '@/utils/currency';
 import toast from 'react-hot-toast';
@@ -327,97 +329,67 @@ export function ItemFormPage() {
 
         {/* Identity */}
         <div className={`grid gap-4 ${form.item_type === 'manufactured' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-slate-600">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="name"
-              type="text"
-              required
-              value={form.name}
-              onChange={(e) => update('name', e.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label htmlFor="sku" className="block text-sm font-medium text-slate-600">SKU</label>
-            <input
-              id="sku"
-              type="text"
-              value={form.sku ?? ''}
-              onChange={(e) => update('sku', e.target.value)}
-              className={INPUT_CLS}
-            />
-          </div>
+          <AppInputLabeled
+            label="Name *"
+            type="text"
+            required
+            value={form.name}
+            onChange={(e) => update('name', e.target.value)}
+          />
+          <AppInputLabeled
+            label="SKU"
+            type="text"
+            value={form.sku ?? ''}
+            onChange={(e) => update('sku', e.target.value)}
+          />
           {form.item_type === 'single' && (
-            <div>
-              <label htmlFor="quantity" className="block text-sm font-medium text-slate-600">Stock quantity</label>
-              <input
-                id="quantity"
-                type="number"
-                min={0}
-                step={1}
-                value={form.quantity ?? 0}
-                onChange={(e) => update('quantity', e.target.value ? Number(e.target.value) : 0)}
-                className={INPUT_CLS}
-              />
-            </div>
+            <AppInputLabeled
+              label="Stock quantity"
+              type="number"
+              min={0}
+              step={1}
+              value={String(form.quantity ?? 0)}
+              onChange={(e) => update('quantity', e.target.value ? Number(e.target.value) : 0)}
+            />
           )}
         </div>
 
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-slate-600">Description</label>
-          <textarea
-            id="description"
-            rows={2}
-            value={form.description ?? ''}
-            onChange={(e) => update('description', e.target.value)}
-            className={INPUT_CLS}
-          />
-        </div>
+        <AppLabeledAreaInput
+          label="Description"
+          rows={2}
+          value={form.description ?? ''}
+          onChange={(e) => update('description', e.target.value)}
+        />
 
         <div className="h-px bg-slate-100" />
 
         {/* Pricing */}
         <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label htmlFor="unit_price" className="block text-sm font-medium text-slate-600">Selling price</label>
-            <input
-              id="unit_price"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.unit_price === 0 ? '' : form.unit_price}
-              onChange={(e) => update('unit_price', e.target.value ? Number(e.target.value) : 0)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label htmlFor="cost_price" className="block text-sm font-medium text-slate-600">Cost price (per item / unit)</label>
-            <input
-              id="cost_price"
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.cost_price ?? ''}
-              onChange={(e) => update('cost_price', e.target.value ? Number(e.target.value) : undefined)}
-              className={INPUT_CLS}
-            />
-          </div>
-          <div>
-            <label htmlFor="tax_rate" className="block text-sm font-medium text-slate-600">Tax rate (%)</label>
-            <input
-              id="tax_rate"
-              type="number"
-              min={0}
-              max={100}
-              step="0.01"
-              value={form.tax_rate ?? ''}
-              onChange={(e) => update('tax_rate', e.target.value ? Number(e.target.value) : undefined)}
-              className={INPUT_CLS}
-            />
-          </div>
+          <AppInputLabeled
+            label="Selling price"
+            type="number"
+            min={0}
+            step={0.01}
+            value={String(form.unit_price === 0 ? '' : (form.unit_price ?? ''))}
+            onChange={(e) => update('unit_price', e.target.value ? Number(e.target.value) : 0)}
+          />
+          <AppInputLabeled
+            label="Cost price (per item / unit)"
+            type="number"
+            min={0}
+            step={0.01}
+            value={String(form.cost_price ?? '')}
+            onChange={(e) => update('cost_price', e.target.value ? Number(e.target.value) : undefined)}
+          />
+          <AppInputLabeled
+            label="Tax rate (%)"
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={String(form.tax_rate ?? '')}
+            onChange={(e) => update('tax_rate', e.target.value ? Number(e.target.value) : undefined)}
+          />
         </div>
 
         {/* Bill of materials */}
@@ -478,19 +450,16 @@ export function ItemFormPage() {
                     placeholder="Search stock item…"
                     className="mb-0"
                   />
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500">Qty / unit</label>
-                    <input
-                      type="number"
-                      min={0.0001}
-                      step="any"
-                      value={row.quantity_per || ''}
-                      onChange={(e) =>
-                        updateBomRow(row.key, { quantity_per: e.target.value ? Number(e.target.value) : 0 })
-                      }
-                      className={INPUT_CLS}
-                    />
-                  </div>
+                  <AppInputLabeled
+                    label="Qty / unit"
+                    type="number"
+                    min={0.0001}
+                    step={undefined}
+                    value={String(row.quantity_per || '')}
+                    onChange={(e) =>
+                      updateBomRow(row.key, { quantity_per: e.target.value ? Number(e.target.value) : 0 })
+                    }
+                  />
                   <button
                     type="button"
                     onClick={() => removeBomRow(row.key)}

@@ -1,7 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { z } from 'zod';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import { useTeamStore } from '@/stores/data/TeamStore';
+
+const inviteSchema = z.object({
+  email: z.string().email('Please provide a valid email address'),
+});
 
 const ROLE_OPTIONS = ['owner', 'admin', 'member', 'viewer'];
 
@@ -38,8 +43,9 @@ export function TeamSettingsTab() {
   const handleInviteSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!businessId) return;
-    if (!inviteEmail.trim()) {
-      toast.error('Please provide an email');
+    const validation = inviteSchema.safeParse({ email: inviteEmail.trim() });
+    if (!validation.success) {
+      toast.error(validation.error.issues[0]?.message ?? 'Please provide a valid email');
       return;
     }
     const created = await createInvite({

@@ -19,6 +19,17 @@ export class InvoiceService {
     return [];
   }
 
+  private static extractRowCount(response: unknown): number | null {
+    const r = response as Record<string, unknown>;
+    if (typeof r?.rowCount === 'number') return r.rowCount;
+    const data = r?.data;
+    if (typeof data === 'object' && data !== null) {
+      const rc = (data as Record<string, unknown>).rowCount;
+      if (typeof rc === 'number') return rc;
+    }
+    return null;
+  }
+
   /**
    * Get all invoices
    * POST /app-api/database/tables/invoices/select with limit & offset
@@ -70,15 +81,34 @@ export class InvoiceService {
     else if (creditedRaw !== undefined && creditedRaw !== '')
       credited_invoice_id = Number(creditedRaw);
     return {
-      ...raw,
       id: raw.id != null ? Number(raw.id) : undefined,
+      business_id: raw.business_id != null ? Number(raw.business_id) : undefined,
+      company_id: raw.company_id != null ? Number(raw.company_id) : null,
+      project_id: raw.project_id != null ? Number(raw.project_id) : null,
       document_kind: normalizeDocumentKind(raw.document_kind),
       credited_invoice_id,
+      invoice_number: String(raw.invoice_number ?? ''),
+      customer_name: String(raw.customer_name ?? ''),
+      customer_email: raw.customer_email != null ? String(raw.customer_email) : undefined,
+      customer_address: raw.customer_address != null ? String(raw.customer_address) : undefined,
+      customer_vat_number: raw.customer_vat_number != null ? String(raw.customer_vat_number) : undefined,
+      delivery_address: raw.delivery_address != null ? String(raw.delivery_address) : undefined,
+      delivery_conditions: raw.delivery_conditions != null ? String(raw.delivery_conditions) : undefined,
+      order_number: raw.order_number != null ? String(raw.order_number) : undefined,
+      terms: raw.terms != null ? String(raw.terms) : undefined,
+      issue_date: String(raw.issue_date ?? ''),
+      due_date: String(raw.due_date ?? ''),
+      status: (raw.status as Invoice['status']) ?? 'draft',
       subtotal: Number(raw.subtotal) || 0,
       tax_rate: raw.tax_rate != null ? Number(raw.tax_rate) : undefined,
       tax_amount: raw.tax_amount != null ? Number(raw.tax_amount) : undefined,
+      discount_percent: raw.discount_percent != null ? Number(raw.discount_percent) : undefined,
       total: Number(raw.total) || 0,
-    } as Invoice;
+      currency: raw.currency != null ? String(raw.currency) : undefined,
+      notes: raw.notes != null ? String(raw.notes) : undefined,
+      created_at: raw.created_at != null ? String(raw.created_at) : undefined,
+      updated_at: raw.updated_at != null ? String(raw.updated_at) : undefined,
+    };
   }
 
   /**
@@ -152,10 +182,9 @@ export class InvoiceService {
         offset: 0,
       }
     );
-    const r = response as unknown as Record<string, unknown>;
-    if (typeof r?.rowCount === 'number') return r.rowCount;
-    const rows = this.normalizeRows(r);
-    return rows.length;
+    const rc = this.extractRowCount(response);
+    if (rc !== null) return rc;
+    return this.normalizeRows(response).length;
   }
 }
 

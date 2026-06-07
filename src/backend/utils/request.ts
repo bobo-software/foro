@@ -8,9 +8,9 @@ import { skaftinClient, ApiResponse } from '../client/SkaftinClient';
 
 export class ApiError extends Error {
   status?: number;
-  data?: any;
+  data?: unknown;
 
-  constructor(message: string, status?: number, data?: any) {
+  constructor(message: string, status?: number, data?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -18,23 +18,36 @@ export class ApiError extends Error {
   }
 }
 
+interface ErrorLike {
+  message?: string;
+  status?: number;
+  data?: unknown;
+}
+
+function toErrorLike(e: unknown): ErrorLike {
+  if (typeof e === 'object' && e !== null) return e as ErrorLike;
+  return { message: String(e) };
+}
+
 /**
  * Handle API errors consistently
  */
-export function handleApiError(error: any): never {
+export function handleApiError(error: unknown): never {
   if (error instanceof ApiError) {
     throw error;
   }
 
-  if (error.status) {
+  const e = toErrorLike(error);
+
+  if (e.status) {
     throw new ApiError(
-      error.message || `Request failed with status ${error.status}`,
-      error.status,
-      error.data
+      e.message || `Request failed with status ${e.status}`,
+      e.status,
+      e.data
     );
   }
 
-  throw new ApiError(error.message || 'An unexpected error occurred');
+  throw new ApiError(e.message || 'An unexpected error occurred');
 }
 
 /**
@@ -44,16 +57,16 @@ export async function apiRequest<T>(
   endpoint: string,
   options: {
     method?: string;
-    body?: any;
+    body?: unknown;
     headers?: Record<string, string>;
   } = {}
 ): Promise<ApiResponse<T>> {
   try {
     const { method = 'GET', body } = options;
-    
+
     switch (method.toUpperCase()) {
       case 'GET':
-        return await skaftinClient.get<T>(endpoint, body);
+        return await skaftinClient.get<T>(endpoint, body as Record<string, unknown>);
       case 'POST':
         return await skaftinClient.post<T>(endpoint, body);
       case 'PUT':
@@ -65,11 +78,11 @@ export async function apiRequest<T>(
       default:
         return await skaftinClient.request<T>(endpoint, {
           method: options.method,
-          body: options.body,
+          body: body as BodyInit | undefined,
           headers: options.headers as HeadersInit,
         });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     handleApiError(error);
     throw error; // This won't be reached but satisfies TypeScript
   }
@@ -80,11 +93,11 @@ export async function apiRequest<T>(
  */
 export async function get<T>(
   endpoint: string,
-  params?: Record<string, any>
+  params?: Record<string, unknown>
 ): Promise<ApiResponse<T>> {
   try {
     return await skaftinClient.get<T>(endpoint, params);
-  } catch (error: any) {
+  } catch (error: unknown) {
     handleApiError(error);
     throw error;
   }
@@ -95,11 +108,11 @@ export async function get<T>(
  */
 export async function post<T>(
   endpoint: string,
-  body?: any
+  body?: unknown
 ): Promise<ApiResponse<T>> {
   try {
     return await skaftinClient.post<T>(endpoint, body);
-  } catch (error: any) {
+  } catch (error: unknown) {
     handleApiError(error);
     throw error;
   }
@@ -110,11 +123,11 @@ export async function post<T>(
  */
 export async function put<T>(
   endpoint: string,
-  body?: any
+  body?: unknown
 ): Promise<ApiResponse<T>> {
   try {
     return await skaftinClient.put<T>(endpoint, body);
-  } catch (error: any) {
+  } catch (error: unknown) {
     handleApiError(error);
     throw error;
   }
@@ -125,11 +138,11 @@ export async function put<T>(
  */
 export async function patch<T>(
   endpoint: string,
-  body?: any
+  body?: unknown
 ): Promise<ApiResponse<T>> {
   try {
     return await skaftinClient.patch<T>(endpoint, body);
-  } catch (error: any) {
+  } catch (error: unknown) {
     handleApiError(error);
     throw error;
   }
@@ -140,11 +153,11 @@ export async function patch<T>(
  */
 export async function del<T>(
   endpoint: string,
-  body?: any
+  body?: unknown
 ): Promise<ApiResponse<T>> {
   try {
     return await skaftinClient.delete<T>(endpoint, body);
-  } catch (error: any) {
+  } catch (error: unknown) {
     handleApiError(error);
     throw error;
   }
@@ -160,4 +173,3 @@ export default {
   ApiError,
   handleApiError,
 };
-

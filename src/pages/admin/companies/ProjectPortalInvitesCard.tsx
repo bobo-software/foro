@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import PortalInviteService from '@/services/portalInviteService';
+import AppInputLabeled from '@/components/forms/AppLabledInput';
 import type { PortalInviteSummary } from '@/types/portalInvite';
 
 function formatExpiry(iso: string): string {
@@ -98,16 +99,12 @@ export function ProjectPortalInvitesCard({
         contract doc.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1 flex-1 min-w-[8rem]">
-          <label htmlFor="portal-label" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            Label (optional)
-          </label>
-          <input
-            id="portal-label"
+        <div className="flex-1 min-w-[8rem]">
+          <AppInputLabeled
+            label="Label (optional)"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="e.g. ACME review"
-            className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-2 text-sm"
           />
         </div>
         <button

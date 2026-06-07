@@ -20,11 +20,7 @@ export function QuotationFormPage() {
       initialCompanyId={initialCompanyId}
       initialProjectId={initialProjectId}
       onSuccess={() => navigate(companyBackPath)}
-      onCancel={() =>
-        quotationId
-          ? navigate(`/app/quotations/${quotationId}${fromCompany ? `?from_company=${fromCompany}` : ''}`)
-          : navigate(companyBackPath)
-      }
+      onCancel={() => navigate(-1)}
     />
   );
 }

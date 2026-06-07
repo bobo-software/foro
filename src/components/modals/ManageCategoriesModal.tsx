@@ -201,13 +201,13 @@ export function ManageCategoriesModal({
               </div>
 
               {/* Name input */}
-              <input
-                type="text"
+              <AppInputLabeled
+                label="Category name"
                 value={row.name}
                 onChange={(e) => updateRow(i, e.target.value)}
                 placeholder="Category name"
                 disabled={saving}
-                className="flex-1 min-w-0 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                className="flex-1 min-w-0 [&_label]:sr-only"
               />
 
               <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">

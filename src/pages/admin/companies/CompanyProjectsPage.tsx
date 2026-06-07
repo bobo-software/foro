@@ -6,6 +6,7 @@ import { useBusinessStore } from '@/stores/data/BusinessStore';
 import type { Company } from '@/types/company';
 import type { Project } from '@/types/project';
 import { AppPageHeader } from '@/components/ComponentsIndex';
+import { projectSchema } from '@/validation/schemas';
 
 type ProjectScope = 'all' | number;
 
@@ -93,20 +94,22 @@ export function CompanyProjectsPage() {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company?.id) return;
-    const trimmedName = newProjectName.trim();
-    if (!trimmedName) {
-      setProjectError('Project name is required');
+    const validation = projectSchema.safeParse({
+      company_id: company.id,
+      business_id: businessId ?? undefined,
+      name: newProjectName.trim(),
+      code: newProjectCode.trim() || undefined,
+      description: newProjectDescription.trim() || undefined,
+    });
+    if (!validation.success) {
+      setProjectError(validation.error.issues[0]?.message ?? 'Please check your input');
       return;
     }
     setProjectError(null);
     setCreatingProject(true);
     try {
       const created = await ProjectService.create({
-        business_id: businessId,
-        company_id: company.id,
-        name: trimmedName,
-        code: newProjectCode.trim() || undefined,
-        description: newProjectDescription.trim() || undefined,
+        ...validation.data,
         status: 'active',
       });
       await loadProjects(company.id);

@@ -8,6 +8,7 @@
 
 import { StorageService } from '../services/storageService';
 import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { logger } from './logger';
 import { TokenManager } from '../services/TokenManager';
 
 export interface LogoData {
@@ -81,7 +82,7 @@ export async function fetchLogoAsBase64(logoFilePath: string): Promise<LogoData 
     logoCache.set(logoFilePath, data);
     return data;
   } catch (err) {
-    console.warn('Failed to fetch logo for PDF:', err);
+    logger.warn('Failed to fetch logo for PDF:', err);
     return null;
   }
 }

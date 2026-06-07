@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { LuArrowLeft } from 'react-icons/lu';
 import toast from 'react-hot-toast';
-import type { CreateInvoiceDto, InvoiceStatus } from '../../types/invoice';
+import type { CreateInvoiceDto } from '../../types/invoice';
 import type { Company } from '../../types/company';
 import type { Project } from '../../types/project';
 import TimeEntryService, { MAX_BILLABLE_ROLLUP_ROWS } from '../../services/timeEntryService';
@@ -11,8 +11,13 @@ import { useItemStore } from '../../stores/data/ItemStore';
 import { useProjectStore } from '../../stores/data/ProjectStore';
 import { useInvoiceStore } from '../../stores/data/InvoiceStore';
 import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
+import { logger } from '../../utils/logger';
+import { InvoiceHeaderFields } from './InvoiceHeaderFields';
+import { InvoiceBillableTimeSummary } from './InvoiceBillableTimeSummary';
+import AppLabeledAreaInput from '../forms/AppLabledAreaInput';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
-import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
+import AppInputLabeled from '../forms/AppLabledInput';
+import { formatCurrency } from '../../utils/currency';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
 
 const NO_PROJECT_ID = -1;
@@ -149,7 +154,7 @@ export function InvoiceForm({
       .then((num) => {
         setFormData((prev) => ({ ...prev, invoice_number: num }));
       })
-      .catch(() => {});
+      .catch((err: unknown) => logger.error('Failed to peek next invoice number:', err));
   }, [invoiceId, creditFromInvoiceId, standaloneCreditNote]);
 
   useEffect(() => {
@@ -165,7 +170,7 @@ export function InvoiceForm({
           invoice_number: cn,
         }));
       })
-      .catch(() => {});
+      .catch((err: unknown) => logger.error('Failed to peek next credit note number:', err));
   }, [standaloneCreditNote, invoiceId]);
 
   const [creditPrefillError, setCreditPrefillError] = useState<string | null>(null);
@@ -272,7 +277,7 @@ export function InvoiceForm({
       if (formData.project_id == null) return;
       const matchedProject = projectList.find((p) => p.id === formData.project_id) ?? null;
       setSelectedProject(matchedProject);
-    }).catch(() => {});
+    }).catch((err: unknown) => logger.error('Failed to load projects for invoice company:', err));
   }, [invoiceId, formData.company_id, formData.project_id, companies, selectedCompany, loadProjectsForCompany]);
 
   const loadInvoice = async () => {
@@ -559,9 +564,6 @@ export function InvoiceForm({
     }
   };
 
-  const inputClass =
-    'w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
-  const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
   const groupClass = 'flex flex-col';
 
   const isCreditNote = formData.document_kind === 'credit_note';
@@ -615,129 +617,11 @@ export function InvoiceForm({
         onSubmit={handleSubmit}
         className="p-4 rounded-lg shadow bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
       >
-        <div className="grid grid-cols-1 gap-x-4 gap-y-2 mb-2 md:grid-cols-4">
-          <div className={groupClass}>
-            <label htmlFor="invoice_number" className={labelClass}>
-              {isCreditNote ? 'Credit note #' : 'Invoice #'}
-            </label>
-            <input
-              id="invoice_number"
-              type="text"
-              value={formData.invoice_number}
-              onChange={(e) => handleChange('invoice_number', e.target.value)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="order_number" className={labelClass}>
-              Order #
-            </label>
-            <input
-              id="order_number"
-              type="text"
-              value={formData.order_number || ''}
-              onChange={(e) => handleChange('order_number', e.target.value)}
-              className={inputClass}
-              placeholder="PO number"
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="status" className={labelClass}>
-              Status
-            </label>
-            <select
-              id="status"
-              value={formData.status}
-              onChange={(e) => handleChange('status', e.target.value as InvoiceStatus)}
-              className={inputClass}
-            >
-              <option value="draft">Draft</option>
-              <option value="accepted">Accepted</option>
-              <option value="sent">Sent</option>
-              <option value="paid">Paid</option>
-              <option value="overdue">Overdue</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="currency" className={labelClass}>
-              Currency
-            </label>
-            <select
-              id="currency"
-              value={formData.currency || 'ZAR'}
-              onChange={(e) => handleChange('currency', e.target.value)}
-              className={inputClass}
-            >
-              {SUPPORTED_CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="issue_date" className={labelClass}>
-              Issue Date
-            </label>
-            <input
-              id="issue_date"
-              type="date"
-              value={formData.issue_date}
-              onChange={(e) => handleChange('issue_date', e.target.value)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="due_date" className={labelClass}>
-              Due Date
-            </label>
-            <input
-              id="due_date"
-              type="date"
-              value={formData.due_date}
-              onChange={(e) => handleChange('due_date', e.target.value)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="terms" className={labelClass}>
-              Terms
-            </label>
-            <select
-              id="terms"
-              value={formData.terms || ''}
-              onChange={(e) => handleChange('terms', e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select terms...</option>
-              <option value="C.O.D">C.O.D (Cash on Delivery)</option>
-              <option value="Net 7">Net 7 Days</option>
-              <option value="Net 14">Net 14 Days</option>
-              <option value="Net 30">Net 30 Days</option>
-              <option value="Net 60">Net 60 Days</option>
-              <option value="Due on Receipt">Due on Receipt</option>
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="delivery_conditions" className={labelClass}>
-              Delivery
-            </label>
-            <select
-              id="delivery_conditions"
-              value={formData.delivery_conditions || ''}
-              onChange={(e) => handleChange('delivery_conditions', e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select...</option>
-              <option value="collect">Collect</option>
-              <option value="deliver">Deliver</option>
-            </select>
-          </div>
-        </div>
+        <InvoiceHeaderFields
+          isCreditNote={isCreditNote}
+          formData={formData}
+          onChange={handleChange}
+        />
 
         <div className="pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
@@ -780,62 +664,36 @@ export function InvoiceForm({
                   {formData.project_id != null &&
                     selectedProject?.id != null &&
                     selectedProject.id !== NO_PROJECT_ID && (
-                      <>
-                        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400" data-testid="invoice-billable-summary">
-                          {billableSummary.loading ||
-                          (billableRollupKey != null && billableLoadedKey !== billableRollupKey)
-                            ? 'Loading billable time summary…'
-                            : selectedProject.business_id == null && currentBusinessId == null
-                              ? 'Select an active business in the app to load billable time for this project.'
-                              : billableLoadedKey === billableRollupKey && billableSummary.entryCount === 0
-                                ? 'No billable time entries for this project.'
-                                : `Billable time: ${(billableSummary.totalMinutes / 60).toFixed(1)} h across ${billableSummary.entryCount} billable ${billableSummary.entryCount === 1 ? 'entry' : 'entries'}${billableSummary.capped ? ` (scan limited — may be incomplete beyond ~${MAX_BILLABLE_ROLLUP_ROWS.toLocaleString()} rows).` : '.'}`}
-                        </p>
-                        <button
-                          type="button"
-                          disabled={
-                            billableSummary.loading ||
-                            (billableRollupKey != null && billableLoadedKey !== billableRollupKey) ||
-                            appendingBillableLine ||
-                            billableSummary.entryCount === 0 ||
-                            (selectedProject?.business_id == null && currentBusinessId == null)
-                          }
-                          onClick={() => void handleAppendBillableTimeLine()}
-                          className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-40 disabled:no-underline"
-                        >
-                          {appendingBillableLine ? 'Adding…' : 'Add billable time as line item'}
-                        </button>
-                      </>
+                      <InvoiceBillableTimeSummary
+                        loading={billableSummary.loading}
+                        isStale={billableRollupKey != null && billableLoadedKey !== billableRollupKey}
+                        needsBusiness={selectedProject.business_id == null && currentBusinessId == null}
+                        totalMinutes={billableSummary.totalMinutes}
+                        entryCount={billableSummary.entryCount}
+                        capped={billableSummary.capped}
+                        appending={appendingBillableLine}
+                        onAppend={() => void handleAppendBillableTimeLine()}
+                      />
                     )}
                 </div>
-                <div className={`${groupClass} mt-2 flex-1`}>
-                  <label htmlFor="customer_vat_number" className={labelClass}>
-                    Company VAT #
-                  </label>
-                  <input
-                    id="customer_vat_number"
-                    type="text"
+                <div className="mt-2 flex-1">
+                  <AppInputLabeled
+                    label="Company VAT #"
                     value={formData.customer_vat_number || ''}
                     onChange={(e) => handleChange('customer_vat_number', e.target.value)}
-                    className={inputClass}
                     placeholder="VAT number"
                   />
                 </div>
               </div>
             </div>
-            <div className={groupClass}>
-              <label htmlFor="delivery_address" className={labelClass}>
-                Delivery address
-              </label>
-              <textarea
-                id="delivery_address"
-                value={formData.delivery_address || ''}
-                onChange={(e) => handleChange('delivery_address', e.target.value)}
-                rows={3}
-                className={`${inputClass} resize-y min-h-[80px]`}
-                placeholder="Delivery address (if different from billing)"
-              />
-            </div>
+            <AppLabeledAreaInput
+              label="Delivery address"
+              value={formData.delivery_address || ''}
+              onChange={(e) => handleChange('delivery_address', e.target.value)}
+              rows={3}
+              textareaClassName="resize-y min-h-[80px]"
+              placeholder="Delivery address (if different from billing)"
+            />
           </div>
         </div>
 
@@ -856,32 +714,23 @@ export function InvoiceForm({
             Totals
           </h3>
           <div className="grid grid-cols-1 gap-x-4 gap-y-2 mb-2 md:grid-cols-2">
-            <div className={groupClass}>
-              <label className={labelClass}>Global discount %</label>
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                max={100}
-                value={globalDiscountPercent || ''}
-                onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
-                className={inputClass}
-              />
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="tax_rate" className={labelClass}>
-                Tax %
-              </label>
-              <input
-                id="tax_rate"
-                type="number"
-                step="0.01"
-                min={0}
-                value={formData.tax_rate || ''}
-                onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
-                className={inputClass}
-              />
-            </div>
+            <AppInputLabeled
+              label="Global discount %"
+              type="number"
+              step={0.01}
+              min={0}
+              max={100}
+              value={String(globalDiscountPercent || '')}
+              onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
+            />
+            <AppInputLabeled
+              label="Tax %"
+              type="number"
+              step={0.01}
+              min={0}
+              value={String(formData.tax_rate || '')}
+              onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
+            />
           </div>
           <div className="rounded-md bg-gray-50 dark:bg-gray-700/50 p-3 space-y-1 text-sm">
             <div className="flex justify-between text-gray-700 dark:text-gray-300">
@@ -911,18 +760,13 @@ export function InvoiceForm({
           </div>
         </div>
 
-        <div className={groupClass}>
-          <label htmlFor="notes" className={labelClass}>
-            Notes
-          </label>
-          <textarea
-            id="notes"
-            value={formData.notes}
-            onChange={(e) => handleChange('notes', e.target.value)}
-            rows={2}
-            className={`${inputClass} resize-y min-h-10`}
-          />
-        </div>
+        <AppLabeledAreaInput
+          label="Notes"
+          value={formData.notes || ''}
+          onChange={(e) => handleChange('notes', e.target.value)}
+          rows={2}
+          textareaClassName="resize-y min-h-10"
+        />
 
         <div className="flex flex-col-reverse gap-2 pt-3 mt-4 border-t border-gray-200 dark:border-gray-700 sm:flex-row sm:justify-end">
           {onCancel && (

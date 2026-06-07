@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { logger } from '../utils/logger';
 
 const envSchema = z
   .object({
@@ -38,10 +39,10 @@ function parseEnv(): Env {
     const formatted = result.error.issues
       .map((i) => `  • ${i.message}`)
       .join('\n');
-    console.error(`[env] Invalid environment configuration:\n${formatted}`);
+    logger.error(`[env] Invalid environment configuration:\n${formatted}`);
 
     if (import.meta.env.DEV) {
-      console.warn('[env] Falling back to defaults in development mode.');
+      logger.warn('[env] Falling back to defaults in development mode.');
       return envSchema.parse({
         ...raw,
         VITE_SKAFTIN_API_KEY: raw.VITE_SKAFTIN_API_KEY || 'dev_placeholder',

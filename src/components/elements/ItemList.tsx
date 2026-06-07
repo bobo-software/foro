@@ -54,46 +54,66 @@ export function ItemList() {
       {
         id: 'sku',
         header: 'SKU',
-        cellClassName: 'text-slate-600 dark:text-slate-300',
-        render: (row) => row.sku ?? '—',
+        cellClassName: 'text-slate-600 dark:text-slate-300 max-w-[8rem]',
+        render: (row) =>
+          row.sku ? (
+            <span className="block truncate" title={row.sku}>
+              {row.sku}
+            </span>
+          ) : (
+            '—'
+          ),
       },
       {
         id: 'item_type',
         header: 'Type',
-        cellClassName: 'text-slate-600 dark:text-slate-300',
+        headerClassName: 'w-24 whitespace-nowrap',
+        cellClassName: 'text-slate-600 dark:text-slate-300 w-24 whitespace-nowrap',
         render: (row) => (row.item_type === 'manufactured' ? 'Manufactured' : 'Single'),
       },
       {
         id: 'name',
         header: 'Name',
-        cellClassName: 'font-medium text-slate-800 dark:text-slate-100',
-        render: (row) => row.name,
+        cellClassName: 'text-slate-600 dark:text-slate-300 max-w-[8rem]',
+        render: (row) =>
+          row.sku ? (
+            <span className="block truncate" title={row.sku}>
+              {row.sku}
+            </span>
+          ) : (
+            '—'
+          ),
       },
       {
         id: 'quantity',
         header: 'Quantity',
-        cellClassName: 'text-slate-600 dark:text-slate-300',
+        align: 'right',
+        headerClassName: 'w-24',
+        cellClassName: 'tabular-nums text-slate-600 dark:text-slate-300 w-24',
         render: (row) => row.quantity ?? 0,
       },
       {
         id: 'unit_price',
         header: 'Stock price',
-        align: 'right',
-        cellClassName: 'tabular-nums text-slate-800 dark:text-slate-100',
+        headerClassName: 'w-24 whitespace-nowrap',
+        cellClassName: 'text-slate-600 dark:text-slate-300 w-24 whitespace-nowrap tabular-nums',
         render: (row) => formatCurrency(Number(row.unit_price ?? 0)),
       },
       {
         id: 'cost_price',
         header: 'Cost price',
         align: 'right',
-        cellClassName: 'tabular-nums text-slate-600 dark:text-slate-300',
+        headerClassName: 'w-24',
+        cellClassName: 'tabular-nums text-slate-600 dark:text-slate-300 w-24',
         render: (row) =>
           row.cost_price != null ? formatCurrency(Number(row.cost_price)) : '—',
       },
       {
         id: 'tax_rate',
         header: 'Tax rate',
-        cellClassName: 'text-slate-600 dark:text-slate-300',
+        align: 'right',
+        headerClassName: 'w-24',
+        cellClassName: 'tabular-nums text-slate-800 dark:text-slate-100 w-24',
         render: (row) => (row.tax_rate != null ? `${row.tax_rate}%` : '—'),
       },
       {
@@ -152,9 +172,9 @@ export function ItemList() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock items</h1>
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 text-center text-slate-500 dark:text-slate-400">
+      <div className="space-y-2">
+        <h1 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Stock items</h1>
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 text-center text-xs text-slate-500 dark:text-slate-400">
           Loading items…
         </div>
       </div>
@@ -162,13 +182,25 @@ export function ItemList() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Stock items</h1>
-        <p className="text-slate-500 dark:text-slate-400">Manage your stock items</p>
+    <div className="space-y-2">
+      {/* Header row */}
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-none">
+            Stock items
+            <span className="ml-2 text-xs font-normal text-slate-400 dark:text-slate-500">Manage your catalogue</span>
+          </h1>
+        </div>
+        <Link
+          to="/app/items/create"
+          className="shrink-0 rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white no-underline hover:bg-indigo-500"
+        >
+          + Add item
+        </Link>
       </div>
 
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
+      {/* Tabs + search in one row */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-700">
         {([
           { key: 'all', label: 'All' },
           { key: 'single', label: 'Single' },
@@ -178,7 +210,7 @@ export function ItemList() {
             key={key}
             type="button"
             onClick={() => setActiveTab(key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
               activeTab === key
                 ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -187,28 +219,19 @@ export function ItemList() {
             {label}
           </button>
         ))}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="relative min-w-0 flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-            <LuFilter size={18} />
+        <div className="relative ml-auto mb-0.5">
+          <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+            <LuFilter size={13} />
           </span>
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search items…"
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            placeholder="Search…"
+            className="rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 py-1 pl-7 pr-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-44"
             aria-label="Search items"
           />
         </div>
-        <Link
-          to="/app/items/create"
-          className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white no-underline hover:bg-indigo-500"
-        >
-          + Add item
-        </Link>
       </div>
 
       <AppDataTable<Item>
@@ -222,6 +245,8 @@ export function ItemList() {
         }}
         error={error}
         emptyMessage={emptyMessage}
+        pageSize={20}
+        pageSizeOptions={[10, 20, 50, 100]}
       />
     </div>
   );

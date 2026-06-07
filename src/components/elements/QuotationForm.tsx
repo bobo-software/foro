@@ -11,8 +11,10 @@ import { useProjectStore } from '../../stores/data/ProjectStore';
 import { useQuotationStore } from '../../stores/data/QuotationStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import AppText from '../text/AppText';
-import { formatCurrency, SUPPORTED_CURRENCIES } from '../../utils/currency';
+import { formatCurrency } from '../../utils/currency';
+import { logger } from '../../utils/logger';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
+import { QuotationHeaderFields } from './QuotationHeaderFields';
 
 const NO_PROJECT_ID = -1;
 const NO_PROJECT_OPTION: Project = {
@@ -126,7 +128,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
         .then((nextNumber) => {
           setFormData((prev) => ({ ...prev, quotation_number: nextNumber }));
         })
-        .catch(() => {});
+        .catch((err: unknown) => logger.error('Failed to get next quotation number:', err));
     }
   }, [quotationId]);
 
@@ -147,7 +149,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
       if (formData.project_id == null) return;
       const matchedProject = projectList.find((p) => p.id === formData.project_id) ?? null;
       setSelectedProject(matchedProject);
-    }).catch(() => {});
+    }).catch((err: unknown) => logger.error('Failed to load projects for quotation company:', err));
   }, [quotationId, formData.company_id, formData.project_id, companies, selectedCompany, loadProjectsForCompany]);
 
   const loadQuotation = async () => {
@@ -384,110 +386,13 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
           <AppText variant="caption" className="uppercase tracking-wider font-semibold mb-2 block">
             Document
           </AppText>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
-            <div className={groupClass}>
-              <label htmlFor="quotation_number" className={labelClass}>Quotation #</label>
-              <input
-                id="quotation_number"
-                type="text"
-                value={formData.quotation_number}
-                onChange={(e) => handleChange('quotation_number', e.target.value)}
-                className={inputClass}
-                required
-              />
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="order_number" className={labelClass}>Order #</label>
-              <input
-                id="order_number"
-                type="text"
-                value={formData.order_number || ''}
-                onChange={(e) => handleChange('order_number', e.target.value)}
-                className={inputClass}
-                placeholder="PO number"
-              />
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="status" className={labelClass}>Status</label>
-              <select
-                id="status"
-                value={formData.status}
-                onChange={(e) => handleChange('status', e.target.value as QuotationStatus)}
-                className={inputClass}
-              >
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="accepted">Accepted</option>
-                <option value="declined">Declined</option>
-                <option value="expired">Expired</option>
-                <option value="converted">Converted</option>
-              </select>
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="currency" className={labelClass}>Currency</label>
-              <select
-                id="currency"
-                value={formData.currency || 'ZAR'}
-                onChange={(e) => handleChange('currency', e.target.value)}
-                className={inputClass}
-              >
-                {SUPPORTED_CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="issue_date" className={labelClass}>Issue Date</label>
-              <input
-                id="issue_date"
-                type="date"
-                value={formData.issue_date}
-                onChange={(e) => handleChange('issue_date', e.target.value)}
-                className={inputClass}
-                required
-              />
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="valid_until" className={labelClass}>Valid Until</label>
-              <input
-                id="valid_until"
-                type="date"
-                value={formData.valid_until || ''}
-                onChange={(e) => handleChange('valid_until', e.target.value || undefined)}
-                className={inputClass}
-              />
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="terms" className={labelClass}>Terms</label>
-              <select
-                id="terms"
-                value={formData.terms || ''}
-                onChange={(e) => handleChange('terms', e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select terms…</option>
-                <option value="C.O.D">C.O.D (Cash on Delivery)</option>
-                <option value="Net 7">Net 7 Days</option>
-                <option value="Net 14">Net 14 Days</option>
-                <option value="Net 30">Net 30 Days</option>
-                <option value="Net 60">Net 60 Days</option>
-                <option value="Due on Receipt">Due on Receipt</option>
-              </select>
-            </div>
-            <div className={groupClass}>
-              <label htmlFor="delivery_conditions" className={labelClass}>Delivery</label>
-              <select
-                id="delivery_conditions"
-                value={formData.delivery_conditions || ''}
-                onChange={(e) => handleChange('delivery_conditions', e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select…</option>
-                <option value="collect">Collect</option>
-                <option value="deliver">Deliver</option>
-              </select>
-            </div>
-          </div>
+          <QuotationHeaderFields
+            formData={formData}
+            onChange={handleChange}
+            inputClass={inputClass}
+            labelClass={labelClass}
+            groupClass={groupClass}
+          />
         </div>
 
         {/* ── Company ── */}

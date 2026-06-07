@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import useAuthStore from '../stores/data/AuthStore';
 import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { logger } from '../utils/logger';
 
 /**
  * Periodically verify the session is still valid
@@ -28,7 +29,7 @@ export function useSessionCheck(intervalMs = SKAFTIN_CONFIG.sessionCheckInterval
     const checkSession = async () => {
       const isValid = await verifySession();
       if (!isValid) {
-        console.log('Session expired during periodic check');
+        logger.log('Session expired during periodic check');
       }
     };
 

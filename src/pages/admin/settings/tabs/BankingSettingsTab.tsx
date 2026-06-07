@@ -4,6 +4,7 @@ import BankingDetailsService from '@/services/bankingDetailsService';
 import type { BankingDetails, CreateBankingDetailsDto } from '@/types/bankingDetails';
 import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';
 import toast from 'react-hot-toast';
+import { bankingDetailsSchema } from '@/validation/schemas';
 
 function getBankingErrorMessage(err: unknown, fallback: string): string {
   const message = err instanceof Error ? err.message : '';
@@ -78,12 +79,9 @@ export function BankingSettingsTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!bankingForm.bank_name?.trim()) {
-      toast.error('Bank name is required');
-      return;
-    }
-    if (!bankingForm.account_number?.trim()) {
-      toast.error('Account number is required');
+    const validation = bankingDetailsSchema.safeParse(bankingForm);
+    if (!validation.success) {
+      toast.error(validation.error.issues[0]?.message ?? 'Please check your input');
       return;
     }
     if (!currentBusiness?.user_id) {

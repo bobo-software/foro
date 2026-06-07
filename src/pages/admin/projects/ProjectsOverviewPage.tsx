@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LuFolderPlus } from 'react-icons/lu';
 import { AppPageHeader } from '@/components/ComponentsIndex';
@@ -18,6 +18,9 @@ import {
   type ProjectOverviewRow,
 } from '@/utils/projectOverviewMetrics';
 import { buildCsvLines, downloadCsvFile } from '@/utils/csvDownload';
+import AppInputLabeled from '@/components/forms/AppLabledInput';
+import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
+import AppLabeledAreaInput from '@/components/forms/AppLabledAreaInput';
 
 const PROJECT_LIST_LIMIT = 500;
 const TASK_PAGE_SIZE = 500;
@@ -305,20 +308,19 @@ export function ProjectsOverviewPage() {
         <SummaryTile label="Overdue (open)" value={totals.overdueOpen} highlight={totals.overdueOpen > 0 ? 'amber' : undefined} />
       </dl>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
-          Sort by
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="min-h-9 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1 text-sm"
-          >
-            <option value="overdue">Overdue (open)</option>
-            <option value="open">Open tasks</option>
-            <option value="name">Project name</option>
-            <option value="company">Company</option>
-          </select>
-        </label>
+      <div className="flex flex-wrap items-end gap-3">
+        <AppLabeledSelectInput
+          label="Sort by"
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          options={[
+            { value: 'overdue', label: 'Overdue (open)' },
+            { value: 'open', label: 'Open tasks' },
+            { value: 'name', label: 'Project name' },
+            { value: 'company', label: 'Company' },
+          ]}
+          className="min-w-[10rem]"
+        />
         <button
           type="button"
           onClick={() => setSortDesc((d) => !d)}
@@ -470,14 +472,6 @@ interface NewProjectModalProps {
 }
 
 function NewProjectModal({ isOpen, onClose, businessId, companies, onCreated }: NewProjectModalProps) {
-  const nameId = useId();
-  const codeId = useId();
-  const companyId = useId();
-  const statusId = useId();
-  const startsId = useId();
-  const endsId = useId();
-  const budgetId = useId();
-  const descId = useId();
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -539,8 +533,6 @@ function NewProjectModal({ isOpen, onClose, businessId, companies, onCreated }: 
     }
   };
 
-  const inputCls = 'w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50';
-  const labelCls = 'block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1';
 
   return (
     <AppModal
@@ -563,50 +555,36 @@ function NewProjectModal({ isOpen, onClose, businessId, companies, onCreated }: 
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
-            <label htmlFor={nameId} className={labelCls}>Project name <span className="text-red-500">*</span></label>
-            <input id={nameId} type="text" value={fields.name} onChange={set('name')} disabled={saving} placeholder="e.g. Website Redesign" className={inputCls} />
+            <AppInputLabeled label="Project name *" type="text" value={fields.name} onChange={set('name')} disabled={saving} placeholder="e.g. Website Redesign" required />
           </div>
 
-          <div>
-            <label htmlFor={companyId} className={labelCls}>Company <span className="text-red-500">*</span></label>
-            <select id={companyId} value={fields.company_id} onChange={set('company_id')} disabled={saving} className={inputCls}>
-              {companies.length === 0 && <option value="">No companies found</option>}
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+          <AppLabeledSelectInput
+            label="Company *"
+            value={String(fields.company_id)}
+            onChange={set('company_id')}
+            disabled={saving}
+            required
+            options={companies.length === 0 ? [{ value: '', label: 'No companies found' }] : companies.map((c) => ({ value: String(c.id), label: c.name ?? '' }))}
+          />
 
-          <div>
-            <label htmlFor={statusId} className={labelCls}>Status</label>
-            <select id={statusId} value={fields.status} onChange={set('status')} disabled={saving} className={inputCls}>
-              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+          <AppLabeledSelectInput
+            label="Status"
+            value={fields.status}
+            onChange={set('status')}
+            disabled={saving}
+            options={STATUS_OPTIONS}
+          />
 
-          <div>
-            <label htmlFor={codeId} className={labelCls}>Project code</label>
-            <input id={codeId} type="text" value={fields.code} onChange={set('code')} disabled={saving} placeholder="e.g. PROJ-001" className={inputCls} />
-          </div>
+          <AppInputLabeled label="Project code" type="text" value={fields.code} onChange={set('code')} disabled={saving} placeholder="e.g. PROJ-001" />
 
-          <div>
-            <label htmlFor={budgetId} className={labelCls}>Budget (hours)</label>
-            <input id={budgetId} type="number" min="0" step="0.5" value={fields.budget_hours} onChange={set('budget_hours')} disabled={saving} placeholder="e.g. 40" className={inputCls} />
-          </div>
+          <AppInputLabeled label="Budget (hours)" type="number" min={0} step={0.5} value={fields.budget_hours} onChange={set('budget_hours')} disabled={saving} placeholder="e.g. 40" />
 
-          <div>
-            <label htmlFor={startsId} className={labelCls}>Start date</label>
-            <input id={startsId} type="date" value={fields.starts_on} onChange={set('starts_on')} disabled={saving} className={inputCls} />
-          </div>
+          <AppInputLabeled label="Start date" type="date" value={fields.starts_on} onChange={set('starts_on')} disabled={saving} />
 
-          <div>
-            <label htmlFor={endsId} className={labelCls}>End date</label>
-            <input id={endsId} type="date" value={fields.ends_on} onChange={set('ends_on')} disabled={saving} className={inputCls} />
-          </div>
+          <AppInputLabeled label="End date" type="date" value={fields.ends_on} onChange={set('ends_on')} disabled={saving} />
 
           <div className="sm:col-span-2">
-            <label htmlFor={descId} className={labelCls}>Description</label>
-            <textarea id={descId} rows={3} value={fields.description} onChange={set('description')} disabled={saving} placeholder="Optional project description…" className={`${inputCls} resize-none`} />
+            <AppLabeledAreaInput label="Description" rows={3} value={fields.description} onChange={set('description')} disabled={saving} placeholder="Optional project description…" />
           </div>
         </div>
       </div>

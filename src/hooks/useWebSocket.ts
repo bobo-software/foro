@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { logger } from '../utils/logger';
 import webSocketService, {
   DatabaseEvent,
   ProjectEvent,
@@ -158,7 +159,7 @@ export function useAutoRefresh(
     }
 
     if (debug) {
-      console.log('🔄 Auto-refreshing due to:', event.type, event.tableName);
+      logger.log('🔄 Auto-refreshing due to:', event.type, event.tableName);
     }
 
     // Debounce rapid updates

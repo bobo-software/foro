@@ -37,6 +37,9 @@ const CompanyFormPage = lazy(() => import('@/pages/admin/companies/CompanyFormPa
 const ItemsPage = lazy(() => import('@pages/admin/ItemsPage').then((m) => ({ default: m.ItemsPage })));
 const ItemDetailPage = lazy(() => import('@pages/admin/ItemDetailPage').then((m) => ({ default: m.ItemDetailPage })));
 const ItemFormPage = lazy(() => import('@pages/admin/ItemFormPage').then((m) => ({ default: m.ItemFormPage })));
+const DocumentsPage = lazy(() => import('@pages/admin/DocumentsPage').then((m) => ({ default: m.DocumentsPage })));
+const InvoiceList = lazy(() => import('@/components/elements/InvoiceList').then((m) => ({ default: m.InvoiceList })));
+const QuotationList = lazy(() => import('@/components/elements/QuotationList').then((m) => ({ default: m.QuotationList })));
 const QuotationListPage = lazy(() => import('@pages/admin/QuotationListPage').then((m) => ({ default: m.QuotationListPage })));
 const QuotationDetailPage = lazy(() => import('@pages/admin/QuotationDetailPage').then((m) => ({ default: m.QuotationDetailPage })));
 const QuotationFormPage = lazy(() => import('@pages/admin/QuotationFormPage').then((m) => ({ default: m.QuotationFormPage })));
@@ -151,6 +154,12 @@ function App() {
                 <Route path="create" element={<ItemFormPage />} />
                 <Route path=":id" element={<ItemDetailPage />} />
                 <Route path=":id/edit" element={<ItemFormPage />} />
+              </Route>
+              <Route path="documents" element={<DocumentsPage />}>
+                <Route index element={<Navigate to="invoices" replace />} />
+                <Route path="invoices" element={<InvoiceList />} />
+                <Route path="quotations" element={<QuotationList />} />
+                <Route path="credit-notes" element={<InvoiceList documentKind="credit_note" />} />
               </Route>
               <Route path="quotations" element={<Outlet />}>
                 <Route index element={<QuotationListPage />} />

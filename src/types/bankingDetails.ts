@@ -3,7 +3,7 @@
  * Used for displaying payment details on invoices and documents
  */
 
-export type AccountType = 'cheque' | 'savings' | 'current' | 'transmission' | 'other';
+export type AccountType = 'cheque' | 'savings' | 'current' | 'transmission' | 'gold_business' | 'other';
 
 export interface BankingDetails {
   id?: number;
@@ -81,6 +81,7 @@ export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: 'savings', label: 'Savings Account' },
   { value: 'current', label: 'Current Account' },
   { value: 'transmission', label: 'Transmission Account' },
+  { value: 'gold_business', label: 'Gold Business Account' },
   { value: 'other', label: 'Other' },
 ];
 

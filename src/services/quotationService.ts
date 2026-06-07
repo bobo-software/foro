@@ -6,26 +6,58 @@
 import { skaftinClient } from '../backend';
 import type { Quotation, CreateQuotationDto } from '../types/quotation';
 import InvoiceService from './invoiceService';
+import { computeNextDocumentNumber } from '../utils/documentNumber';
 
 const TABLE_NAME = 'quotations';
 
-function normalizeRows<T>(response: unknown): T[] {
+function normalizeRows(response: unknown): Record<string, unknown>[] {
   const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
+  if (Array.isArray(r?.data)) return r.data as Record<string, unknown>[];
+  if (Array.isArray(r?.rows)) return r.rows as Record<string, unknown>[];
+  if (Array.isArray(r)) return r as Record<string, unknown>[];
   return [];
+}
+
+function extractRowCount(response: unknown): number {
+  const r = response as Record<string, unknown>;
+  if (typeof r?.rowCount === 'number') return r.rowCount;
+  const data = r?.data;
+  if (typeof data === 'object' && data !== null) {
+    const rc = (data as Record<string, unknown>).rowCount;
+    if (typeof rc === 'number') return rc;
+  }
+  return 0;
 }
 
 function normalizeQuotation(raw: Record<string, unknown>): Quotation {
   return {
-    ...raw,
     id: raw.id != null ? Number(raw.id) : undefined,
+    business_id: raw.business_id != null ? Number(raw.business_id) : undefined,
+    company_id: raw.company_id != null ? Number(raw.company_id) : null,
+    project_id: raw.project_id != null ? Number(raw.project_id) : null,
+    quotation_number: String(raw.quotation_number ?? ''),
+    customer_name: String(raw.customer_name ?? ''),
+    customer_email: raw.customer_email != null ? String(raw.customer_email) : undefined,
+    customer_address: raw.customer_address != null ? String(raw.customer_address) : undefined,
+    customer_vat_number: raw.customer_vat_number != null ? String(raw.customer_vat_number) : undefined,
+    delivery_address: raw.delivery_address != null ? String(raw.delivery_address) : undefined,
+    delivery_conditions: raw.delivery_conditions != null ? String(raw.delivery_conditions) : undefined,
+    order_number: raw.order_number != null ? String(raw.order_number) : undefined,
+    terms: raw.terms != null ? String(raw.terms) : undefined,
+    issue_date: String(raw.issue_date ?? ''),
+    valid_until: raw.valid_until != null ? String(raw.valid_until) : undefined,
+    status: (raw.status as Quotation['status']) ?? 'draft',
     subtotal: Number(raw.subtotal) || 0,
+    discount_percent: raw.discount_percent != null ? Number(raw.discount_percent) : undefined,
     tax_rate: raw.tax_rate != null ? Number(raw.tax_rate) : undefined,
     tax_amount: raw.tax_amount != null ? Number(raw.tax_amount) : undefined,
     total: Number(raw.total) || 0,
-  } as Quotation;
+    currency: raw.currency != null ? String(raw.currency) : undefined,
+    notes: raw.notes != null ? String(raw.notes) : undefined,
+    converted_invoice_id: raw.converted_invoice_id != null ? Number(raw.converted_invoice_id) : undefined,
+    created_at: raw.created_at != null ? String(raw.created_at) : undefined,
+    updated_at: raw.updated_at != null ? String(raw.updated_at) : undefined,
+  };
 }
 
 export class QuotationService {
@@ -46,8 +78,7 @@ export class QuotationService {
         ...(params?.orderDirection && { orderDirection: params.orderDirection }),
       }
     );
-    const rows = normalizeRows<Quotation>(response);
-    return rows.map((q) => normalizeQuotation(q as unknown as Record<string, unknown>));
+    return normalizeRows(response).map(normalizeQuotation);
   }
 
   static async findById(id: number): Promise<Quotation | null> {
@@ -59,9 +90,8 @@ export class QuotationService {
         offset: 0,
       }
     );
-    const rows = normalizeRows<Quotation>(response);
-    const q = rows[0] ?? null;
-    return q ? normalizeQuotation(q as unknown as Record<string, unknown>) : null;
+    const rows = normalizeRows(response);
+    return rows[0] ? normalizeQuotation(rows[0]) : null;
   }
 
   static async create(data: CreateQuotationDto): Promise<Quotation> {
@@ -72,7 +102,7 @@ export class QuotationService {
     );
     const r = response as unknown as Record<string, unknown>;
     const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizeQuotation(inserted as unknown as Record<string, unknown>);
+    return normalizeQuotation(inserted as Record<string, unknown>);
   }
 
   static async update(id: number, data: Partial<CreateQuotationDto>): Promise<{ rowCount: number }> {
@@ -81,8 +111,7 @@ export class QuotationService {
       `/app-api/database/tables/${TABLE_NAME}/update`,
       { where: { id }, data: row as Record<string, unknown> }
     );
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    return { rowCount: extractRowCount(response) };
   }
 
   static async delete(id: number): Promise<{ rowCount: number }> {
@@ -90,8 +119,7 @@ export class QuotationService {
       `/app-api/database/tables/${TABLE_NAME}/delete`,
       { where: { id } }
     );
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    return { rowCount: extractRowCount(response) };
   }
 
   static async count(where?: Record<string, unknown>): Promise<number> {
@@ -99,8 +127,8 @@ export class QuotationService {
       `/app-api/database/tables/${TABLE_NAME}/select`,
       { ...(where && { where }), limit: 1, offset: 0 }
     );
-    const rr = response as unknown as Record<string, unknown>;
-    if (typeof rr?.rowCount === 'number') return rr.rowCount;
+    const rc = extractRowCount(response);
+    if (rc > 0) return rc;
     return normalizeRows(response).length;
   }
 
@@ -139,16 +167,8 @@ export class QuotationService {
       `/app-api/database/tables/${TABLE_NAME}/select`,
       { limit: 5000, offset: 0 }
     );
-    const rows = normalizeRows<Quotation>(response);
-    let max = 0;
-    for (const row of rows) {
-      const match = String(row.quotation_number ?? '').match(/(\d+)$/);
-      if (match) {
-        const n = parseInt(match[1], 10);
-        if (n > max) max = n;
-      }
-    }
-    return String(max + 1).padStart(4, '0');
+    const rows = normalizeRows(response);
+    return computeNextDocumentNumber(rows.map((r) => String(r.quotation_number ?? '')));
   }
 }
 

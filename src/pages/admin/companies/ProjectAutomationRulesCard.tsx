@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import AutomationRuleService from '@/services/automationRuleService';
+import AppInputLabeled from '@/components/forms/AppLabledInput';
+import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
+import AppLabeledAreaInput from '@/components/forms/AppLabledAreaInput';
 import type { AutomationRule } from '@/types/automationRule';
 import { automationRuleCreateSchema } from '@/validation/schemas';
 
@@ -138,47 +141,24 @@ export function ProjectAutomationRulesCard({ projectId, businessId }: { projectI
         <code className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 rounded">message</code> string.
       </p>
       <div className="space-y-2 rounded-lg border border-slate-100 dark:border-slate-700 p-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="ar-name" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            Name
-          </label>
-          <input
-            id="ar-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Notify PM when done"
-            className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-2 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="ar-trigger" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            Trigger
-          </label>
-          <select
-            id="ar-trigger"
-            value={triggerKey}
-            onChange={(e) => onTriggerChange(e.target.value)}
-            className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-2 text-sm"
-          >
-            {TRIGGER_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="ar-def" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            Definition (JSON object)
-          </label>
-          <textarea
-            id="ar-def"
-            value={definitionJson}
-            onChange={(e) => setDefinitionJson(e.target.value)}
-            rows={3}
-            className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-2 text-xs font-mono"
-          />
-        </div>
+        <AppInputLabeled
+          label="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Notify PM when done"
+        />
+        <AppLabeledSelectInput
+          label="Trigger"
+          value={triggerKey}
+          onChange={(e) => onTriggerChange(e.target.value)}
+          options={[...TRIGGER_OPTIONS]}
+        />
+        <AppLabeledAreaInput
+          label="Definition (JSON object)"
+          value={definitionJson}
+          onChange={(e) => setDefinitionJson(e.target.value)}
+          rows={3}
+        />
         <button
           type="button"
           disabled={busy || !name.trim()}

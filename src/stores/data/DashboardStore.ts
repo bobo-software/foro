@@ -13,8 +13,16 @@ export interface DashboardStats {
   items: number;
 }
 
+export interface DashboardFinancials {
+  totalBilled: number;
+  totalPaid: number;
+  outstanding: number;
+  overdue: number;
+}
+
 interface DashboardState {
   stats: DashboardStats;
+  financials: DashboardFinancials;
   recentInvoices: Invoice[];
   loading: boolean;
   error: string | null;
@@ -24,8 +32,24 @@ interface DashboardState {
   loadBankingPresence: (userId: number | null | undefined) => Promise<void>;
 }
 
+function computeFinancials(invoices: Invoice[]): DashboardFinancials {
+  let totalBilled = 0;
+  let totalPaid = 0;
+  let outstanding = 0;
+  let overdue = 0;
+  for (const inv of invoices) {
+    if (inv.document_kind === 'credit_note' || inv.status === 'draft' || inv.status === 'cancelled') continue;
+    totalBilled += inv.total;
+    if (inv.status === 'paid') totalPaid += inv.total;
+    if (inv.status === 'sent' || inv.status === 'accepted') outstanding += inv.total;
+    if (inv.status === 'overdue') overdue += inv.total;
+  }
+  return { totalBilled, totalPaid, outstanding, overdue };
+}
+
 export const useDashboardStore = create<DashboardState>((set) => ({
   stats: { companies: 0, invoices: 0, quotations: 0, items: 0 },
+  financials: { totalBilled: 0, totalPaid: 0, outstanding: 0, overdue: 0 },
   recentInvoices: [],
   loading: true,
   error: null,
@@ -36,21 +60,21 @@ export const useDashboardStore = create<DashboardState>((set) => ({
     set({ loading: true, error: null });
     try {
       const businessWhere = businessId != null ? { business_id: businessId } : undefined;
-      const [companies, invoices, quotations, items, recent] = await Promise.all([
-        CompanyService.count(businessWhere),
-        InvoiceService.count(businessWhere),
-        QuotationService.count(businessWhere),
-        ItemService.count(businessWhere),
-        InvoiceService.findAll({
-          where: businessWhere,
-          orderBy: 'issue_date',
-          orderDirection: 'DESC',
-          limit: 5,
-        }),
+      const [allCompanies, allInvoices, allQuotations, allItems] = await Promise.all([
+        CompanyService.findAll({ where: businessWhere }),
+        InvoiceService.findAll({ where: businessWhere, orderBy: 'issue_date', orderDirection: 'DESC' }),
+        QuotationService.findAll({ where: businessWhere }),
+        ItemService.findAll({ where: businessWhere }),
       ]);
       set({
-        stats: { companies, invoices, quotations, items },
-        recentInvoices: recent,
+        stats: {
+          companies: allCompanies.length,
+          invoices: allInvoices.length,
+          quotations: allQuotations.length,
+          items: allItems.length,
+        },
+        financials: computeFinancials(allInvoices),
+        recentInvoices: allInvoices.slice(0, 5),
         loading: false,
       });
     } catch (e) {

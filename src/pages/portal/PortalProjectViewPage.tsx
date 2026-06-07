@@ -15,6 +15,7 @@ import { buildProjectTimelineCsv } from '@/utils/projectTimelineCsv';
 import { downloadCsvFile } from '@/utils/csvDownload';
 import { ProjectTasksTimeline } from '@/pages/admin/companies/ProjectTasksTimeline';
 import { usePortalNoIndex } from '@/hooks/usePortalNoIndex';
+import { withIds } from '@/utils/withIds';
 import toast from 'react-hot-toast';
 
 const PORTAL_GENERIC_ERROR =
@@ -150,7 +151,7 @@ export function PortalProjectViewPage() {
 
   const exportPortalTimelineCsv = useCallback(() => {
     if (project?.id == null) return;
-    if (tasks.filter((t) => t.id != null).length === 0) {
+    if (withIds(tasks).length === 0) {
       toast.error('No tasks loaded to export');
       return;
     }
@@ -210,7 +211,7 @@ export function PortalProjectViewPage() {
       </header>
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
         <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-600">
-          Read-only view. {tasks.filter((t) => t.id != null).length} task(s) loaded
+          Read-only view. {withIds(tasks).length} task(s) loaded
           {hasMoreTasks ? ' — more available below.' : '.'}
         </p>
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 print:border-slate-300">

@@ -4,6 +4,8 @@ interface AppInputProps {
   value: string | Date;
   onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   label: string;
+  id?: string;
+  labelHidden?: boolean;
   type?: 'text' | 'password' | 'email' | 'number' | 'date' | 'time' | 'tel';
   placeholder?: string;
   required?: boolean;
@@ -22,6 +24,8 @@ interface AppInputProps {
 
 const AppInputLabeled: React.FC<AppInputProps> = ({
   label,
+  id,
+  labelHidden = false,
   value,
   onChange,
   type = 'text',
@@ -38,7 +42,7 @@ const AppInputLabeled: React.FC<AppInputProps> = ({
   onBlur,
   onKeyDown,
 }) => {
-  const inputId = label.toLowerCase().replace(/\s+/g, '-');
+  const inputId = id ?? label.toLowerCase().replace(/\s+/g, '-');
 
   // Format date value for input
   const formattedValue = type === 'date' && value instanceof Date
@@ -51,7 +55,7 @@ const AppInputLabeled: React.FC<AppInputProps> = ({
     <div className={`flex flex-col gap-1.5 ${className}`}>
       <label
         htmlFor={inputId}
-        className="text-sm font-medium text-slate-700"
+        className={`text-sm font-medium text-slate-700 dark:text-slate-300${labelHidden ? ' sr-only' : ''}`}
       >
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
@@ -60,12 +64,13 @@ const AppInputLabeled: React.FC<AppInputProps> = ({
       <input
         id={inputId}
         className={`
-          w-full px-3 py-2
-          bg-white border rounded-lg
-          text-slate-700 text-sm
+          w-full px-3 py-1.5
+          bg-white dark:bg-slate-800 border rounded-lg
+          text-slate-700 dark:text-slate-100 text-sm
           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-          disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed
-          ${error ? 'border-red-500' : 'border-slate-200'}
+          dark:focus:ring-indigo-400 dark:focus:border-indigo-400
+          disabled:bg-slate-50 dark:disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed
+          ${error ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'}
           ${disabled ? 'cursor-not-allowed' : ''}
         `}
         type={type}

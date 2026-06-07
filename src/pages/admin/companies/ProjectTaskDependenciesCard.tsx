@@ -4,6 +4,8 @@ import TaskDependencyService from '@/services/taskDependencyService';
 import type { ProjectTask } from '@/types/task';
 import type { ProjectTaskDependency } from '@/types/taskDependency';
 import { projectTaskDependencyCreateSchema } from '@/validation/schemas';
+import { withIds } from '@/utils/withIds';
+import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
 
 export function ProjectTaskDependenciesCard({
   projectId,
@@ -23,7 +25,7 @@ export function ProjectTaskDependenciesCard({
   const [busy, setBusy] = useState(false);
 
   const taskOptions = useMemo(
-    () => tasks.filter((t) => t.id != null).sort((a, b) => (a.title || '').localeCompare(b.title || '')),
+    () => withIds(tasks).sort((a, b) => (a.title || '').localeCompare(b.title || '')),
     [tasks]
   );
 
@@ -86,42 +88,24 @@ export function ProjectTaskDependenciesCard({
         Predecessor must complete before successor in planning order. Shown on the Timeline view as “After …”.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1 min-w-[10rem]">
-          <label htmlFor="dep-pred" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            Predecessor
-          </label>
-          <select
-            id="dep-pred"
+        <div className="min-w-[10rem]">
+          <AppLabeledSelectInput
+            label="Predecessor"
             value={pred}
             onChange={(e) => setPred(e.target.value)}
-            className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-2 text-sm"
-          >
-            <option value="">Select task…</option>
-            {taskOptions.map((t) => (
-              <option key={t.id} value={String(t.id)}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+            options={taskOptions.map((t) => ({ value: String(t.id), label: t.title || `Task #${t.id}` }))}
+            placeholder="Select task…"
+          />
         </div>
         <span className="text-xs text-slate-500 pb-2">→</span>
-        <div className="flex flex-col gap-1 min-w-[10rem]">
-          <label htmlFor="dep-succ" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            Successor
-          </label>
-          <select
-            id="dep-succ"
+        <div className="min-w-[10rem]">
+          <AppLabeledSelectInput
+            label="Successor"
             value={succ}
             onChange={(e) => setSucc(e.target.value)}
-            className="min-h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-2 text-sm"
-          >
-            <option value="">Select task…</option>
-            {taskOptions.map((t) => (
-              <option key={t.id} value={String(t.id)}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+            options={taskOptions.map((t) => ({ value: String(t.id), label: t.title || `Task #${t.id}` }))}
+            placeholder="Select task…"
+          />
         </div>
         <button
           type="button"

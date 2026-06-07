@@ -1,4 +1,5 @@
 import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
+import { logger } from '../../utils/logger';
 
 /**
  * Database change event types
@@ -28,8 +29,8 @@ export interface DatabaseEvent {
   type: DatabaseEventType;
   projectId: string;
   tableName: string;
-  data?: any;
-  oldData?: any;
+  data?: unknown;
+  oldData?: unknown;
   timestamp: string;
 }
 
@@ -53,6 +54,17 @@ export interface ConnectionStatus {
 }
 
 type ConnectionListener = (status: ConnectionStatus) => void;
+
+interface WsMessage {
+  type: string;
+  payload?: unknown;
+  projectId?: string;
+  message?: string;
+}
+
+function isWsMessage(v: unknown): v is WsMessage {
+  return typeof v === 'object' && v !== null && 'type' in v && typeof (v as Record<string, unknown>)['type'] === 'string';
+}
 
 /**
  * WebSocket service for real-time updates
@@ -78,10 +90,10 @@ class WebSocketService {
   private debugLog(message: string, payload?: unknown) {
     const ts = new Date().toISOString();
     if (payload === undefined) {
-      console.log(`[WebSocket][${ts}] ${message}`);
+      logger.log(`[WebSocket][${ts}] ${message}`);
       return;
     }
-    console.log(`[WebSocket][${ts}] ${message}`, payload);
+    logger.log(`[WebSocket][${ts}] ${message}`, payload);
   }
 
   /**
@@ -179,7 +191,7 @@ class WebSocketService {
 
   private handleMessage(raw: unknown) {
     if (typeof raw !== 'string') return;
-    let msg: any;
+    let msg: unknown;
     try {
       msg = JSON.parse(raw);
     } catch {
@@ -188,31 +200,33 @@ class WebSocketService {
     }
     this.debugLog('Parsed incoming message', msg);
 
-    if (msg?.type === 'database-change' && msg.payload) {
+    if (!isWsMessage(msg)) return;
+
+    if (msg.type === 'database-change' && msg.payload) {
       this.databaseListeners.forEach((listener) => listener(msg.payload as DatabaseEvent));
       return;
     }
 
-    if (msg?.type === 'project-event' && msg.payload) {
+    if (msg.type === 'project-event' && msg.payload) {
       this.projectListeners.forEach((listener) => listener(msg.payload as ProjectEvent));
       return;
     }
 
-    if (msg?.type === 'subscribed' && typeof msg.projectId === 'string') {
+    if (msg.type === 'subscribed' && typeof msg.projectId === 'string') {
       this.currentProjectId = msg.projectId;
       return;
     }
 
-    if (msg?.type === 'unsubscribed' && typeof msg.projectId === 'string') {
+    if (msg.type === 'unsubscribed' && typeof msg.projectId === 'string') {
       if (this.currentProjectId === msg.projectId) {
         this.currentProjectId = null;
       }
       return;
     }
 
-    if (msg?.type === 'error') {
+    if (msg.type === 'error') {
       this.debugLog('Server reported WebSocket error', msg);
-      console.error('WebSocket error:', msg?.message || 'Unknown error');
+      logger.error('WebSocket error:', msg.message || 'Unknown error');
     }
   }
 

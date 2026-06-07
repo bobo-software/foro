@@ -281,6 +281,20 @@ export const projectTimeEntryCreateSchema = z.object({
 
 export type ProjectTimeEntryCreateInput = z.infer<typeof projectTimeEntryCreateSchema>;
 
+// ── Banking Details ────────────────────────────────────────────────
+export const bankingDetailsSchema = z.object({
+  bank_name: nonEmptyString('Bank name'),
+  account_number: nonEmptyString('Account number'),
+  account_holder: z.string().optional(),
+  account_type: z.string().optional(),
+  branch_code: z.string().optional(),
+  branch_name: z.string().optional(),
+  swift_code: z.string().optional(),
+  label: z.string().optional(),
+});
+
+export type BankingDetailsInput = z.infer<typeof bankingDetailsSchema>;
+
 // ── Line Items ─────────────────────────────────────────────────────
 export const lineItemSchema = z.object({
   item_id: z.number().int().positive().optional(),

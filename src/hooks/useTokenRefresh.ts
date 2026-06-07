@@ -5,6 +5,7 @@ import { TokenManager } from '../services/TokenManager';
 import { skaftinClient } from '../backend';
 import useAuthStore from '../stores/data/AuthStore';
 import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { logger } from '../utils/logger';
 
 /**
  * Proactively refresh the token before it expires
@@ -29,7 +30,7 @@ export function useTokenRefresh() {
     const checkAndRefresh = async () => {
       // Check if token will expire soon
       if (TokenManager.isTokenExpired(SKAFTIN_CONFIG.tokenRefreshBuffer)) {
-        console.log('Token expiring soon, proactively refreshing...');
+        logger.log('Token expiring soon, proactively refreshing...');
         
         try {
           const response = await skaftinClient.post<{ accessToken?: string }>(
@@ -38,10 +39,10 @@ export function useTokenRefresh() {
           
           if (response.data?.accessToken) {
             TokenManager.setAccessToken(response.data.accessToken);
-            console.log('Token proactively refreshed');
+            logger.log('Token proactively refreshed');
           }
         } catch (error) {
-          console.error('Proactive token refresh failed:', error);
+          logger.error('Proactive token refresh failed:', error);
           // Don't logout here - the 401 interceptor will handle it if needed
         }
       }

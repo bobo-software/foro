@@ -7,8 +7,12 @@ import PaymentService from '../../services/paymentService';
 import CompanyService from '../../services/companyService';
 import ProjectService from '../../services/projectService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
+import { logger } from '../../utils/logger';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
+import AppInputLabeled from '../forms/AppLabledInput';
+import AppLabeledSelectInput from '../forms/AppLabledSelectInput';
 import { SUPPORTED_CURRENCIES } from '../../utils/currency';
+import { paymentSchema } from '../../validation/schemas';
 
 interface PaymentFormProps {
   paymentId?: number;
@@ -76,7 +80,7 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
           business_id: payment.business_id,
         });
         if (payment.company_id) {
-          loadProjectsForCompany(payment.company_id).catch(() => {});
+          loadProjectsForCompany(payment.company_id).catch((err: unknown) => logger.error('Failed to load projects for payment company:', err));
         }
       })
       .catch(() => setError('Failed to load payment'))
@@ -96,7 +100,7 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
         if (!projectId) return;
         const project = projectList.find((p) => p.id === projectId) ?? null;
         setSelectedProject(project);
-      }).catch(() => {});
+      }).catch((err: unknown) => logger.error('Failed to load projects for company:', err));
     }
   }, [companies, formData.company_id, formData.project_id, selectedCompany, loadProjectsForCompany]);
 
@@ -182,12 +186,12 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.customer_name?.trim()) {
-      setError('Company is required');
-      return;
-    }
-    if (Number(formData.amount) <= 0) {
-      setError('Amount must be greater than 0');
+    const parsed = paymentSchema.safeParse({
+      ...formData,
+      amount: Number(formData.amount),
+    });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Invalid form data');
       return;
     }
     try {
@@ -215,10 +219,6 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
     }
   };
 
-  const inputClass =
-    'w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors font-[inherit]';
-  const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
-  const groupClass = 'flex flex-col';
 
   if (loadingPayment) {
     return (
@@ -281,81 +281,41 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
           />
         </div>
         <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">
-          <div className={groupClass}>
-            <label htmlFor="amount" className={labelClass}>
-              Amount *
-            </label>
-            <input
-              id="amount"
-              type="number"
-              step="0.01"
-              min={0}
-              value={formData.amount || ''}
-              onChange={(e) => handleChange('amount', e.target.value ? parseFloat(e.target.value) : 0)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="currency" className={labelClass}>
-              Currency
-            </label>
-            <select
-              id="currency"
-              value={formData.currency || 'ZAR'}
-              onChange={(e) => handleChange('currency', e.target.value)}
-              className={inputClass}
-            >
-              {SUPPORTED_CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="date" className={labelClass}>
-              Date *
-            </label>
-            <input
-              id="date"
-              type="date"
-              value={formData.date || ''}
-              onChange={(e) => handleChange('date', e.target.value)}
-              className={inputClass}
-              required
-            />
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="payment_method" className={labelClass}>
-              Payment method
-            </label>
-            <select
-              id="payment_method"
-              value={formData.payment_method || 'eft'}
-              onChange={(e) => handleChange('payment_method', e.target.value)}
-              className={inputClass}
-            >
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={groupClass}>
-            <label htmlFor="reference" className={labelClass}>
-              Reference
-            </label>
-            <input
-              id="reference"
-              type="text"
-              value={formData.reference || ''}
-              onChange={(e) => handleChange('reference', e.target.value)}
-              className={inputClass}
-              placeholder="e.g. bank transfer, cheque #"
-            />
-          </div>
+          <AppInputLabeled
+            label="Amount *"
+            type="number"
+            step={0.01}
+            min={0}
+            value={String(formData.amount || '')}
+            onChange={(e) => handleChange('amount', e.target.value ? parseFloat(e.target.value) : 0)}
+            required
+          />
+          <AppLabeledSelectInput
+            label="Currency"
+            value={formData.currency || 'ZAR'}
+            onChange={(e) => handleChange('currency', e.target.value)}
+            options={SUPPORTED_CURRENCIES}
+          />
+          <AppInputLabeled
+            label="Date *"
+            type="date"
+            value={formData.date || ''}
+            onChange={(e) => handleChange('date', e.target.value)}
+            required
+          />
+          <AppLabeledSelectInput
+            label="Payment method"
+            value={formData.payment_method || 'eft'}
+            onChange={(e) => handleChange('payment_method', e.target.value)}
+            options={PAYMENT_METHODS}
+          />
+          <AppInputLabeled
+            label="Reference"
+            type="text"
+            value={formData.reference || ''}
+            onChange={(e) => handleChange('reference', e.target.value)}
+            placeholder="e.g. bank transfer, cheque #"
+          />
         </div>
         <div className="flex flex-wrap gap-3">
           <button

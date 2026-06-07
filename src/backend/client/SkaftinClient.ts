@@ -6,6 +6,7 @@
 
 import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
 import { TokenManager } from '../../services/TokenManager';
+import { logger } from '../../utils/logger';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -24,6 +25,18 @@ interface RetryConfig {
   baseDelayMs: number;
   maxDelayMs: number;
   retryableStatuses: Set<number>;
+}
+
+interface HttpError extends Error {
+  status?: number;
+  data?: unknown;
+}
+
+function createHttpError(message: string, status: number, data: unknown): HttpError {
+  const e = new Error(message) as HttpError;
+  e.status = status;
+  e.data = data;
+  return e;
 }
 
 const DEFAULT_RETRY_CONFIG: RetryConfig = {
@@ -46,7 +59,7 @@ export class SkaftinClient {
   private isRefreshing = false;
   private refreshSubscribers: Array<(token: string) => void> = [];
   private failedRefreshSubscribers: Array<(error: Error) => void> = [];
-  private inflightGets = new Map<string, Promise<any>>();
+  private inflightGets = new Map<string, Promise<unknown>>();
   private retryConfig: RetryConfig;
 
   constructor(retryConfig?: Partial<RetryConfig>) {
@@ -62,9 +75,7 @@ export class SkaftinClient {
       throw new Error('Skaftin credentials required. Set VITE_SKAFTIN_API_KEY or VITE_SKAFTIN_ACCESS_TOKEN');
     }
 
-    if (import.meta.env.DEV) {
-      console.log('🔧 Skaftin Client initialized');
-    }
+    logger.log('🔧 Skaftin Client initialized');
 
     this.initialized = true;
   }
@@ -183,7 +194,7 @@ export class SkaftinClient {
       
       return null;
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      logger.error('Token refresh failed:', error);
       return null;
     }
   }
@@ -296,10 +307,11 @@ export class SkaftinClient {
     const data = await response.json();
 
     if (!response.ok) {
-      const error = new Error(data.message || data.error || `Request failed: ${response.status}`);
-      (error as any).status = response.status;
-      (error as any).data = data;
-      throw error;
+      throw createHttpError(
+        data.message || data.error || `Request failed: ${response.status}`,
+        response.status,
+        data
+      );
     }
 
     return data;
@@ -315,10 +327,12 @@ export class SkaftinClient {
     return Math.min(delay + jitter, this.retryConfig.maxDelayMs);
   }
 
-  private isRetryable(error: any): boolean {
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') return true;
-    if (error.message === 'Failed to fetch') return true;
-    if (error.status && this.retryConfig.retryableStatuses.has(error.status)) return true;
+  private isRetryable(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const e = error as HttpError;
+    if (e.name === 'AbortError' || e.name === 'TimeoutError') return true;
+    if (e.message === 'Failed to fetch') return true;
+    if (e.status && this.retryConfig.retryableStatuses.has(e.status)) return true;
     return false;
   }
 
@@ -343,7 +357,7 @@ export class SkaftinClient {
         : JSON.stringify(options.body);
     }
 
-    let lastError: any;
+    let lastError: unknown;
 
     for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
       const controller = new AbortController();
@@ -365,16 +379,15 @@ export class SkaftinClient {
         if (response.status === 401) {
           const retryResult = await this.handle401<T>(endpoint, options, isFormData);
           if (retryResult) return retryResult;
-          const error = new Error(data.message || data.error || 'Unauthorized');
-          (error as any).status = 401;
-          (error as any).data = data;
-          throw error;
+          throw createHttpError(data.message || data.error || 'Unauthorized', 401, data);
         }
 
         if (!response.ok) {
-          const error = new Error(data.message || data.error || `Request failed: ${response.status}`);
-          (error as any).status = response.status;
-          (error as any).data = data;
+          const error = createHttpError(
+            data.message || data.error || `Request failed: ${response.status}`,
+            response.status,
+            data
+          );
 
           if (this.retryConfig.retryableStatuses.has(response.status) && attempt < this.retryConfig.maxRetries) {
             lastError = error;
@@ -386,21 +399,18 @@ export class SkaftinClient {
         }
 
         return data;
-      } catch (error: any) {
+      } catch (error: unknown) {
         clearTimeout(timeoutId);
         lastError = error;
 
         if (this.isRetryable(error) && attempt < this.retryConfig.maxRetries) {
-          if (import.meta.env.DEV) {
-            console.warn(`[${method}] ${endpoint} retry ${attempt + 1}/${this.retryConfig.maxRetries}`, error.message);
-          }
+          const msg = error instanceof Error ? error.message : String(error);
+          logger.warn(`[${method}] ${endpoint} retry ${attempt + 1}/${this.retryConfig.maxRetries}`, msg);
           await this.sleep(this.getRetryDelay(attempt));
           continue;
         }
 
-        if (import.meta.env.DEV) {
-          console.error(`[${method}] ${endpoint} ❌`, error);
-        }
+        logger.error(`[${method}] ${endpoint} ❌`, error);
         throw error;
       }
     }
@@ -408,7 +418,7 @@ export class SkaftinClient {
     throw lastError;
   }
 
-  async get<T>(endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
+  async get<T>(endpoint: string, params?: Record<string, unknown>): Promise<ApiResponse<T>> {
     let url = endpoint;
     if (params && Object.keys(params).length > 0) {
       const query = new URLSearchParams(
@@ -423,7 +433,7 @@ export class SkaftinClient {
     }
 
     const inflight = this.inflightGets.get(url);
-    if (inflight) return inflight;
+    if (inflight) return inflight as Promise<ApiResponse<T>>;
 
     const promise = this.request<T>(url, { method: 'GET' }).finally(() => {
       this.inflightGets.delete(url);
@@ -432,20 +442,20 @@ export class SkaftinClient {
     return promise;
   }
 
-  async post<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'POST', body });
+  async post<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'POST', body: body as BodyInit | undefined });
   }
 
-  async put<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'PUT', body });
+  async put<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'PUT', body: body as BodyInit | undefined });
   }
 
-  async patch<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'PATCH', body });
+  async patch<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'PATCH', body: body as BodyInit | undefined });
   }
 
-  async delete<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, { method: 'DELETE', body });
+  async delete<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'DELETE', body: body as BodyInit | undefined });
   }
 
   /**

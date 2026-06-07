@@ -7,8 +7,12 @@ import { useBusinessStore } from '@/stores/data/BusinessStore';
 import type { CreateCompanyDto } from '@/types/company';
 import type { CreateBankingDetailsDto, BankingDetails } from '@/types/bankingDetails';
 import type { Address, CreateAddressDto } from '@/types/address';
-import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';
 import toast from 'react-hot-toast';
+import AppInputLabeled from '@/components/forms/AppLabledInput';
+import { CompanyAddressFields } from './CompanyAddressFields';
+import { CompanyCredentialsFields } from './CompanyCredentialsFields';
+import { CompanyBankingFields } from './CompanyBankingFields';
+import { companySchema, bankingDetailsSchema } from '@/validation/schemas';
 
 declare global {
   interface Window {
@@ -33,19 +37,6 @@ function loadGoogleMapsPlaces(apiKey: string): Promise<void> {
 
     return window.__foroGoogleMapsPromise;
 }
-
-const SA_PROVINCES = [
-  { value: '', label: 'Select province…' },
-  { value: 'Eastern Cape', label: 'Eastern Cape' },
-  { value: 'Free State', label: 'Free State' },
-  { value: 'Gauteng', label: 'Gauteng' },
-  { value: 'KwaZulu-Natal', label: 'KwaZulu-Natal' },
-  { value: 'Limpopo', label: 'Limpopo' },
-  { value: 'Mpumalanga', label: 'Mpumalanga' },
-  { value: 'Northern Cape', label: 'Northern Cape' },
-  { value: 'North West', label: 'North West' },
-  { value: 'Western Cape', label: 'Western Cape' },
-];
 
 function parseGooglePlace(place: any): Partial<CreateAddressDto> {
   const components = place?.address_components ?? [];
@@ -105,20 +96,11 @@ const initial: CreateCompanyDto = {
   notes: '',
 };
 
-const BUSINESS_TYPES = [
-  { value: '', label: 'Select type…' },
-  { value: 'sole_proprietorship', label: 'Sole Proprietorship' },
-  { value: 'partnership', label: 'Partnership' },
-  { value: 'llc', label: 'LLC' },
-  { value: 'corporation', label: 'Corporation' },
-  { value: 'other', label: 'Other' },
-];
-
 export function CompanyFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditMode = !!id;
-  
+
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
   const [form, setForm] = useState<CreateCompanyDto>(initial);
   const [addressLookup, setAddressLookup] = useState('');
@@ -300,7 +282,7 @@ export function CompanyFormPage() {
   const update = (key: keyof CreateCompanyDto, value: string | undefined) => {
     setForm((prev) => ({ ...prev, [key]: value ?? '' }));
   };
-  const updateAddressField = (key: keyof CreateAddressDto, value: string | boolean | undefined) => {
+  const updateAddressField = (key: keyof CreateAddressDto, value: string) => {
     setAddressForm((prev) => {
       const next = { ...prev, [key]: value };
       update('address', composeAddress(next));
@@ -310,8 +292,9 @@ export function CompanyFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) {
-      toast.error('Company name is required');
+    const validation = companySchema.safeParse(form);
+    if (!validation.success) {
+      toast.error(validation.error.issues[0]?.message ?? 'Please check your input');
       return;
     }
     setSaving(true);
@@ -367,8 +350,9 @@ export function CompanyFormPage() {
           }
         }
         if (includeBankingDetails && id) {
-          if (!bankingForm.bank_name?.trim() || !bankingForm.account_number?.trim()) {
-            throw new Error('Bank name and account number are required when adding banking details');
+          const bankValidation = bankingDetailsSchema.safeParse(bankingForm);
+          if (!bankValidation.success) {
+            throw new Error(bankValidation.error.issues[0]?.message ?? 'Banking details are invalid');
           }
           const bankingPayload: CreateBankingDetailsDto = {
             ...bankingForm,
@@ -419,8 +403,9 @@ export function CompanyFormPage() {
           });
         }
         if (includeBankingDetails && createdCompany.id) {
-          if (!bankingForm.bank_name?.trim() || !bankingForm.account_number?.trim()) {
-            throw new Error('Bank name and account number are required when adding banking details');
+          const bankValidation = bankingDetailsSchema.safeParse(bankingForm);
+          if (!bankValidation.success) {
+            throw new Error(bankValidation.error.issues[0]?.message ?? 'Banking details are invalid');
           }
           await BankingDetailsService.create({
             ...bankingForm,
@@ -445,11 +430,6 @@ export function CompanyFormPage() {
       setSaving(false);
     }
   };
-
-  const inputClass =
-    'mt-1 block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-800 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed';
-  const addressInputClass =
-    'mt-1 block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-800 dark:text-slate-100 transition-colors duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed';
 
   const hasNoBusiness = businessId == null;
 
@@ -497,391 +477,69 @@ export function CompanyFormPage() {
             </h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label htmlFor="name" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Company name *
-                </label>
-                <input
-                  id="name"
+                <AppInputLabeled
+                  label="Company name *"
                   type="text"
                   required
                   value={form.name}
                   onChange={(e) => update('name', e.target.value)}
                   disabled={saving}
                   placeholder="e.g. Acme Corporation"
-                  className={inputClass}
                 />
               </div>
               <div className="sm:col-span-2">
-                <label htmlFor="contact_person" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Contact person
-                </label>
-                <input
-                  id="contact_person"
+                <AppInputLabeled
+                  label="Contact person"
                   type="text"
                   value={form.contact_person ?? ''}
                   onChange={(e) => update('contact_person', e.target.value)}
                   disabled={saving}
                   placeholder="e.g. John Smith"
-                  className={inputClass}
                 />
               </div>
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={form.email ?? ''}
-                  onChange={(e) => update('email', e.target.value)}
-                  disabled={saving}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Phone
-                </label>
-                <input
-                  id="phone"
-                  type="text"
-                  value={form.phone ?? ''}
-                  onChange={(e) => update('phone', e.target.value)}
-                  disabled={saving}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="address_lookup" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Address lookup
-              </label>
-              <input
-                id="address_lookup"
-                ref={addressLookupRef}
-                type="text"
-                value={addressLookup}
-                onChange={(e) => setAddressLookup(e.target.value)}
+              <AppInputLabeled
+                label="Email"
+                type="email"
+                value={form.email ?? ''}
+                onChange={(e) => update('email', e.target.value)}
                 disabled={saving}
-                placeholder="Search address with Google Places"
-                className={addressInputClass}
               />
-              {mapsStatus === 'ready' && (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Select a suggestion to auto-fill the address.
-                </p>
-              )}
-              {mapsStatus === 'failed' && (
-                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                  Google Places unavailable. Enter address manually below.
-                </p>
-              )}
+              <AppInputLabeled
+                label="Phone"
+                type="text"
+                value={form.phone ?? ''}
+                onChange={(e) => update('phone', e.target.value)}
+                disabled={saving}
+              />
             </div>
-            <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label htmlFor="street_address" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Street address
-                </label>
-                <input
-                  id="street_address"
-                  type="text"
-                  value={addressForm.street_address ?? ''}
-                  onChange={(e) => updateAddressField('street_address', e.target.value)}
-                  disabled={saving}
-                  placeholder="123 Main Street"
-                  className={addressInputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="suburb" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Suburb
-                </label>
-                <input
-                  id="suburb"
-                  type="text"
-                  value={addressForm.suburb ?? ''}
-                  onChange={(e) => updateAddressField('suburb', e.target.value)}
-                  disabled={saving}
-                  className={addressInputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="city" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  City
-                </label>
-                <input
-                  id="city"
-                  type="text"
-                  value={addressForm.city ?? ''}
-                  onChange={(e) => updateAddressField('city', e.target.value)}
-                  disabled={saving}
-                  className={addressInputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="province" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Province
-                </label>
-                <select
-                  id="province"
-                  value={addressForm.province ?? ''}
-                  onChange={(e) => updateAddressField('province', e.target.value)}
-                  disabled={saving}
-                  className={addressInputClass}
-                >
-                  {SA_PROVINCES.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="postal_code" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Postal code
-                </label>
-                <input
-                  id="postal_code"
-                  type="text"
-                  value={addressForm.postal_code ?? ''}
-                  onChange={(e) => updateAddressField('postal_code', e.target.value)}
-                  disabled={saving}
-                  placeholder="0001"
-                  className={addressInputClass}
-                />
-              </div>
-            </div>
+            <CompanyAddressFields
+              addressLookup={addressLookup}
+              onAddressLookupChange={setAddressLookup}
+              addressLookupRef={addressLookupRef}
+              mapsStatus={mapsStatus}
+              addressForm={addressForm}
+              onAddressFieldChange={updateAddressField}
+              disabled={saving}
+            />
           </section>
 
-          {/* Business credentials */}
+          {/* Business credentials + Banking */}
           <section className="space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Business credentials
             </h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="business_type" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Business type
-                </label>
-                <select
-                  id="business_type"
-                  value={form.business_type ?? ''}
-                  onChange={(e) => update('business_type', e.target.value)}
-                  disabled={saving}
-                  className={inputClass}
-                >
-                  {BUSINESS_TYPES.map((opt) => (
-                    <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="tax_id" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Tax ID
-                </label>
-                <input
-                  id="tax_id"
-                  type="text"
-                  value={form.tax_id ?? ''}
-                  onChange={(e) => update('tax_id', e.target.value)}
-                  disabled={saving}
-                  placeholder="EIN, SSN, or local tax number"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="registration_number" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Registration number
-                </label>
-                <input
-                  id="registration_number"
-                  type="text"
-                  value={form.registration_number ?? ''}
-                  onChange={(e) => update('registration_number', e.target.value)}
-                  disabled={saving}
-                  placeholder="Official company registration number"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="vat_number" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  VAT number
-                </label>
-                <input
-                  id="vat_number"
-                  type="text"
-                  value={form.vat_number ?? ''}
-                  onChange={(e) => update('vat_number', e.target.value)}
-                  disabled={saving}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="industry" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Industry
-                </label>
-                <input
-                  id="industry"
-                  type="text"
-                  value={form.industry ?? ''}
-                  onChange={(e) => update('industry', e.target.value)}
-                  disabled={saving}
-                  placeholder="e.g. Retail, Manufacturing"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="website" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Website
-                </label>
-                <input
-                  id="website"
-                  type="url"
-                  value={form.website ?? ''}
-                  onChange={(e) => update('website', e.target.value)}
-                  disabled={saving}
-                  placeholder="https://"
-                  className={inputClass}
-                />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                Notes
-              </label>
-              <textarea
-                id="notes"
-                rows={4}
-                value={form.notes ?? ''}
-                onChange={(e) => update('notes', e.target.value)}
-                disabled={saving}
-                placeholder="Additional notes about this company"
-                className={inputClass}
-              />
-            </div>
-
-            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={includeBankingDetails}
-                  onChange={(e) => setIncludeBankingDetails(e.target.checked)}
-                  disabled={saving}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                Add banking details (optional)
-              </label>
-
-              {includeBankingDetails && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Bank name *
-                    </label>
-                    <select
-                      value={bankingForm.bank_name ?? ''}
-                      onChange={(e) =>
-                        setBankingForm((prev) => {
-                          const selectedBank = SA_BANKS.find((b) => b.name === e.target.value);
-                          return {
-                            ...prev,
-                            bank_name: e.target.value,
-                            branch_code: selectedBank?.branchCode ?? prev.branch_code,
-                          };
-                        })
-                      }
-                      disabled={saving}
-                      className={inputClass}
-                    >
-                      <option value="">Select bank…</option>
-                      {SA_BANKS.map((bank) => (
-                        <option key={bank.name} value={bank.name}>
-                          {bank.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Account number *
-                    </label>
-                    <input
-                      type="text"
-                      value={bankingForm.account_number ?? ''}
-                      onChange={(e) =>
-                        setBankingForm((prev) => ({ ...prev, account_number: e.target.value }))
-                      }
-                      disabled={saving}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Account holder
-                    </label>
-                    <input
-                      type="text"
-                      value={bankingForm.account_holder ?? ''}
-                      onChange={(e) =>
-                        setBankingForm((prev) => ({ ...prev, account_holder: e.target.value }))
-                      }
-                      disabled={saving}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Account type
-                    </label>
-                    <select
-                      value={bankingForm.account_type ?? 'cheque'}
-                      onChange={(e) =>
-                        setBankingForm((prev) => ({
-                          ...prev,
-                          account_type: e.target.value as CreateBankingDetailsDto['account_type'],
-                        }))
-                      }
-                      disabled={saving}
-                      className={inputClass}
-                    >
-                      {ACCOUNT_TYPES.map((type) => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Branch code
-                    </label>
-                    <input
-                      type="text"
-                      value={bankingForm.branch_code ?? ''}
-                      onChange={(e) =>
-                        setBankingForm((prev) => ({ ...prev, branch_code: e.target.value }))
-                      }
-                      disabled={saving}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      SWIFT code
-                    </label>
-                    <input
-                      type="text"
-                      value={bankingForm.swift_code ?? ''}
-                      onChange={(e) =>
-                        setBankingForm((prev) => ({ ...prev, swift_code: e.target.value }))
-                      }
-                      disabled={saving}
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+            <CompanyCredentialsFields
+              form={form}
+              onChange={update}
+              disabled={saving}
+            />
+            <CompanyBankingFields
+              includeBankingDetails={includeBankingDetails}
+              onToggle={setIncludeBankingDetails}
+              bankingForm={bankingForm}
+              onBankingFormChange={(updates) => setBankingForm((prev) => ({ ...prev, ...updates }))}
+              disabled={saving}
+            />
           </section>
         </div>
 

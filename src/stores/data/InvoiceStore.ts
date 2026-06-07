@@ -4,6 +4,7 @@ import InvoiceItemService from '../../services/invoiceItemService';
 import QuotationService from '../../services/quotationService';
 import { useBusinessStore } from './BusinessStore';
 import type { Invoice, CreateInvoiceDto, InvoiceItem } from '../../types/invoice';
+import { computeNextDocumentNumber } from '../../utils/documentNumber';
 
 export type InvoiceLineInput = Omit<InvoiceItem, 'id' | 'invoice_id'> & { item_id?: number };
 
@@ -82,16 +83,16 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const where: Record<string, unknown> = { document_kind: 'invoice' };
     if (businessId != null) where.business_id = businessId;
-    const count = await InvoiceService.count(where);
-    return String(count + 1).padStart(4, '0');
+    const rows = await InvoiceService.findAll({ where });
+    return computeNextDocumentNumber(rows.map((r) => r.invoice_number ?? ''));
   },
 
   peekNextCreditNoteNumber: async () => {
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const where: Record<string, unknown> = { document_kind: 'credit_note' };
     if (businessId != null) where.business_id = businessId;
-    const count = await InvoiceService.count(where);
-    return `CN-${String(count + 1).padStart(4, '0')}`;
+    const rows = await InvoiceService.findAll({ where });
+    return computeNextDocumentNumber(rows.map((r) => r.invoice_number ?? ''), 'CN-');
   },
 
   createInvoiceWithLines: async (header, lines) => {

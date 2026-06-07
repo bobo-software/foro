@@ -8,19 +8,10 @@ import StorageService from '@/services/storageService';
 import type { CreateBusinessDto } from '@/types/business';
 import type { Address, CreateAddressDto } from '@/types/address';
 import toast from 'react-hot-toast';
-
-const SA_PROVINCES = [
-  { value: '', label: 'Select province…' },
-  { value: 'Eastern Cape', label: 'Eastern Cape' },
-  { value: 'Free State', label: 'Free State' },
-  { value: 'Gauteng', label: 'Gauteng' },
-  { value: 'KwaZulu-Natal', label: 'KwaZulu-Natal' },
-  { value: 'Limpopo', label: 'Limpopo' },
-  { value: 'Mpumalanga', label: 'Mpumalanga' },
-  { value: 'Northern Cape', label: 'Northern Cape' },
-  { value: 'North West', label: 'North West' },
-  { value: 'Western Cape', label: 'Western Cape' },
-];
+import { companySchema } from '@/validation/schemas';
+import AppLabledInput from '@/components/forms/AppLabledInput';
+import { BusinessAddressSection } from './BusinessAddressSection';
+import { BusinessCredentialsSection } from './BusinessCredentialsSection';
 
 export function BusinessSettingsTab() {
   const currentBusiness = useBusinessStore((s) => s.currentBusiness);
@@ -36,7 +27,6 @@ export function BusinessSettingsTab() {
     registration_number: '',
   });
 
-  // Address state
   const [existingAddress, setExistingAddress] = useState<Address | null>(null);
   const [addressForm, setAddressForm] = useState<CreateAddressDto>({
     company_id: currentBusiness?.id,
@@ -55,14 +45,12 @@ export function BusinessSettingsTab() {
 
   const [saving, setSaving] = useState(false);
 
-  // Logo state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [hasExistingLogo, setHasExistingLogo] = useState(false);
 
-  // Load business data into form
   useEffect(() => {
     if (currentBusiness) {
       setForm({
@@ -74,7 +62,6 @@ export function BusinessSettingsTab() {
         registration_number: currentBusiness.registration_number || '',
       });
 
-      // Load existing logo — logo_url stores the file path, we get a fresh presigned URL
       if (currentBusiness.logo_url) {
         StorageService.getFileDownloadUrl(currentBusiness.logo_url).then((url) => {
           if (url) {
@@ -87,7 +74,6 @@ export function BusinessSettingsTab() {
         });
       }
 
-      // Fetch address for this company
       if (currentBusiness.id) {
         AddressService.findByCompanyId(currentBusiness.id).then((addresses) => {
           if (addresses.length > 0) {
@@ -119,7 +105,7 @@ export function BusinessSettingsTab() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
-  const handleAddressChange = useCallback((field: keyof CreateAddressDto, value: string | boolean) => {
+  const handleAddressChange = useCallback((field: string, value: string) => {
     setAddressForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
@@ -127,22 +113,18 @@ export function BusinessSettingsTab() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       toast.error('Please select a PNG, JPG, SVG, or WebP image');
       return;
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Logo must be smaller than 5MB');
       return;
     }
 
     setLogoFile(file);
-
-    // Create preview
     const reader = new FileReader();
     reader.onload = (ev) => {
       setLogoPreview(ev.target?.result as string);
@@ -155,28 +137,16 @@ export function BusinessSettingsTab() {
 
     setUploadingLogo(true);
     try {
-      // Upload file — returns the stored file path
       const { filePath } = await StorageService.uploadCompanyLogo(currentBusiness.id, logoFile);
-
-      // Save the file PATH (not URL) to the business record
       await BusinessService.update(currentBusiness.id, { logo_url: filePath });
-
-      // Use the selected file directly for instant preview
       const objectUrl = URL.createObjectURL(logoFile);
       setLogoPreview(objectUrl);
       setLogoFile(null);
       setHasExistingLogo(true);
       toast.success('Logo uploaded successfully');
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-
-      // Refresh business data
+      if (fileInputRef.current) fileInputRef.current.value = '';
       const updated = await BusinessService.getById(currentBusiness.id);
-      if (updated) {
-        setCurrentBusiness(updated);
-      }
+      if (updated) setCurrentBusiness(updated);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to upload logo');
     } finally {
@@ -186,25 +156,15 @@ export function BusinessSettingsTab() {
 
   const handleLogoRemove = useCallback(async () => {
     if (!currentBusiness?.id) return;
-
     try {
-      // Clear the logo_url on the business record
       await BusinessService.update(currentBusiness.id, { logo_url: '' });
       setLogoPreview(null);
       setLogoFile(null);
       setHasExistingLogo(false);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-
+      if (fileInputRef.current) fileInputRef.current.value = '';
       toast.success('Logo removed');
-
-      // Refresh business data
       const updated = await BusinessService.getById(currentBusiness.id);
-      if (updated) {
-        setCurrentBusiness(updated);
-      }
+      if (updated) setCurrentBusiness(updated);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to remove logo');
     }
@@ -212,8 +172,9 @@ export function BusinessSettingsTab() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) {
-      toast.error('Business name is required');
+    const validation = companySchema.safeParse(form);
+    if (!validation.success) {
+      toast.error(validation.error.issues[0]?.message ?? 'Please check your input');
       return;
     }
     if (!currentBusiness?.id) {
@@ -223,7 +184,6 @@ export function BusinessSettingsTab() {
 
     setSaving(true);
     try {
-      // Update business details
       await BusinessService.update(currentBusiness.id, {
         name: form.name.trim(),
         address: form.address?.trim() || undefined,
@@ -233,7 +193,6 @@ export function BusinessSettingsTab() {
         registration_number: form.registration_number?.trim() || undefined,
       });
 
-      // Save address (create or update)
       const addressData: CreateAddressDto = {
         company_id: currentBusiness.id,
         label: addressForm.label?.trim() || 'Business Address',
@@ -249,7 +208,7 @@ export function BusinessSettingsTab() {
         address_type: 'physical',
       };
 
-      const hasAddressData = addressData.street_address || addressData.suburb || 
+      const hasAddressData = addressData.street_address || addressData.suburb ||
         addressData.town || addressData.city || addressData.province || addressData.postal_code;
 
       if (hasAddressData && currentBusiness.id) {
@@ -262,22 +221,14 @@ export function BusinessSettingsTab() {
       }
 
       toast.success('Business details updated');
-
-      // Refresh business data
       const updated = await BusinessService.getById(currentBusiness.id);
-      if (updated) {
-        setCurrentBusiness(updated);
-      }
+      if (updated) setCurrentBusiness(updated);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update business');
     } finally {
       setSaving(false);
     }
   };
-
-  const inputClass =
-    'w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors';
-  const labelClass = 'block mb-1 text-sm font-medium text-slate-700 dark:text-slate-300';
 
   if (loading) {
     return (
@@ -310,14 +261,9 @@ export function BusinessSettingsTab() {
             This logo will appear on your invoices, quotations, and other documents. Recommended size: 300x100px. Max 5MB.
           </p>
           <div className="flex items-start gap-6">
-            {/* Logo Preview */}
             <div className="shrink-0 w-48 h-28 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 flex items-center justify-center overflow-hidden">
               {logoPreview ? (
-                <img
-                  src={logoPreview}
-                  alt="Company logo"
-                  className="max-w-full max-h-full object-contain p-2"
-                />
+                <img src={logoPreview} alt="Company logo" className="max-w-full max-h-full object-contain p-2" />
               ) : (
                 <div className="text-center text-slate-400 dark:text-slate-500">
                   <LuImage className="w-8 h-8 mx-auto mb-1" />
@@ -325,8 +271,6 @@ export function BusinessSettingsTab() {
                 </div>
               )}
             </div>
-
-            {/* Upload Controls */}
             <div className="flex flex-col gap-2">
               <input
                 ref={fileInputRef}
@@ -344,12 +288,10 @@ export function BusinessSettingsTab() {
                 <LuUpload className="w-4 h-4" />
                 {hasExistingLogo ? 'Change Logo' : 'Select Logo'}
               </button>
-
-              {/* Upload button - shown when a new file is selected */}
               {logoFile && (
                 <button
                   type="button"
-                  onClick={handleLogoUpload}
+                  onClick={() => void handleLogoUpload()}
                   disabled={uploadingLogo}
                   className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -369,19 +311,16 @@ export function BusinessSettingsTab() {
                   )}
                 </button>
               )}
-
-              {/* Remove button - shown when a logo exists */}
               {hasExistingLogo && !logoFile && (
                 <button
                   type="button"
-                  onClick={handleLogoRemove}
+                  onClick={() => void handleLogoRemove()}
                   className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-slate-800 border border-red-300 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                 >
                   <LuTrash2 className="w-4 h-4" />
                   Remove Logo
                 </button>
               )}
-
               {logoFile && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Selected: {logoFile.name} ({(logoFile.size / 1024).toFixed(1)}KB)
@@ -395,151 +334,44 @@ export function BusinessSettingsTab() {
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label htmlFor="name" className={labelClass}>Business Name *</label>
-              <input
-                id="name"
+              <AppLabledInput
+                id="biz-name"
+                label="Business Name *"
                 type="text"
-                required
                 value={form.name}
                 onChange={(e) => handleChange('name', e.target.value)}
-                className={inputClass}
+                required
               />
             </div>
-            <div>
-              <label htmlFor="phone" className={labelClass}>Phone</label>
-              <input
-                id="phone"
-                type="tel"
-                value={form.phone ?? ''}
-                onChange={(e) => handleChange('phone', e.target.value)}
-                className={inputClass}
-              />
-            </div>
+            <AppLabledInput
+              id="biz-phone"
+              label="Phone"
+              type="tel"
+              value={form.phone ?? ''}
+              onChange={(e) => handleChange('phone', e.target.value)}
+              placeholder="+27 11 123 4567"
+            />
           </div>
         </div>
 
         {/* Physical Address */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-            Physical Address
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label htmlFor="street_address" className={labelClass}>Street Address</label>
-              <input
-                id="street_address"
-                type="text"
-                value={addressForm.street_address ?? ''}
-                onChange={(e) => handleAddressChange('street_address', e.target.value)}
-                className={inputClass}
-                placeholder="123 Main Street"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="street_address_2" className={labelClass}>Street Address 2</label>
-              <input
-                id="street_address_2"
-                type="text"
-                value={addressForm.street_address_2 ?? ''}
-                onChange={(e) => handleAddressChange('street_address_2', e.target.value)}
-                className={inputClass}
-                placeholder="Suite, Unit, Building, Floor, etc."
-              />
-            </div>
-            <div>
-              <label htmlFor="suburb" className={labelClass}>Suburb</label>
-              <input
-                id="suburb"
-                type="text"
-                value={addressForm.suburb ?? ''}
-                onChange={(e) => handleAddressChange('suburb', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="city" className={labelClass}>City</label>
-              <input
-                id="city"
-                type="text"
-                value={addressForm.city ?? ''}
-                onChange={(e) => handleAddressChange('city', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="province" className={labelClass}>Province</label>
-              <select
-                id="province"
-                value={addressForm.province ?? ''}
-                onChange={(e) => handleAddressChange('province', e.target.value)}
-                className={inputClass}
-              >
-                {SA_PROVINCES.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="postal_code" className={labelClass}>Postal Code</label>
-              <input
-                id="postal_code"
-                type="text"
-                value={addressForm.postal_code ?? ''}
-                onChange={(e) => handleAddressChange('postal_code', e.target.value)}
-                className={inputClass}
-                placeholder="0001"
-              />
-            </div>
-            <div>
-              <label htmlFor="country" className={labelClass}>Country</label>
-              <input
-                id="country"
-                type="text"
-                value={addressForm.country ?? 'South Africa'}
-                onChange={(e) => handleAddressChange('country', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Physical Address</h3>
+          <BusinessAddressSection
+            values={addressForm}
+            onChange={handleAddressChange}
+            idPrefix="biz"
+          />
         </div>
 
         {/* Business Credentials */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-            Business Credentials
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label htmlFor="tax_id" className={labelClass}>Tax ID</label>
-              <input
-                id="tax_id"
-                type="text"
-                value={form.tax_id ?? ''}
-                onChange={(e) => handleChange('tax_id', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="registration_number" className={labelClass}>Registration Number</label>
-              <input
-                id="registration_number"
-                type="text"
-                value={form.registration_number ?? ''}
-                onChange={(e) => handleChange('registration_number', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="vat_number" className={labelClass}>VAT Number</label>
-              <input
-                id="vat_number"
-                type="text"
-                value={form.vat_number ?? ''}
-                onChange={(e) => handleChange('vat_number', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Business Credentials</h3>
+          <BusinessCredentialsSection
+            values={form}
+            onChange={(field, value) => handleChange(field as keyof CreateBusinessDto, value)}
+            idPrefix="biz"
+          />
         </div>
 
         {/* Actions */}
@@ -593,8 +425,9 @@ function CreateBusinessForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) {
-      toast.error('Business name is required');
+    const validation = companySchema.safeParse(form);
+    if (!validation.success) {
+      toast.error(validation.error.issues[0]?.message ?? 'Please check your input');
       return;
     }
     if (!sessionUser) {
@@ -604,7 +437,6 @@ function CreateBusinessForm() {
 
     setSaving(true);
     try {
-      // Build a flat address string from the structured fields
       const addressParts = [
         addressForm.street_address,
         addressForm.street_address_2,
@@ -624,10 +456,8 @@ function CreateBusinessForm() {
         registration_number: form.registration_number.trim() || undefined,
       });
 
-      // Link the new business to the current user
       await BusinessService.linkUserToBusiness(Number(sessionUser.id), business.id!);
 
-      // Save structured address if any fields were filled
       const hasAddressData = addressForm.street_address || addressForm.suburb ||
         addressForm.town || addressForm.city || addressForm.province || addressForm.postal_code;
 
@@ -652,7 +482,6 @@ function CreateBusinessForm() {
         }
       }
 
-      // Refresh the store so the edit form appears
       await fetchUserBusinesses(Number(sessionUser.id));
       toast.success('Business created successfully');
     } catch (err) {
@@ -661,10 +490,6 @@ function CreateBusinessForm() {
       setSaving(false);
     }
   };
-
-  const inputClass =
-    'w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors';
-  const labelClass = 'block mb-1 text-sm font-medium text-slate-700 dark:text-slate-300';
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
@@ -679,152 +504,44 @@ function CreateBusinessForm() {
         {/* Basic Info */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label htmlFor="create-name" className={labelClass}>Business Name *</label>
-            <input
+            <AppLabledInput
               id="create-name"
+              label="Business Name *"
               type="text"
-              required
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
-              className={inputClass}
+              required
               placeholder="Acme Solutions (Pty) Ltd"
             />
           </div>
-          <div>
-            <label htmlFor="create-phone" className={labelClass}>Phone</label>
-            <input
-              id="create-phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => handleChange('phone', e.target.value)}
-              className={inputClass}
-              placeholder="+27 11 123 4567"
-            />
-          </div>
+          <AppLabledInput
+            id="create-phone"
+            label="Phone"
+            type="tel"
+            value={form.phone}
+            onChange={(e) => handleChange('phone', e.target.value)}
+            placeholder="+27 11 123 4567"
+          />
         </div>
 
         {/* Physical Address */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-            Physical Address
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label htmlFor="create-street" className={labelClass}>Street Address</label>
-              <input
-                id="create-street"
-                type="text"
-                value={addressForm.street_address}
-                onChange={(e) => handleAddressChange('street_address', e.target.value)}
-                className={inputClass}
-                placeholder="123 Main Street"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="create-street2" className={labelClass}>Street Address 2</label>
-              <input
-                id="create-street2"
-                type="text"
-                value={addressForm.street_address_2}
-                onChange={(e) => handleAddressChange('street_address_2', e.target.value)}
-                className={inputClass}
-                placeholder="Suite, Unit, Building, Floor, etc."
-              />
-            </div>
-            <div>
-              <label htmlFor="create-suburb" className={labelClass}>Suburb</label>
-              <input
-                id="create-suburb"
-                type="text"
-                value={addressForm.suburb}
-                onChange={(e) => handleAddressChange('suburb', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="create-city" className={labelClass}>City</label>
-              <input
-                id="create-city"
-                type="text"
-                value={addressForm.city}
-                onChange={(e) => handleAddressChange('city', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="create-province" className={labelClass}>Province</label>
-              <select
-                id="create-province"
-                value={addressForm.province}
-                onChange={(e) => handleAddressChange('province', e.target.value)}
-                className={inputClass}
-              >
-                {SA_PROVINCES.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="create-postal" className={labelClass}>Postal Code</label>
-              <input
-                id="create-postal"
-                type="text"
-                value={addressForm.postal_code}
-                onChange={(e) => handleAddressChange('postal_code', e.target.value)}
-                className={inputClass}
-                placeholder="0001"
-              />
-            </div>
-            <div>
-              <label htmlFor="create-country" className={labelClass}>Country</label>
-              <input
-                id="create-country"
-                type="text"
-                value={addressForm.country}
-                onChange={(e) => handleAddressChange('country', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Physical Address</h3>
+          <BusinessAddressSection
+            values={addressForm}
+            onChange={handleAddressChange}
+            idPrefix="create"
+          />
         </div>
 
         {/* Business Credentials */}
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-            Business Credentials
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label htmlFor="create-tax" className={labelClass}>Tax ID</label>
-              <input
-                id="create-tax"
-                type="text"
-                value={form.tax_id}
-                onChange={(e) => handleChange('tax_id', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="create-reg" className={labelClass}>Registration Number</label>
-              <input
-                id="create-reg"
-                type="text"
-                value={form.registration_number}
-                onChange={(e) => handleChange('registration_number', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="create-vat" className={labelClass}>VAT Number</label>
-              <input
-                id="create-vat"
-                type="text"
-                value={form.vat_number}
-                onChange={(e) => handleChange('vat_number', e.target.value)}
-                className={inputClass}
-              />
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Business Credentials</h3>
+          <BusinessCredentialsSection
+            values={form}
+            onChange={handleChange}
+            idPrefix="create"
+          />
         </div>
 
         {/* Actions */}

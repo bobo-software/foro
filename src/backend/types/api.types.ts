@@ -32,7 +32,7 @@ export interface PaginatedResponse<T> {
  * Query result from raw SQL
  */
 export interface QueryResult {
-  rows: any[];
+  rows: unknown[];
   rowCount: number;
   columns: string[];
   executionTime: number;

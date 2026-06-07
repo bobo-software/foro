@@ -3,6 +3,7 @@ import type { Project } from '@/types/project';
 import type { ProjectTask } from '@/types/task';
 import type { ProjectTimeEntry } from '@/types/timeEntry';
 import { localDateISO } from '@/utils/localDateISO';
+import { withIds } from '@/utils/withIds';
 
 function isOpenTask(status: string | undefined): boolean {
   return String(status ?? 'todo') !== 'done';
@@ -28,7 +29,7 @@ export function ProjectInsightsCard({
 }) {
   const todayIso = localDateISO();
 
-  const withId = useMemo(() => tasks.filter((t) => t.id != null), [tasks]);
+  const withId = useMemo(() => withIds(tasks), [tasks]);
   const canExportTasks = withId.length > 0 && onExportTasksCsv != null;
   const canExportTime = timeEntries.length > 0 && onExportTimeEntriesCsv != null;
 
