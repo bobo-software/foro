@@ -2,7 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import BankingDetailsService from '@/services/bankingDetailsService';
 import type { BankingDetails, CreateBankingDetailsDto } from '@/types/bankingDetails';
-import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';
+import { ACCOUNT_TYPES } from '@/types/bankingDetails';
+import { useBankStore } from '@/stores/data/BankStore';
+import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
 import toast from 'react-hot-toast';
 import { bankingDetailsSchema } from '@/validation/schemas';
 
@@ -17,6 +19,8 @@ function getBankingErrorMessage(err: unknown, fallback: string): string {
 export function BankingSettingsTab() {
   const currentBusiness = useBusinessStore((s) => s.currentBusiness);
   const loading = useBusinessStore((s) => s.loading);
+  const banks = useBankStore((s) => s.banks);
+  const fetchBanks = useBankStore((s) => s.fetchBanks);
 
   const [existingBankingDetails, setExistingBankingDetails] = useState<BankingDetails | null>(null);
   const [bankingForm, setBankingForm] = useState<CreateBankingDetailsDto>({
@@ -34,6 +38,10 @@ export function BankingSettingsTab() {
   });
 
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void fetchBanks();
+  }, [fetchBanks]);
 
   // Fetch existing banking details
   useEffect(() => {
@@ -68,13 +76,13 @@ export function BankingSettingsTab() {
 
   // Auto-fill branch code when bank is selected
   const handleBankSelect = useCallback((bankName: string) => {
-    const selectedBank = SA_BANKS.find(b => b.name === bankName);
+    const selectedBank = banks.find((b) => b.name === bankName);
     setBankingForm((prev) => ({
       ...prev,
       bank_name: bankName,
-      branch_code: selectedBank?.branchCode ?? prev.branch_code,
+      branch_code: selectedBank?.code ?? prev.branch_code,
     }));
-  }, []);
+  }, [banks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,21 +162,15 @@ export function BankingSettingsTab() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label htmlFor="bank_name" className={labelClass}>Bank Name *</label>
-            <select
-              id="bank_name"
-              value={bankingForm.bank_name ?? ''}
-              onChange={(e) => handleBankSelect(e.target.value)}
-              className={inputClass}
-              required
-            >
-              <option value="">Select bank…</option>
-              {SA_BANKS.map((bank) => (
-                <option key={bank.name} value={bank.name}>{bank.name}</option>
-              ))}
-            </select>
-          </div>
+          <AppLabeledSelectInput
+            label="Bank Name *"
+            id="bank_name"
+            value={bankingForm.bank_name ?? ''}
+            onChange={(e) => handleBankSelect(e.target.value)}
+            required
+            placeholder="Select bank…"
+            options={banks.map((bank) => ({ value: bank.name, label: bank.name }))}
+          />
           <div>
             <label htmlFor="account_holder" className={labelClass}>Account Holder</label>
             <input

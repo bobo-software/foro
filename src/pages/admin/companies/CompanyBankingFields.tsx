@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import type { CreateBankingDetailsDto } from '@/types/bankingDetails';
-import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';
+import { ACCOUNT_TYPES } from '@/types/bankingDetails';
+import { useBankStore } from '@/stores/data/BankStore';
 import AppInputLabeled from '@/components/forms/AppLabledInput';
 import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
 
@@ -18,6 +20,13 @@ export function CompanyBankingFields({
   onBankingFormChange,
   disabled,
 }: CompanyBankingFieldsProps) {
+  const banks = useBankStore((s) => s.banks);
+  const fetchBanks = useBankStore((s) => s.fetchBanks);
+
+  useEffect(() => {
+    void fetchBanks();
+  }, [fetchBanks]);
+
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4">
       <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -37,14 +46,14 @@ export function CompanyBankingFields({
             label="Bank name *"
             value={bankingForm.bank_name ?? ''}
             onChange={(e) => {
-              const selectedBank = SA_BANKS.find((b) => b.name === e.target.value);
+              const selectedBank = banks.find((b) => b.name === e.target.value);
               onBankingFormChange({
                 bank_name: e.target.value,
-                branch_code: selectedBank?.branchCode ?? bankingForm.branch_code,
+                branch_code: selectedBank?.code ?? bankingForm.branch_code,
               });
             }}
             disabled={disabled}
-            options={SA_BANKS.map((b) => ({ value: b.name, label: b.name }))}
+            options={banks.map((b) => ({ value: b.name, label: b.name }))}
             placeholder="Select bank…"
           />
           <AppInputLabeled

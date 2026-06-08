@@ -57,23 +57,6 @@ export interface CreateBankingDetailsDto {
 }
 
 /**
- * Common South African banks with their universal branch codes
- */
-export const SA_BANKS = [
-  { name: 'ABSA Bank', branchCode: '632005' },
-  { name: 'African Bank', branchCode: '430000' },
-  { name: 'Bidvest Bank', branchCode: '462005' },
-  { name: 'Capitec Bank', branchCode: '470010' },
-  { name: 'Discovery Bank', branchCode: '679000' },
-  { name: 'First National Bank (FNB)', branchCode: '250655' },
-  { name: 'Investec Bank', branchCode: '580105' },
-  { name: 'Nedbank', branchCode: '198765' },
-  { name: 'Standard Bank', branchCode: '051001' },
-  { name: 'TymeBank', branchCode: '678910' },
-  { name: 'Other', branchCode: '' },
-] as const;
-
-/**
  * Account types available in South Africa
  */
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [

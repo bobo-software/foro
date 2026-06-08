@@ -9,7 +9,8 @@ import StorageService from '@/services/storageService';
 import type { Company, CreateCompanyDto } from '@/types/company';
 import type { Address, CreateAddressDto } from '@/types/address';
 import type { BankingDetails, CreateBankingDetailsDto } from '@/types/bankingDetails';
-import { SA_BANKS, ACCOUNT_TYPES } from '@/types/bankingDetails';
+import { ACCOUNT_TYPES } from '@/types/bankingDetails';
+import { useBankStore } from '@/stores/data/BankStore';
 import { AppButton, DeleteConfirmationModal } from '@/components/ComponentsIndex';
 import type { ConfirmationMode } from '@/components/modals/DeleteConfirmationModal';
 import toast from 'react-hot-toast';
@@ -35,6 +36,8 @@ interface CompanyEditTabProps {
 
 export function CompanyEditTab({ company, onCompanyUpdate, onCompanyDelete }: CompanyEditTabProps) {
   const navigate = useNavigate();
+  const banks = useBankStore((s) => s.banks);
+  const fetchBanks = useBankStore((s) => s.fetchBanks);
   const [form, setForm] = useState<CreateCompanyDto>({
     name: company.name,
     email: company.email ?? '',
@@ -96,6 +99,10 @@ export function CompanyEditTab({ company, onCompanyUpdate, onCompanyDelete }: Co
   const [deleteConfirmationMode, setDeleteConfirmationMode] = useState<ConfirmationMode>('button');
   const [deleting, setDeleting] = useState(false);
   const [relatedDataCount, setRelatedDataCount] = useState<{ contacts: number }>({ contacts: 0 });
+
+  useEffect(() => {
+    void fetchBanks();
+  }, [fetchBanks]);
 
   // Load existing logo
   useEffect(() => {
@@ -182,13 +189,13 @@ export function CompanyEditTab({ company, onCompanyUpdate, onCompanyDelete }: Co
 
   // Auto-fill branch code when bank is selected
   const handleBankSelect = useCallback((bankName: string) => {
-    const selectedBank = SA_BANKS.find(b => b.name === bankName);
+    const selectedBank = banks.find((b) => b.name === bankName);
     setBankingForm((prev) => ({
       ...prev,
       bank_name: bankName,
-      branch_code: selectedBank?.branchCode ?? prev.branch_code,
+      branch_code: selectedBank?.code ?? prev.branch_code,
     }));
-  }, []);
+  }, [banks]);
 
   const handleLogoSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -666,7 +673,7 @@ export function CompanyEditTab({ company, onCompanyUpdate, onCompanyDelete }: Co
               value={bankingForm.bank_name ?? ''}
               onChange={(e) => handleBankSelect(e.target.value)}
               disabled={saving}
-              options={[{ value: '', label: 'Select bank…' }, ...SA_BANKS.map((b) => ({ value: b.name, label: b.name }))]}
+              options={[{ value: '', label: 'Select bank…' }, ...banks.map((b) => ({ value: b.name, label: b.name }))]}
             />
             <AppInputLabeled
               label="Account holder"

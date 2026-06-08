@@ -12,4 +12,5 @@ export { useProjectStore } from './data/ProjectStore';
 export { useDashboardStore } from './data/DashboardStore';
 export { useBusinessDocumentContextStore } from './data/BusinessDocumentContextStore';
 export { useTeamStore } from './data/TeamStore';
+export { useBankStore } from './data/BankStore';
 export { default as useThemeStore } from './state/ThemeStore';
