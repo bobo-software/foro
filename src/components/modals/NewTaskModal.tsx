@@ -7,14 +7,16 @@ import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
 import AppLabledAutocomplete from '@/components/forms/AppLabledAutocomplete';
 import ProjectService from '@/services/projectService';
 import TaskService from '@/services/taskService';
+import TaskChecklistService from '@/services/taskChecklistService';
 import type { Project } from '@/types/project';
 import type { ProjectTask, ProjectTaskPriority, ProjectTaskStatus } from '@/types/task';
 import type { TaskCategory } from '@/types/taskCategory';
 import { DEFAULT_TASK_CATEGORIES } from '@/types/taskCategory';
+import { DraftChecklistSection, type DraftChecklistItem } from '@/components/tasks/DraftChecklistSection';
 
-const PRIORITY_LABELS = ['Low', 'Normal', 'High', 'Urgent'];
-const PRIORITY_VALUE: Record<string, ProjectTaskPriority> = {
-  Low: 'low', Normal: 'normal', High: 'high', Urgent: 'urgent',
+const PRIORITY_LABELS = ['None', 'Low', 'Normal', 'High', 'Urgent'];
+const PRIORITY_VALUE: Record<string, ProjectTaskPriority | null> = {
+  None: null, Low: 'low', Normal: 'normal', High: 'high', Urgent: 'urgent',
 };
 
 export interface NewTaskModalProps {
@@ -46,9 +48,10 @@ export function NewTaskModal({
   const [title, setTitle] = useState('');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [statusLabel, setStatusLabel] = useState('');
-  const [priorityLabel, setPriorityLabel] = useState('Normal');
+  const [priorityLabel, setPriorityLabel] = useState('None');
   const [dueOn, setDueOn] = useState('');
   const [description, setDescription] = useState('');
+  const [checklistItems, setChecklistItems] = useState<DraftChecklistItem[]>([]);
 
   // Build status options from dynamic categories or static defaults
   const statusOptions = useMemo(() => {
@@ -69,9 +72,10 @@ export function NewTaskModal({
     setSaving(false);
     setTitle('');
     setStatusLabel(statusOptions[0] ?? 'To Do');
-    setPriorityLabel('Normal');
+    setPriorityLabel('None');
     setDueOn('');
     setDescription('');
+    setChecklistItems([]);
     setSelectedProject(null);
 
     if (defaultProjectId != null) return;
@@ -102,11 +106,27 @@ export function NewTaskModal({
         project_id: projectId,
         title: title.trim(),
         status: statusSlugByName[statusLabel] ?? 'todo',
-        priority: PRIORITY_VALUE[priorityLabel] ?? undefined,
+        priority: PRIORITY_VALUE[priorityLabel] ?? null,
         due_on: dueOn || null,
         description: description.trim() || null,
         assigned_to_user_id: assignedToUserId != null && Number.isFinite(assignedToUserId) ? assignedToUserId : null,
       });
+
+      if (checklistItems.length > 0 && task.id != null) {
+        const checklistId = await TaskChecklistService.ensureChecklistForTask(task.id, businessId, projectId);
+        for (let i = 0; i < checklistItems.length; i++) {
+          const item = checklistItems[i];
+          await TaskChecklistService.createItem({
+            business_id: businessId,
+            project_id: projectId,
+            checklist_id: checklistId,
+            label: item.label,
+            is_done: item.is_done,
+            position: i,
+          });
+        }
+      }
+
       onCreated(task);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Failed to create task.');
@@ -122,7 +142,7 @@ export function NewTaskModal({
       onClose={() => !saving && onClose()}
       title="Add Task"
       titleIcon={<LuListPlus size={16} />}
-      size="lg"
+      size="xl"
       closeOnBackdrop={!saving}
       showCloseButton={!saving}
       buttons={[
@@ -199,6 +219,8 @@ export function NewTaskModal({
           rows={3}
           disabled={saving}
         />
+
+        <DraftChecklistSection items={checklistItems} onChange={setChecklistItems} disabled={saving} />
       </div>
     </AppModal>
   );

@@ -1024,6 +1024,10 @@ export function ProjectDetailPage() {
                 setEditTask(null);
                 void loadTasks('reset');
               }}
+              onDeleted={() => {
+                setEditTask(null);
+                void loadTasks('reset');
+              }}
             />
 
             <ManageCategoriesModal

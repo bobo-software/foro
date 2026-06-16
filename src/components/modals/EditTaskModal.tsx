@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LuPencil } from 'react-icons/lu';
+import { LuPencil, LuTrash2 } from 'react-icons/lu';
 import { AppModal } from './AppModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 import AppInputLabeled from '@/components/forms/AppLabledInput';
 import AppLabeledAreaInput from '@/components/forms/AppLabledAreaInput';
 import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
@@ -25,9 +26,10 @@ export interface EditTaskModalProps {
   /** Dynamic categories for the project — falls back to defaults if not provided */
   categories?: TaskCategory[];
   onSaved: () => void;
+  onDeleted: () => void;
 }
 
-export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: EditTaskModalProps) {
+export function EditTaskModal({ isOpen, onClose, task, categories, onSaved, onDeleted }: EditTaskModalProps) {
   const [title, setTitle] = useState('');
   const [statusLabel, setStatusLabel] = useState('');
   const [priorityLabel, setPriorityLabel] = useState('None');
@@ -35,6 +37,8 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const statusOptions = useMemo(() => {
     const cats: Array<{ name: string; slug: string }> =
@@ -64,6 +68,7 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
     setDescription(task.description != null ? String(task.description) : '');
     setFormError(null);
     setSaving(false);
+    setShowDeleteConfirm(false);
   }, [isOpen, task, statusNameBySlug, statusOptions]);
 
   const handleSubmit = async () => {
@@ -87,7 +92,23 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
     }
   };
 
+  const handleDelete = async () => {
+    if (task?.id == null) return;
+    setDeleting(true);
+    setFormError(null);
+    try {
+      await TaskService.delete(task.id);
+      onDeleted();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to delete task.');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   return (
+    <>
     <AppModal
       isOpen={isOpen}
       onClose={() => !saving && onClose()}
@@ -96,16 +117,37 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
       size="xl"
       closeOnBackdrop={!saving}
       showCloseButton={!saving}
-      buttons={[
-        { label: 'Cancel', variant: 'secondary', onClick: onClose, disabled: saving },
-        {
-          label: 'Save',
-          variant: 'primary',
-          onClick: () => void handleSubmit(),
-          loading: saving,
-          loadingLabel: 'Saving…',
-        },
-      ]}
+      footer={
+        <div className="w-full flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white"
+          >
+            <LuTrash2 size={14} aria-hidden />
+            Delete
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSubmit()}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-indigo-600 hover:bg-indigo-500 text-white"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      }
     >
       <div className="space-y-4">
         {formError && <p className="text-red-600 dark:text-red-400 text-xs">{formError}</p>}
@@ -159,6 +201,16 @@ export function EditTaskModal({ isOpen, onClose, task, categories, onSaved }: Ed
         )}
       </div>
     </AppModal>
+
+    <DeleteConfirmationModal
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      onConfirm={handleDelete}
+      title="Delete Task"
+      message={`Are you sure you want to delete "${task?.title ?? 'this task'}"? This will also delete its checklist items. This action cannot be undone.`}
+      isLoading={deleting}
+    />
+    </>
   );
 }
 
