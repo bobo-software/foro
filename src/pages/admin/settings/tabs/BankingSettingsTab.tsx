@@ -4,6 +4,7 @@ import BankingDetailsService from '@/services/bankingDetailsService';
 import type { BankingDetails, CreateBankingDetailsDto } from '@/types/bankingDetails';
 import { ACCOUNT_TYPES } from '@/types/bankingDetails';
 import { useBankStore } from '@/stores/data/BankStore';
+import AppInputLabeled from '@/components/forms/AppLabledInput';
 import AppLabeledSelectInput from '@/components/forms/AppLabledSelectInput';
 import toast from 'react-hot-toast';
 import { bankingDetailsSchema } from '@/validation/schemas';
@@ -128,9 +129,6 @@ export function BankingSettingsTab() {
     }
   };
 
-  const inputClass =
-    'w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-colors';
-  const labelClass = 'block mb-1 text-sm font-medium text-slate-700 dark:text-slate-300';
 
   if (loading) {
     return (
@@ -171,75 +169,48 @@ export function BankingSettingsTab() {
             placeholder="Select bank…"
             options={banks.map((bank) => ({ value: bank.name, label: bank.name }))}
           />
-          <div>
-            <label htmlFor="account_holder" className={labelClass}>Account Holder</label>
-            <input
-              id="account_holder"
-              type="text"
-              value={bankingForm.account_holder ?? ''}
-              onChange={(e) => handleBankingChange('account_holder', e.target.value)}
-              className={inputClass}
-              placeholder="Name on the account"
-            />
-          </div>
-          <div>
-            <label htmlFor="account_number" className={labelClass}>Account Number *</label>
-            <input
-              id="account_number"
-              type="text"
-              value={bankingForm.account_number ?? ''}
-              onChange={(e) => handleBankingChange('account_number', e.target.value)}
-              className={inputClass}
-              placeholder="1234567890"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="account_type" className={labelClass}>Account Type</label>
-            <select
-              id="account_type"
-              value={bankingForm.account_type ?? 'cheque'}
-              onChange={(e) => handleBankingChange('account_type', e.target.value)}
-              className={inputClass}
-            >
-              {ACCOUNT_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="branch_code" className={labelClass}>Branch Code</label>
-            <input
-              id="branch_code"
-              type="text"
-              value={bankingForm.branch_code ?? ''}
-              onChange={(e) => handleBankingChange('branch_code', e.target.value)}
-              className={inputClass}
-              placeholder="Universal branch code"
-            />
-          </div>
-          <div>
-            <label htmlFor="branch_name" className={labelClass}>Branch Name</label>
-            <input
-              id="branch_name"
-              type="text"
-              value={bankingForm.branch_name ?? ''}
-              onChange={(e) => handleBankingChange('branch_name', e.target.value)}
-              className={inputClass}
-              placeholder="Optional"
-            />
-          </div>
-          <div>
-            <label htmlFor="swift_code" className={labelClass}>SWIFT Code</label>
-            <input
-              id="swift_code"
-              type="text"
-              value={bankingForm.swift_code ?? ''}
-              onChange={(e) => handleBankingChange('swift_code', e.target.value)}
-              className={inputClass}
-              placeholder="For international transfers"
-            />
-          </div>
+          <AppInputLabeled
+            label="Account holder"
+            type="text"
+            value={bankingForm.account_holder ?? ''}
+            onChange={(e) => handleBankingChange('account_holder', e.target.value)}
+            placeholder="Name on the account"
+          />
+          <AppInputLabeled
+            label="Account number"
+            type="text"
+            value={bankingForm.account_number ?? ''}
+            onChange={(e) => handleBankingChange('account_number', e.target.value)}
+            placeholder="1234567890"
+            required
+          />
+          <AppLabeledSelectInput
+            label="Account type"
+            value={bankingForm.account_type ?? 'cheque'}
+            onChange={(e) => handleBankingChange('account_type', e.target.value)}
+            options={ACCOUNT_TYPES}
+          />
+          <AppInputLabeled
+            label="Branch code"
+            type="text"
+            value={bankingForm.branch_code ?? ''}
+            onChange={(e) => handleBankingChange('branch_code', e.target.value)}
+            placeholder="Universal branch code"
+          />
+          <AppInputLabeled
+            label="Branch name"
+            type="text"
+            value={bankingForm.branch_name ?? ''}
+            onChange={(e) => handleBankingChange('branch_name', e.target.value)}
+            placeholder="Optional"
+          />
+          <AppInputLabeled
+            label="SWIFT code"
+            type="text"
+            value={bankingForm.swift_code ?? ''}
+            onChange={(e) => handleBankingChange('swift_code', e.target.value)}
+            placeholder="For international transfers"
+          />
         </div>
 
         {/* Preview */}

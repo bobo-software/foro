@@ -3,7 +3,7 @@
  * Used for displaying payment details on invoices and documents
  */
 
-export type AccountType = 'cheque' | 'savings' | 'current' | 'transmission' | 'gold_business' | 'other';
+export type AccountType = 'cheque' | 'savings' | 'entrepreneurial_account' | 'current' | 'transmission' | 'gold_business' | 'credit_card' | 'bond' | 'subscription_share' | 'money_market' | 'notice_deposit' | 'fixed_deposit' | 'other';
 
 export interface BankingDetails {
   id?: number;
@@ -65,6 +65,13 @@ export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: 'current', label: 'Current Account' },
   { value: 'transmission', label: 'Transmission Account' },
   { value: 'gold_business', label: 'Gold Business Account' },
+  { value: 'entrepreneurial_account', label: 'Entrepreneurial Account' },
+  { value: 'credit_card', label: 'Credit Card Account' },
+  { value: 'bond', label: 'Bond Account' },
+  { value: 'subscription_share', label: 'Subscription Share Account' },
+  { value: 'money_market', label: 'Money Market Account' },
+  { value: 'notice_deposit', label: 'Notice Deposit Account' },
+  { value: 'fixed_deposit', label: 'Fixed Deposit Account' },
   { value: 'other', label: 'Other' },
 ];
 
