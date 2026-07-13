@@ -1,27 +1,8 @@
-import { useState, useEffect } from 'react';
+import useThemeStore from '@/stores/state/ThemeStore';
 
 export function PreferencesSettingsTab() {
-  const [darkMode, setDarkMode] = useState(false);
-
-  // Check current dark mode state on mount
-  useEffect(() => {
-    const isDark = document.documentElement.classList.contains('dark');
-    setDarkMode(isDark);
-  }, []);
-
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    const newValue = !darkMode;
-    setDarkMode(newValue);
-    
-    if (newValue) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  };
+  const darkMode = useThemeStore((s) => s.theme === 'dark');
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
@@ -42,7 +23,7 @@ export function PreferencesSettingsTab() {
             </p>
           </div>
           <button
-            onClick={toggleDarkMode}
+            onClick={toggleTheme}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
               darkMode ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
             }`}

@@ -1,7 +1,5 @@
-import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import useAuthStore from '../../stores/data/AuthStore';
-import useThemeStore from '../../stores/state/ThemeStore';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import AppProfileComponent from './AppProfileComponent';
 import { ConnectionDot } from './ConnectionStatus';
@@ -53,24 +51,10 @@ function useBreadcrumbs() {
 
 const AppNavbar = () => {
   const sessionUser = useAuthStore((s) => s.sessionUser);
-  const theme = useThemeStore((s) => s.theme);
   const breadcrumbs = useBreadcrumbs();
   const businesses = useBusinessStore((s) => s.businesses);
   const currentBusiness = useBusinessStore((s) => s.currentBusiness);
   const setCurrentBusinessById = useBusinessStore((s) => s.setCurrentBusinessById);
-
-  // Sync theme to document.documentElement (admin pages only).
-  // Cleanup on unmount removes dark when navigating to landing/auth.
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    return () => {
-      document.documentElement.classList.remove('dark');
-    };
-  }, [theme]);
 
   const companyName = currentBusiness?.name || sessionUser?.association_name || sessionUser?.name || 'My Company';
 

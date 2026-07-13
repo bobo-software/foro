@@ -149,7 +149,7 @@ export function Landing() {
               },
               {
                 name: 'Bronze',
-                price: 'R249',
+                price: 'R149',
                 period: '/mo',
                 description: 'For growing small businesses.',
                 highlight: false,
@@ -172,7 +172,7 @@ export function Landing() {
               },
               {
                 name: 'Silver',
-                price: 'R499',
+                price: 'R249',
                 period: '/mo',
                 description: 'For teams managing more clients.',
                 highlight: true,
@@ -195,7 +195,7 @@ export function Landing() {
               },
               {
                 name: 'Gold',
-                price: 'R899',
+                price: 'R399',
                 period: '/mo',
                 description: 'Full power for larger operations.',
                 highlight: false,

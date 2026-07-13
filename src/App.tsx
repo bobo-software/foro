@@ -8,6 +8,7 @@ import { useAuthSync } from './hooks/useAuthSync';
 import { useTokenRefresh } from './hooks/useTokenRefresh';
 import { webSocketService } from './backend/services/WebSocketService';
 import { SKAFTIN_CONFIG } from './config/skaftin.config';
+import useThemeStore from './stores/state/ThemeStore';
 import './App.css';
 
 // ── Eager-loaded (above the fold / small) ──────────────────────────
@@ -106,6 +107,12 @@ function UnauthorizedPage() {
 }
 
 function App() {
+  const theme = useThemeStore((s) => s.theme);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
   return (
     <ErrorBoundary>
       <AuthProvider verifyOnMount={true}>
