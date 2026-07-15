@@ -59,6 +59,21 @@ class TeamService {
     return response.data;
   }
 
+  /**
+   * Creates the 'owner' membership row for a newly-created owner company.
+   * Onboard.tsx historically only set companies.user_id/is_owner_company and
+   * never wrote this row — call it right after createOwnerCompany() so every
+   * new business has one going forward.
+   */
+  async createOwnerMembership(userId: number, businessId: number): Promise<TeamMembership> {
+    const response = await skaftinClient.post<{ data?: TeamMembership } | TeamMembership>(
+      '/app-api/database/tables/team_memberships/insert',
+      { data: { user_id: userId, business_id: businessId, role_key: 'owner', status: 'active' } }
+    );
+    const data = response.data;
+    return (data as { data?: TeamMembership })?.data ?? (data as TeamMembership);
+  }
+
   async listMembers(businessId: number): Promise<TeamMembership[]> {
     const response = await skaftinClient.post<{ rows?: TeamMembership[] } | TeamMembership[]>(
       '/app-api/database/tables/team_memberships/select',

@@ -4,6 +4,8 @@ import CompanyService from '@/services/companyService';
 import BankingDetailsService from '@/services/bankingDetailsService';
 import AddressService from '@/services/addressService';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
+import { useCompanyStore } from '@/stores/data/CompanyStore';
+import { useSubscriptionLimits } from '@/hooks';
 import type { CreateCompanyDto } from '@/types/company';
 import type { CreateBankingDetailsDto, BankingDetails } from '@/types/bankingDetails';
 import type { Address, CreateAddressDto } from '@/types/address';
@@ -102,6 +104,9 @@ export function CompanyFormPage() {
   const isEditMode = !!id;
 
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
+  const companies = useCompanyStore((s) => s.companies);
+  const fetchCompanies = useCompanyStore((s) => s.fetchCompanies);
+  const { limits } = useSubscriptionLimits();
   const [form, setForm] = useState<CreateCompanyDto>(initial);
   const [addressLookup, setAddressLookup] = useState('');
   const addressLookupRef = useRef<HTMLInputElement | null>(null);
@@ -141,6 +146,12 @@ export function CompanyFormPage() {
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Keep the company count fresh for the create-mode plan-limit check below,
+  // regardless of whether the user arrived via CompaniesPage or a direct URL.
+  useEffect(() => {
+    if (!isEditMode) void fetchCompanies();
+  }, [isEditMode, fetchCompanies]);
 
   // Load existing company data in edit mode
   useEffect(() => {
@@ -296,6 +307,13 @@ export function CompanyFormPage() {
     if (!validation.success) {
       toast.error(validation.error.issues[0]?.message ?? 'Please check your input');
       return;
+    }
+    if (!isEditMode) {
+      const clientCompanyCount = companies.filter((c) => !c.is_owner_company).length;
+      if (clientCompanyCount >= limits.companies) {
+        toast.error(`Your plan is limited to ${limits.companies} companies — upgrade in Settings → Billing to add more.`);
+        return;
+      }
     }
     setSaving(true);
     try {

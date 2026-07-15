@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import useAuthStore from '@stores/data/AuthStore';
 import { useBusinessStore } from '@stores/data/BusinessStore';
 import CompanyService from '@/services/companyService';
+import { teamService } from '@/services/teamService';
 import AddressService from '@/services/addressService';
 import type { CreateAddressDto } from '@/types/address';
 import type { CreateCompanyDto } from '@/types/company';
@@ -239,6 +240,7 @@ export function Onboard() {
       } else {
         const company = await CompanyService.createOwnerCompany(Number(sessionUser.id), payload);
         companyId = Number(company.id);
+        await teamService.createOwnerMembership(Number(sessionUser.id), companyId);
         toast.success('Company saved');
       }
 

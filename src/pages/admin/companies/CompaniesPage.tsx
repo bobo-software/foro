@@ -4,7 +4,7 @@ import { LuFilter, LuUsers } from 'react-icons/lu';
 import { AppDataTable, type AppDataTableColumn } from '@/components/elements/AppDataTable';
 import { useCompanyStore } from '@/stores/data/CompanyStore';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
-import { useAutoRefresh, useProjectId } from '@/hooks';
+import { useAutoRefresh, useProjectId, useSubscriptionLimits } from '@/hooks';
 import type { Company } from '@/types/company';
 
 const companyColumns: AppDataTableColumn<Company>[] = [
@@ -40,6 +40,13 @@ export function CompaniesPage() {
   const businessId = useBusinessStore((s) => s.currentBusiness?.id);
   const projectId = useProjectId();
   const [search, setSearch] = useState('');
+  const { tier, limits } = useSubscriptionLimits();
+
+  const clientCompanyCount = useMemo(
+    () => companies.filter((c) => !c.is_owner_company).length,
+    [companies]
+  );
+  const atCompanyLimit = clientCompanyCount >= limits.companies;
 
   useEffect(() => {
     fetchCompanies();
@@ -96,13 +103,26 @@ export function CompaniesPage() {
             aria-label="Search companies"
           />
         </div>
-        <Link
-          to="/app/companies/create"
-          className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white no-underline hover:bg-indigo-500"
-        >
-          + Add company
-        </Link>
+        {atCompanyLimit ? (
+          <Link
+            to="/app/settings/billing"
+            title={`${tier === 'free' ? 'Free' : tier} plan is limited to ${limits.companies} companies — upgrade to add more`}
+            className="shrink-0 rounded-lg bg-slate-200 dark:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 no-underline hover:bg-slate-300 dark:hover:bg-slate-600"
+          >
+            Limit reached — upgrade
+          </Link>
+        ) : (
+          <Link
+            to="/app/companies/create"
+            className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white no-underline hover:bg-indigo-500"
+          >
+            + Add company
+          </Link>
+        )}
       </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {clientCompanyCount} of {limits.companies} companies used on your plan.
+      </p>
 
       <AppDataTable<Company>
         title="Companies"

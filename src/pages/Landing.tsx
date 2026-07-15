@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { LuFileText, LuReceipt, LuKanban, LuUsers, LuCheck, LuX } from 'react-icons/lu';
 import toast from 'react-hot-toast';
 import useAuthStore from '../stores/data/AuthStore';
+import { PRICING_TIERS } from '../config/pricingTiers';
 
 export function Landing() {
   const navigate = useNavigate();
@@ -123,103 +124,9 @@ export function Landing() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-            {[
-              {
-                name: 'Free',
-                price: 'R0',
-                period: '/mo',
-                description: 'Get started at no cost. No credit card required.',
-                highlight: false,
-                badge: null,
-                features: [
-                  { label: '7 companies', included: true },
-                  { label: '2 team members', included: true },
-                  { label: 'Quotations & invoices', included: true },
-                  { label: 'Payments & statements', included: true },
-                  { label: 'PDF downloads', included: true },
-                  { label: 'Items catalog', included: true },
-                  { label: 'Project tasks (list view)', included: true },
-                  { label: 'Time tracking', included: false },
-                  { label: 'Custom branding', included: false },
-                  { label: 'Client portal', included: false },
-                  { label: 'Priority support', included: false },
-                ],
-                cta: 'Get started',
-                ctaTo: '/register',
-              },
-              {
-                name: 'Bronze',
-                price: 'R149',
-                period: '/mo',
-                description: 'For growing small businesses.',
-                highlight: false,
-                badge: null,
-                features: [
-                  { label: '10 companies', included: true },
-                  { label: '5 team members', included: true },
-                  { label: 'Quotations & invoices', included: true },
-                  { label: 'Payments & statements', included: true },
-                  { label: 'PDF downloads', included: true },
-                  { label: 'Items catalog', included: true },
-                  { label: 'Kanban & timeline views', included: true },
-                  { label: 'Time tracking & budgets', included: true },
-                  { label: 'Custom branding', included: true },
-                  { label: 'Client portal', included: false },
-                  { label: 'Priority support', included: false },
-                ],
-                cta: 'Get started',
-                ctaTo: '/register',
-              },
-              {
-                name: 'Silver',
-                price: 'R249',
-                period: '/mo',
-                description: 'For teams managing more clients.',
-                highlight: true,
-                badge: 'Most popular',
-                features: [
-                  { label: '18 companies', included: true },
-                  { label: '10 team members', included: true },
-                  { label: 'Quotations & invoices', included: true },
-                  { label: 'Payments & statements', included: true },
-                  { label: 'Kanban & timeline views', included: true },
-                  { label: 'Time tracking & budgets', included: true },
-                  { label: 'Custom branding', included: true },
-                  { label: 'Client portal', included: true },
-                  { label: 'Project automation', included: true },
-                  { label: 'Priority support', included: true },
-                  { label: 'Bulk operations', included: true },
-                ],
-                cta: 'Get started',
-                ctaTo: '/register',
-              },
-              {
-                name: 'Gold',
-                price: 'R399',
-                period: '/mo',
-                description: 'Full power for larger operations.',
-                highlight: false,
-                badge: null,
-                features: [
-                  { label: '25 companies', included: true },
-                  { label: '15 team members', included: true },
-                  { label: 'Quotations & invoices', included: true },
-                  { label: 'Payments & statements', included: true },
-                  { label: 'Kanban & timeline views', included: true },
-                  { label: 'Time tracking & budgets', included: true },
-                  { label: 'Custom branding', included: true },
-                  { label: 'Client portal', included: true },
-                  { label: 'Project automation', included: true },
-                  { label: 'Priority support', included: true },
-                  { label: 'Bulk operations', included: true },
-                  { label: 'API access', included: true },
-                ],
-                cta: 'Get started',
-                ctaTo: '/register',
-              },
-            ].map((tier) => (
+            {PRICING_TIERS.map((tier) => (
               <div
-                key={tier.name}
+                key={tier.id}
                 className={`relative flex flex-col rounded-2xl border p-6 transition ${
                   tier.highlight
                     ? 'border-indigo-500 bg-indigo-600 shadow-xl shadow-indigo-500/25'
@@ -283,14 +190,14 @@ export function Landing() {
                 </ul>
 
                 <Link
-                  to={tier.ctaTo}
+                  to="/register"
                   className={`inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition no-underline ${
                     tier.highlight
                       ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-sm'
                       : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm shadow-indigo-500/20'
                   }`}
                 >
-                  {tier.cta}
+                  Get started
                 </Link>
               </div>
             ))}

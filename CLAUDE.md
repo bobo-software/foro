@@ -22,7 +22,7 @@ Always use the shared form components from `src/components/forms/` for all user 
 
 ## Documentation Updates
 
-After adding or modifying a feature, always update the relevant docs in the `docs/` folder:
+Update the relevant docs in the `docs/` folder **as part of the same change** that adds or modifies a feature — not as a deferred follow-up. If a task touches multiple files over several steps, update the corresponding doc alongside the step that changes the behavior it describes, so the docs are never behind the code even mid-task.
 
 - `docs/00-overview/` — if the feature affects overall architecture or project scope
 - `docs/01-roles/` — if the feature affects user roles or permissions

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './components/auth/AuthProvider';
 import { ProtectedRoute } from './components/elements/ProtectedRoute';
+import { SubscriptionGate } from './components/elements/SubscriptionGate';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { RouteLoadingFallback } from './components/error/RouteLoadingFallback';
 import { useAuthSync } from './hooks/useAuthSync';
@@ -53,6 +54,9 @@ const BankingSettingsTab = lazy(() => import('@pages/admin/settings/tabs').then(
 const DocumentSettingsTab = lazy(() => import('@pages/admin/settings/tabs').then((m) => ({ default: m.DocumentSettingsTab })));
 const PreferencesSettingsTab = lazy(() => import('@pages/admin/settings/tabs').then((m) => ({ default: m.PreferencesSettingsTab })));
 const TeamSettingsTab = lazy(() => import('@pages/admin/settings/tabs').then((m) => ({ default: m.TeamSettingsTab })));
+const BillingSettingsTab = lazy(() => import('@pages/admin/settings/tabs').then((m) => ({ default: m.BillingSettingsTab })));
+const PaymentSuccess = lazy(() => import('@pages/payment/PaymentSuccess').then((m) => ({ default: m.PaymentSuccess })));
+const PaymentCancel = lazy(() => import('@pages/payment/PaymentCancel').then((m) => ({ default: m.PaymentCancel })));
 const InviteAccept = lazy(() => import('@pages/team/InviteAccept').then((m) => ({ default: m.InviteAccept })));
 const InvitePostAuth = lazy(() => import('@pages/team/InvitePostAuth').then((m) => ({ default: m.InvitePostAuth })));
 const PortalLandingPage = lazy(() => import('@pages/portal/PortalLandingPage').then((m) => ({ default: m.PortalLandingPage })));
@@ -132,12 +136,23 @@ function App() {
             <Route path="/invite/:token/accept" element={<InvitePostAuth />} />
             <Route path="/portal/v/:portalToken" element={<PortalProjectViewPage />} />
             <Route path="/portal" element={<PortalLandingPage />} />
+            <Route path="/payment/success" element={<PaymentSuccess />} />
+            <Route path="/payment/cancel" element={<PaymentCancel />} />
 
             {/* Onboarding - requires auth but no role check */}
             <Route path="/onboard" element={<ProtectedRoute><Onboard /></ProtectedRoute>} />
 
             {/* Protected app routes */}
-            <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute>
+                  <SubscriptionGate>
+                    <AppLayout />
+                  </SubscriptionGate>
+                </ProtectedRoute>
+              }
+            >
               <Route index element={<Navigate to="/app/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="tasks" element={<MyTasksPage />} />
@@ -186,6 +201,7 @@ function App() {
                 <Route path="documents" element={<DocumentSettingsTab />} />
                 <Route path="preferences" element={<PreferencesSettingsTab />} />
                 <Route path="team" element={<TeamSettingsTab />} />
+                <Route path="billing" element={<BillingSettingsTab />} />
               </Route>
             </Route>
 

@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { z } from 'zod';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import { useTeamStore } from '@/stores/data/TeamStore';
+import { useSubscriptionLimits } from '@/hooks';
 
 const inviteSchema = z.object({
   email: z.string().email('Please provide a valid email address'),
@@ -40,12 +42,26 @@ export function TeamSettingsTab() {
     [invites]
   );
 
+  const { limits } = useSubscriptionLimits();
+  const activeMemberCount = useMemo(
+    () => members.filter((m) => m.status === 'active').length,
+    [members]
+  );
+  // Count outstanding invites too, so a business can't invite past its cap
+  // and land over the limit the moment they're all accepted.
+  const seatsUsed = activeMemberCount + pendingInvites.length;
+  const atMemberLimit = seatsUsed >= limits.teamMembers;
+
   const handleInviteSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!businessId) return;
     const validation = inviteSchema.safeParse({ email: inviteEmail.trim() });
     if (!validation.success) {
       toast.error(validation.error.issues[0]?.message ?? 'Please provide a valid email');
+      return;
+    }
+    if (atMemberLimit) {
+      toast.error(`Your plan is limited to ${limits.teamMembers} team members — upgrade in Settings → Billing to invite more.`);
       return;
     }
     const created = await createInvite({
@@ -77,18 +93,23 @@ export function TeamSettingsTab() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Send an invite email with role access to {currentBusiness.name}.
         </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {seatsUsed} of {limits.teamMembers} team seats used on your plan.
+        </p>
         <form onSubmit={handleInviteSubmit} className="mt-4 flex flex-wrap gap-3">
           <input
             type="email"
             value={inviteEmail}
             onChange={(event) => setInviteEmail(event.target.value)}
             placeholder="teammate@example.com"
-            className="min-w-[240px] flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+            disabled={atMemberLimit}
+            className="min-w-[240px] flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm disabled:opacity-50"
           />
           <select
             value={inviteRole}
             onChange={(event) => setInviteRole(event.target.value)}
-            className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+            disabled={atMemberLimit}
+            className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm disabled:opacity-50"
           >
             {ROLE_OPTIONS.map((role) => (
               <option key={role} value={role}>
@@ -98,12 +119,21 @@ export function TeamSettingsTab() {
           </select>
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || atMemberLimit}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Send invite
           </button>
         </form>
+        {atMemberLimit && (
+          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+            Your plan is limited to {limits.teamMembers} team members.{' '}
+            <Link to="/app/settings/billing" className="underline">
+              Upgrade to invite more
+            </Link>
+            .
+          </p>
+        )}
         {error && <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       </section>
 
