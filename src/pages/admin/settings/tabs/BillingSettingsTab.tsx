@@ -68,7 +68,12 @@ export function BillingSettingsTab() {
     if (!window.confirm('Cancel your paid plan and switch back to Free? You can upgrade again any time.')) {
       return;
     }
-    await cancelSubscription();
+    const cancelled = await cancelSubscription();
+    if (!cancelled) {
+      const reason = useSubscriptionStore.getState().error;
+      toast.error(reason ? `Failed to cancel: ${reason}` : 'Failed to cancel your subscription. Please try again.');
+      return;
+    }
     toast.success('Switched back to the Free plan');
   };
 
@@ -105,13 +110,19 @@ export function BillingSettingsTab() {
           )}
         </div>
         {currentSubscription?.tier !== 'free' && currentSubscription?.status === 'active' && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="mt-4 text-sm text-red-600 hover:text-red-500 underline"
-          >
-            Cancel and switch to Free
-          </button>
+          currentSubscription?.subscription_token ? (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="mt-4 text-sm text-red-600 hover:text-red-500 underline"
+            >
+              Cancel and switch to Free
+            </button>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+              Confirming your subscription with the payment provider — cancellation will be available shortly.
+            </p>
+          )
         )}
       </div>
 

@@ -27,8 +27,8 @@ interface SubscriptionState {
     customerEmail: string
   ) => Promise<string | null>;
   reconcilePending: () => Promise<void>;
-  /** Cancels any active paid plan and reverts the business to Free. */
-  cancel: () => Promise<void>;
+  /** Cancels any active paid plan and reverts the business to Free. Returns false (with `error` set) if the API call fails. */
+  cancel: () => Promise<boolean>;
 }
 
 export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
@@ -171,7 +171,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   cancel: async () => {
     const { currentSubscription } = get();
-    if (!currentSubscription) return;
+    if (!currentSubscription) return false;
     set({ loading: true, error: null });
     try {
       if (currentSubscription.transaction_id && currentSubscription.tier !== 'free' && currentSubscription.status === 'active') {
@@ -190,9 +190,11 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
         currentSubscription: { ...currentSubscription, ...payload },
         loading: false,
       });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to cancel subscription';
       set({ error: message, loading: false });
+      return false;
     }
   },
 }));
