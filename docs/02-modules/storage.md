@@ -1,30 +1,25 @@
 # Storage and logos (S3-backed via foro-api)
 
-> **Migrated off Skaftin/MinIO.** Foro now stores uploaded assets (company logos, PDF embeds) via **foro-api**'s S3-backed storage endpoints (`/api/v1/storage/*`), not Skaftin MinIO. API shapes are defined in [`client-sdk/requests/03-STORAGE-REQUESTS.md`](../../client-sdk/requests/03-STORAGE-REQUESTS.md).
+Foro stores uploaded assets (company logos, PDF embeds) via **foro-api**'s S3-compatible
+storage endpoints (`/api/v1/storage/*`), backed by a self-hosted MinIO instance in this
+environment. API shapes are defined in [`client-sdk/requests/03-STORAGE-REQUESTS.md`](../../client-sdk/requests/03-STORAGE-REQUESTS.md).
 
-Database semantics for `logo_url` are unchanged conceptually — still a stored file **path**, not a URL — but the schema itself lives in foro-api's MySQL `companies` table now; see `foro-api/docs/database.md` rather than the stale `storage-and-logos-schema-contract.md` in this repo (Postgres/Skaftin-era, not authoritative post-migration).
+Database semantics for `logo_url` are unchanged conceptually — still a stored file **path**,
+not a URL — see `foro-api/docs/database.md` for the `companies` table schema.
 
 ## Bucket
 
 | Setting | Value |
 |---------|--------|
-| Bucket | **`foroman`** (unchanged), configurable via foro-api's `S3_BUCKET` env var |
+| Bucket | **`foro`** in this environment (via `MINIO_BUCKET`) — configurable via foro-api's `S3_BUCKET` env var, defaulting to `foroman` if neither is set |
 | Client code | [`storageService.ts`](../../src/services/storageService.ts) |
-| Bucket ownership | **Server-side only** now — the client no longer sends a bucket name in requests (Skaftin required one; foro-api's `S3_BUCKET` env var owns it) |
+| Server config | [`foro-api/src/config/s3.ts`](../../../foro-api/src/config/s3.ts) — reads `S3_*` env vars, falling back to `MINIO_*` (self-hosted MinIO deployments expose credentials under those names instead) |
+| Bucket ownership | **Server-side only** — the client never sends a bucket name in requests; foro-api's config owns it |
 
-**Verification gap:** actual S3 upload/download/delete was not live-tested against a real bucket during the migration (no S3 credentials configured in that environment) — request validation and auth-gating were verified, the S3 I/O itself was not. Verify before relying on this in production.
-
-Verify with Skaftin MCP `list_project_buckets` or a test upload:
-
-```bash
-curl -X POST "$VITE_SKAFTIN_API_URL/app-api/storage/files" \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/path/to/image.png" \
-  -F "bucket=foroman" \
-  -F "path=test/upload.png"
-```
-
-Expect **201** and `"success": true`.
+**Verified live** (2026-08-02): upload → presigned download → list → delete round-tripped
+successfully against the configured MinIO bucket, and a real company-logo upload through
+Settings → Company → Change Logo rendered correctly end-to-end. The bucket (`foro`) had to
+be created once via the S3 API before first use — MinIO/S3 don't auto-create buckets.
 
 ## Client service
 
@@ -32,20 +27,21 @@ Expect **201** and `"success": true`.
 
 | Method | Use |
 |--------|-----|
-| `upload(filePath, file)` | Multipart `POST /app-api/storage/files` (`file`, `bucket`, `path`) |
+| `upload(filePath, file)` | Multipart `POST /api/v1/storage/files` (`file`, `path`) |
 | `uploadCompanyLogo(businessId, file)` | Issuer logo → `{businessId}/company_logo.{ext}` |
 | `uploadClientCompanyLogo(companyId, file)` | Client company logo → `companies/{companyId}/logo.{ext}` |
-| `getFileDownloadUrl(filePath)` | Presigned URL for `<img>` / fetch (1h expiry) |
-| `delete(filePath)` | Remove object by path |
+| `getFileDownloadUrl(filePath)` | Presigned URL via `GET /api/v1/storage/files/download?path=...` (15 min expiry) |
+| `delete(filePath)` | `DELETE /api/v1/storage/files?path=...` |
 | `fetchFileAsObjectUrl(url)` | Authenticated fetch when URL requires headers |
 
-[`SkaftinClient.postFormData`](../../src/backend/client/SkaftinClient.ts) must **not** set `Content-Type` on `FormData` requests so the browser adds the multipart boundary.
+[`ForoApiClient.postFormData`](../../src/backend/client/ForoApiClient.ts) must **not** set
+`Content-Type` on `FormData` requests so the browser adds the multipart boundary.
 
 ## UI entry points
 
 | Screen | Route / component | Upload helper |
 |--------|-------------------|---------------|
-| Business (issuer) logo | Settings → Business → [`BusinessSettingsTab.tsx`](../../src/pages/admin/settings/tabs/BusinessSettingsTab.tsx) | `uploadCompanyLogo` |
+| Business (issuer) logo | Settings → Company → [`BusinessSettingsTab.tsx`](../../src/pages/admin/settings/tabs/BusinessSettingsTab.tsx) | `uploadCompanyLogo` |
 | Client company logo | Company edit → [`CompanyEditTab.tsx`](../../src/pages/admin/companies/companyPage/tabs/CompanyEditTab.tsx) | `uploadClientCompanyLogo` |
 | Sidebar / invoice / quotation preview | [`AppSidebar`](../../src/components/elements/AppSidebar.tsx), [`InvoiceDetail`](../../src/components/elements/InvoiceDetail.tsx), [`QuotationDetail`](../../src/components/elements/QuotationDetail.tsx) | `getFileDownloadUrl` |
 | PDF export | [`pdfLogoHelper.ts`](../../src/utils/pdfLogoHelper.ts), invoice/quotation/statement PDF utils | `getFileDownloadUrl` + base64 when `show_logo_on_documents` |
@@ -58,18 +54,21 @@ Allowed image types in settings UI: PNG, JPEG, SVG, WebP (max 5MB).
 sequenceDiagram
   participant UI as Settings / Company edit
   participant SS as StorageService
-  participant API as Skaftin app-api
+  participant API as foro-api
+  participant S3 as MinIO / S3
   participant DB as companies.logo_url
 
   UI->>SS: upload*Logo(file)
-  SS->>API: POST /storage/files (bucket=foroman, path=...)
-  API-->>SS: 201 filePath
+  SS->>API: POST /api/v1/storage/files (path=...)
+  API->>S3: PutObjectCommand
+  API-->>SS: 201 { fileName, url, etag }
   SS-->>UI: filePath
   UI->>DB: update logo_url = path only
   Note over UI,DB: Not a presigned URL
 
   UI->>SS: getFileDownloadUrl(path)
-  SS->>API: GET /storage/files/download?returnUrl=true
+  SS->>API: GET /api/v1/storage/files/download?path=...
+  API->>S3: getSignedUrl(GetObjectCommand)
   API-->>UI: presigned URL for display/PDF
 ```
 
@@ -77,12 +76,14 @@ sequenceDiagram
 
 | Symptom | Likely cause |
 |---------|----------------|
-| 500 `Failed to upload file`, correct form fields | Wrong or unprovisioned bucket name |
+| 500 on any storage call, correct request shape | Bucket doesn't exist on the S3/MinIO server yet — buckets aren't auto-created; create it once via `CreateBucketCommand` with the same credentials |
+| Presigned URL fetch returns `NoSuchBucket` | Same as above — check `S3_BUCKET`/`MINIO_BUCKET` matches an actual bucket |
+| 500 `Missing required environment variable` | Neither `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` nor `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are set |
 | Upload OK, image broken in UI | `logo_url` empty, wrong path, or download auth missing |
 | PDF without logo | `show_logo_on_documents` false or `logo_url` unset |
 | Old logos after bucket change | Paths are bucket-agnostic; re-upload if objects lived in another bucket |
 
 ## Related docs
 
-- [Storage and logos schema contract](../03-database/storage-and-logos-schema-contract.md)
+- [Storage and logos schema contract](../03-database/storage-and-logos-schema-contract.md) (Postgres/Skaftin-era — not authoritative post-migration, schema now lives in foro-api's MySQL `companies` table)
 - [Document template / show logo](../plan.md) (historical plan; live flags on `companies`)
