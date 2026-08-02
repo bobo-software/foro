@@ -137,8 +137,17 @@ export class ForoApiClient {
     options: RequestInit,
     isFormData: boolean
   ): Promise<ApiResponse<T> | null> {
-    const isAuthEndpoint = endpoint.startsWith('/api/v1/auth/');
-    if (isAuthEndpoint) {
+    // Only skip refresh-and-retry for endpoints where it can't possibly help:
+    // login/register (401 means bad credentials, not an expired session) and
+    // refresh itself (avoids refreshing-the-refresh-call recursion). Other
+    // /auth/* endpoints like `me` and `logout` are normal authenticated calls
+    // and should get the same silent-refresh treatment as any other route.
+    const noRefreshEndpoints: string[] = [
+      API_CONFIG.endpoints.login,
+      API_CONFIG.endpoints.register,
+      API_CONFIG.endpoints.refresh,
+    ];
+    if (noRefreshEndpoints.includes(endpoint)) {
       return null;
     }
 

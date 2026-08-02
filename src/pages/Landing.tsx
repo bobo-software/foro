@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LuFileText, LuReceipt, LuKanban, LuUsers, LuCheck, LuX } from 'react-icons/lu';
 import toast from 'react-hot-toast';
@@ -7,9 +7,12 @@ import { PRICING_TIERS } from '../config/pricingTiers';
 
 export function Landing() {
   const navigate = useNavigate();
+  const hasRedirected = useRef(false);
   useEffect(() => {
+    if (hasRedirected.current) return;
     const { sessionUser, accessToken } = useAuthStore.getState();
     if (sessionUser?.accessToken || accessToken) {
+      hasRedirected.current = true;
       toast.success('Session Restored');
       navigate('/app', { replace: true });
     }
