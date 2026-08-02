@@ -59,7 +59,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   loadSnapshot: async (businessId) => {
     set({ loading: true, error: null });
     try {
-      const businessWhere = businessId != null ? { business_id: businessId } : undefined;
+      const businessWhere = businessId != null ? { businessId } : undefined;
       const [allCompanies, allInvoices, allQuotations, allItems] = await Promise.all([
         CompanyService.findAll({ where: businessWhere }),
         InvoiceService.findAll({ where: businessWhere, orderBy: 'issue_date', orderDirection: 'DESC' }),

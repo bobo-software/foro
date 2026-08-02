@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import useAuthStore from '../stores/data/AuthStore';
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { API_CONFIG } from '../config/api.config';
 import { TokenManager } from '../services/TokenManager';
 
 /**
@@ -16,7 +16,7 @@ export function useAuthSync() {
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
       // Check if auth storage changed
-      if (event.key === SKAFTIN_CONFIG.authStorageKey) {
+      if (event.key === API_CONFIG.authStorageKey) {
         if (event.newValue === null) {
           // Storage cleared (logout in another tab)
           TokenManager.clearAll();
@@ -32,9 +32,9 @@ export function useAuthSync() {
           verifySession();
         }
       }
-      
+
       // Check if token directly changed
-      if (event.key === SKAFTIN_CONFIG.tokenStorageKey) {
+      if (event.key === API_CONFIG.tokenStorageKey) {
         if (event.newValue === null) {
           // Token removed in another tab
           TokenManager.clearAll();

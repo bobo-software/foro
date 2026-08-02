@@ -1,27 +1,30 @@
 // src/services/TokenManager.ts
 
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { API_CONFIG } from '../config/api.config';
 
 export type StorageType = 'localStorage' | 'sessionStorage' | 'memory';
 
 interface TokenManagerOptions {
   storageType?: StorageType;
   tokenKey?: string;
+  refreshTokenKey?: string;
   userKey?: string;
 }
 
 class TokenManagerClass {
   private storageType: StorageType = 'localStorage';
   private tokenKey: string;
+  private refreshTokenKey: string;
   private userKey: string;
-  
+
   // Memory storage fallback (for SSR or when localStorage is unavailable)
   private memoryStore: Map<string, string> = new Map();
 
   constructor(options: TokenManagerOptions = {}) {
     this.storageType = options.storageType || 'localStorage';
-    this.tokenKey = options.tokenKey || SKAFTIN_CONFIG.tokenStorageKey;
-    this.userKey = options.userKey || SKAFTIN_CONFIG.userStorageKey;
+    this.tokenKey = options.tokenKey || API_CONFIG.tokenStorageKey;
+    this.refreshTokenKey = options.refreshTokenKey || API_CONFIG.refreshTokenStorageKey;
+    this.userKey = options.userKey || API_CONFIG.userStorageKey;
   }
 
   /**
@@ -109,6 +112,22 @@ class TokenManagerClass {
    */
   hasToken(): boolean {
     return !!this.getAccessToken();
+  }
+
+  // ============================================
+  // REFRESH TOKEN METHODS
+  // ============================================
+
+  getRefreshToken(): string | null {
+    return this.getItem(this.refreshTokenKey);
+  }
+
+  setRefreshToken(token: string): void {
+    this.setItem(this.refreshTokenKey, token);
+  }
+
+  clearRefreshToken(): void {
+    this.removeItem(this.refreshTokenKey);
   }
 
   /**
@@ -209,6 +228,7 @@ class TokenManagerClass {
    */
   clearAll(): void {
     this.clearToken();
+    this.clearRefreshToken();
     this.clearUser();
   }
 }

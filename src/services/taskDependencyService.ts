@@ -1,38 +1,37 @@
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { CreateProjectTaskDependencyDto, ProjectTaskDependency } from '../types/taskDependency';
 import TaskService from './taskService';
 
-const TABLE_NAME = 'project_task_dependencies';
+const BASE = '/api/v1/project-task-dependencies';
 
-function normalizeRows<T>(response: unknown): T[] {
-  const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
-  return [];
+interface ApiRow {
+  id: number;
+  businessId: number;
+  projectId: number;
+  predecessorTaskId: number;
+  successorTaskId: number;
+  createdAt: string | null;
 }
 
-function normalizeRow(raw: Record<string, unknown>): ProjectTaskDependency {
+function fromApi(row: ApiRow): ProjectTaskDependency {
   return {
-    id: raw.id != null ? Number(raw.id) : undefined,
-    business_id: Number(raw.business_id),
-    project_id: Number(raw.project_id),
-    predecessor_task_id: Number(raw.predecessor_task_id),
-    successor_task_id: Number(raw.successor_task_id),
-    created_at: raw.created_at != null ? String(raw.created_at) : undefined,
+    id: row.id,
+    business_id: row.businessId,
+    project_id: row.projectId,
+    predecessor_task_id: row.predecessorTaskId,
+    successor_task_id: row.successorTaskId,
+    created_at: row.createdAt ?? undefined,
   };
 }
 
 export class TaskDependencyService {
   static async findByProject(projectId: number, businessId: number): Promise<ProjectTaskDependency[]> {
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/select`, {
-      where: { project_id: projectId, business_id: businessId },
-      orderBy: 'id',
-      orderDirection: 'ASC',
+    const response = await foroApiClient.get<ApiRow[]>(BASE, {
+      projectId,
+      businessId,
       limit: 2000,
-      offset: 0,
     });
-    return normalizeRows<Record<string, unknown>>(response).map((row) => normalizeRow(row));
+    return (response.data ?? []).map(fromApi).sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
   }
 
   static async create(data: CreateProjectTaskDependencyDto): Promise<ProjectTaskDependency> {
@@ -50,18 +49,19 @@ export class TaskDependencyService {
     if (Number(pred.business_id) !== data.business_id || Number(succ.business_id) !== data.business_id) {
       throw new Error('Tasks must belong to this business scope');
     }
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/insert`, { data });
-    const r = response as unknown as Record<string, unknown>;
-    const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizeRow(inserted as Record<string, unknown>);
+    const response = await foroApiClient.post<ApiRow>(BASE, {
+      businessId: data.business_id,
+      projectId: data.project_id,
+      predecessorTaskId: data.predecessor_task_id,
+      successorTaskId: data.successor_task_id,
+    });
+    return fromApi(response.data);
   }
 
   static async delete(id: number, businessId: number): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.delete(`/app-api/database/tables/${TABLE_NAME}/delete`, {
-      where: { id, business_id: businessId },
-    });
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    void businessId;
+    await foroApiClient.delete(`${BASE}/${id}`);
+    return { rowCount: 1 };
   }
 }
 

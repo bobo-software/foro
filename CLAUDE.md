@@ -2,12 +2,15 @@
 
 ## Backend Request Implementation
 
+foro-web talks to **foro-api** (first-party Node/Express/Drizzle service in the sibling `foro-api` repo) — not Skaftin. The Skaftin BaaS integration was migrated off in full; `skaftinClient`/`SKAFTIN_CONFIG` no longer exist.
+
 Before implementing any backend request feature, always check:
 
-1. The MCP tools (e.g., `mcp__skaftin__*`) for available server-side operations.
+1. The MCP tools (`mcp__foro-mysql__*`) for available server-side DB operations (schema introspection, migrations, bulk data loads) — these operate on foro-api's MySQL database directly.
 2. The `client-sdk/requests/` docs for existing request patterns and API contracts.
+3. `foro-api/docs/api.md` for the authoritative, up-to-date route/contract reference — it's kept in sync with what's actually shipped.
 
-Do not invent or assume request shapes — consult these sources first.
+Do not invent or assume request shapes — consult these sources first. If a feature needs an endpoint that doesn't exist yet on foro-api, it needs to be built there first (resource-oriented REST under `/api/v1`, see `foro-api/src/lib/crudRouter.ts` for the standard CRUD pattern), not proxied through some other mechanism.
 
 ## Form Inputs
 

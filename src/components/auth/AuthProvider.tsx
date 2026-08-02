@@ -15,10 +15,6 @@ interface AuthContextType {
   logout: () => Promise<void>;
   verifySession: () => Promise<boolean>;
   clearError: () => void;
-  hasRole: (roleKey: string) => boolean;
-  hasAnyRole: (roleKeys: string[]) => boolean;
-  hasAllRoles: (roleKeys: string[]) => boolean;
-  isAdmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -52,10 +48,6 @@ export function AuthProvider({
     logout,
     verifySession,
     clearError,
-    hasRole,
-    hasAnyRole,
-    hasAllRoles,
-    isAdmin,
   } = useAuthStore();
 
   // Check if user is authenticated
@@ -100,10 +92,6 @@ export function AuthProvider({
     logout,
     verifySession,
     clearError,
-    hasRole,
-    hasAnyRole,
-    hasAllRoles,
-    isAdmin,
   };
 
   return (

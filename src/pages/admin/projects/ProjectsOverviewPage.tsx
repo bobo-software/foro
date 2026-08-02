@@ -115,7 +115,7 @@ export function ProjectsOverviewPage() {
           limit: PROJECT_LIST_LIMIT,
         }),
         CompanyService.findAll({
-          where: { business_id: bid },
+          where: { businessId: bid },
           orderBy: 'name',
           orderDirection: 'ASC',
           limit: PROJECT_LIST_LIMIT,

@@ -1,35 +1,21 @@
 import { z } from 'zod';
 import { logger } from '../utils/logger';
 
-const envSchema = z
-  .object({
-    VITE_SKAFTIN_API_URL: z
-      .string()
-      .url('VITE_SKAFTIN_API_URL must be a valid URL')
-      .default('http://localhost:4006'),
-    VITE_SKAFTIN_API_KEY: z.string().optional().default(''),
-    VITE_SKAFTIN_API: z.string().optional().default(''),
-    VITE_SKAFTIN_ACCESS_TOKEN: z.string().optional().default(''),
-    VITE_SKAFTIN_PROJECT_ID: z.string().optional().default(''),
-    VITE_GOOGLE_MAPS_API_KEY: z.string().optional().default(''),
-  })
-  .refine(
-    (v) => !!(v.VITE_SKAFTIN_API_KEY || v.VITE_SKAFTIN_API || v.VITE_SKAFTIN_ACCESS_TOKEN),
-    {
-      message:
-        'Skaftin credentials required. Set VITE_SKAFTIN_API_KEY or VITE_SKAFTIN_ACCESS_TOKEN in your .env file.',
-    },
-  );
+const envSchema = z.object({
+  VITE_API_URL: z
+    .string()
+    .url('VITE_API_URL must be a valid URL')
+    .default('http://localhost:4003'),
+  VITE_WS_URL: z.string().url('VITE_WS_URL must be a valid URL').optional().default(''),
+  VITE_GOOGLE_MAPS_API_KEY: z.string().optional().default(''),
+});
 
 export type Env = z.infer<typeof envSchema>;
 
 function parseEnv(): Env {
   const raw = {
-    VITE_SKAFTIN_API_URL: import.meta.env.VITE_SKAFTIN_API_URL,
-    VITE_SKAFTIN_API_KEY: import.meta.env.VITE_SKAFTIN_API_KEY,
-    VITE_SKAFTIN_API: import.meta.env.VITE_SKAFTIN_API,
-    VITE_SKAFTIN_ACCESS_TOKEN: import.meta.env.VITE_SKAFTIN_ACCESS_TOKEN,
-    VITE_SKAFTIN_PROJECT_ID: import.meta.env.VITE_SKAFTIN_PROJECT_ID,
+    VITE_API_URL: import.meta.env.VITE_API_URL,
+    VITE_WS_URL: import.meta.env.VITE_WS_URL,
     VITE_GOOGLE_MAPS_API_KEY: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   };
 
@@ -43,10 +29,7 @@ function parseEnv(): Env {
 
     if (import.meta.env.DEV) {
       logger.warn('[env] Falling back to defaults in development mode.');
-      return envSchema.parse({
-        ...raw,
-        VITE_SKAFTIN_API_KEY: raw.VITE_SKAFTIN_API_KEY || 'dev_placeholder',
-      });
+      return envSchema.parse(raw);
     }
 
     throw new Error(`Invalid environment configuration:\n${formatted}`);

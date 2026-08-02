@@ -2,82 +2,9 @@ import { useState, useEffect, FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { LuEye, LuEyeOff } from 'react-icons/lu';
-import { authPayloadNeedsOtpVerification, authService } from '../../services/authService';
+import { authService } from '../../services/authService';
 import useAuthStore from '../../stores/data/AuthStore';
-import { skaftinClient } from '../../backend';
-import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
-import type { SessionUser } from '../../types/Types';
 import { AppButton } from '@components/ComponentsIndex';
-
-interface LoginApiShape {
-  data?: {
-    accessToken?: string;
-    session?: { accessToken?: string };
-    user?: {
-      id: number | string;
-      name?: string;
-      full_name?: string;
-      last_name?: string | null;
-      email: string;
-      phone?: string | null;
-      is_active?: boolean;
-      email_verified?: boolean;
-      roles?: Array<{
-        id?: number;
-        role_name?: string;
-        role_key: string;
-        organisation_field_name?: string;
-        organisation_lookup_table?: string;
-        organisation_lookup_field?: string | null;
-      }>;
-    };
-    organisation_id?: number;
-    organisation_name?: string;
-    organisation?: { id?: number; name?: string; is_admin?: boolean };
-    is_admin?: boolean;
-  };
-}
-
-function mapNewLoginResponseToSessionUser(raw: LoginApiShape): SessionUser {
-  const payload = raw?.data ?? {};
-  const token = payload.session?.accessToken ?? payload.accessToken ?? '';
-  const user = payload.user;
-
-  if (!user || !token) {
-    throw new Error('Invalid login response');
-  }
-
-  const firstName = user.name ?? user.full_name ?? '';
-  const fullName =
-    [firstName, user.last_name].filter(Boolean).join(' ').trim() || firstName || user.email;
-  const role = user.roles?.[0]?.role_key ?? '';
-  const normalizedRoles = user.roles
-    ?.filter(
-      (r): r is NonNullable<SessionUser['roles']>[number] =>
-        typeof r.id === 'number' &&
-        typeof r.role_name === 'string' &&
-        typeof r.role_key === 'string'
-    );
-
-  return {
-    id: user.id,
-    email: user.email,
-    accessToken: token,
-    access: token,
-    association: payload.organisation_id ?? payload.organisation?.id ?? 0,
-    association_name: payload.organisation_name ?? payload.organisation?.name ?? '',
-    role,
-    name: fullName,
-    full_name: fullName,
-    last_name: user.last_name ?? undefined,
-    first_name: firstName || undefined,
-    phone: user.phone ?? null,
-    is_active: user.is_active,
-    email_verified: user.email_verified,
-    roles: normalizedRoles?.length ? normalizedRoles : undefined,
-    is_admin: payload.is_admin ?? payload.organisation?.is_admin ?? false,
-  };
-}
 
 export function Login() {
   const navigate = useNavigate();
@@ -85,40 +12,28 @@ export function Login() {
   const stateFrom = (location.state as { from?: { pathname: string } })?.from?.pathname;
   const returnTo = new URLSearchParams(location.search).get('returnTo') ?? undefined;
   const from = stateFrom ?? returnTo;
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  
+
   // Use store state
   const isLoading = useAuthStore((s) => s.isLoading);
   const error = useAuthStore((s) => s.error);
   const sessionUser = useAuthStore((s) => s.sessionUser);
   const accessToken = useAuthStore((s) => s.accessToken);
   const clearError = useAuthStore((s) => s.clearError);
-  const setLoading = useAuthStore((s) => s.setLoading);
-  const setError = useAuthStore((s) => s.setError);
-  const loginToStore = useAuthStore((s) => s.login);
-  const setRequiresOtpVerification = useAuthStore((s) => s.setRequiresOtpVerification);
-  const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
   const setRememberMeStore = useAuthStore((s) => s.setRememberMe);
 
   const isAuthenticated = !!(sessionUser?.accessToken || accessToken);
 
-  // Redirect if already authenticated (pending OTP → verify screen first)
+  // Redirect if already authenticated
   useEffect(() => {
-    if (requiresOtpVerification && sessionUser?.email) {
-      navigate('/verify-otp', {
-        replace: true,
-        state: { email: sessionUser.email, userId: sessionUser.id },
-      });
-      return;
-    }
-    if (isAuthenticated && !requiresOtpVerification) {
+    if (isAuthenticated) {
       navigate(from ?? '/app', { replace: true });
     }
-  }, [isAuthenticated, requiresOtpVerification, sessionUser, navigate, from]);
+  }, [isAuthenticated, navigate, from]);
 
   // Clear error on unmount
   useEffect(() => {
@@ -129,80 +44,25 @@ export function Login() {
 
   const handleSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
-    
+
     if (!email.trim() || !password) {
       toast.error('Please enter email and password');
       return;
     }
-    
+
     clearError();
-    
+
     try {
-      const loggedIn = await authService.login({
-        username: email.trim(),
-        password,
-        method: 'email',
-      });
+      await authService.login({ username: email.trim(), password });
       setRememberMeStore(rememberMe);
       if (!rememberMe) {
         window.sessionStorage.setItem('_fm_sess', '1');
       }
-      const pendingOtp = useAuthStore.getState().requiresOtpVerification;
-      if (pendingOtp) {
-        toast.success('Check your email for the verification code');
-        navigate('/verify-otp', {
-          replace: true,
-          state: { email: loggedIn.email, userId: loggedIn.id },
-        });
-      } else {
-        toast.success('Welcome back');
-        navigate(from ?? '/app', { replace: true });
-      }
+      toast.success('Welcome back');
+      navigate(from ?? '/app', { replace: true });
     } catch (err: unknown) {
-      const isInvalidShape = err instanceof Error && err.message === 'Invalid login response';
-
-      if (!isInvalidShape) {
-        // Error is already set in the store by authService
-        const message = err instanceof Error ? err.message : 'Login failed';
-        toast.error(message);
-        return;
-      }
-
-      try {
-        // Fallback for new backend login payloads that return data.accessToken.
-        clearError();
-        setLoading(true);
-        const response = await skaftinClient.post<LoginApiShape['data']>(SKAFTIN_CONFIG.endpoints.login, {
-          credential: email.trim(),
-          password,
-          method: 'email',
-        });
-        const session = mapNewLoginResponseToSessionUser(response as LoginApiShape);
-        loginToStore(session);
-        setRememberMeStore(rememberMe);
-        if (!rememberMe) {
-          window.sessionStorage.setItem('_fm_sess', '1');
-        }
-        const inner = (response as LoginApiShape).data ?? {};
-        if (authPayloadNeedsOtpVerification(inner)) {
-          setRequiresOtpVerification(true);
-          toast.success('Check your email for the verification code');
-          navigate('/verify-otp', {
-            replace: true,
-            state: { email: session.email, userId: session.id },
-          });
-        } else {
-          toast.success('Welcome back');
-          navigate(from ?? '/app', { replace: true });
-        }
-        setLoading(false);
-      } catch (fallbackErr: unknown) {
-        const fallbackMessage =
-          fallbackErr instanceof Error ? fallbackErr.message : 'Login failed';
-        setError(fallbackMessage);
-        setLoading(false);
-        toast.error(fallbackMessage);
-      }
+      const message = err instanceof Error ? err.message : 'Login failed';
+      toast.error(message);
     }
   };
 

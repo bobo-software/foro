@@ -1,61 +1,82 @@
 /**
  * Subscription Service
- * CRUD for the business_subscriptions table via Skaftin app-api
+ * CRUD for the business_subscriptions table
  */
 
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { BusinessSubscription, CreateBusinessSubscriptionDto } from '../types/subscription';
 
-const TABLE_NAME = 'business_subscriptions';
+const BASE = '/api/v1/business-subscriptions';
 
-function normalizeRows<T>(response: unknown): T[] {
-  const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
-  return [];
+interface ApiRow {
+  id: number;
+  businessId: number;
+  tier: string;
+  status: string;
+  provider: string | null;
+  planCode: string | null;
+  transactionId: string | null;
+  subscriptionToken: string | null;
+  amount: string | null;
+  currency: string | null;
+  currentPeriodEnd: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
-function normalizeSubscription(raw: Record<string, unknown>): BusinessSubscription {
+function fromApi(row: ApiRow): BusinessSubscription {
   return {
-    ...raw,
-    id: raw.id != null ? Number(raw.id) : undefined,
-    business_id: Number(raw.business_id),
-    amount: raw.amount != null ? Number(raw.amount) : null,
-  } as BusinessSubscription;
+    id: row.id,
+    business_id: row.businessId,
+    tier: row.tier as BusinessSubscription['tier'],
+    status: row.status as BusinessSubscription['status'],
+    provider: row.provider ?? undefined,
+    plan_code: row.planCode,
+    transaction_id: row.transactionId,
+    subscription_token: row.subscriptionToken,
+    amount: row.amount != null ? Number(row.amount) : null,
+    currency: row.currency ?? undefined,
+    current_period_end: row.currentPeriodEnd,
+    created_at: row.createdAt ?? undefined,
+    updated_at: row.updatedAt ?? undefined,
+  };
+}
+
+function toApiBody(data: Partial<CreateBusinessSubscriptionDto>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (data.business_id !== undefined) body.businessId = data.business_id;
+  if (data.tier !== undefined) body.tier = data.tier;
+  if (data.status !== undefined) body.status = data.status;
+  if (data.provider !== undefined) body.provider = data.provider;
+  if (data.plan_code !== undefined) body.planCode = data.plan_code;
+  if (data.transaction_id !== undefined) body.transactionId = data.transaction_id;
+  if (data.subscription_token !== undefined) body.subscriptionToken = data.subscription_token;
+  if (data.amount !== undefined) body.amount = data.amount;
+  if (data.currency !== undefined) body.currency = data.currency;
+  if (data.current_period_end !== undefined) body.currentPeriodEnd = data.current_period_end;
+  return body;
 }
 
 export class SubscriptionService {
   static async findByBusinessId(businessId: number): Promise<BusinessSubscription | null> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE_NAME}/select`,
-      { where: { business_id: businessId }, limit: 1, offset: 0 }
-    );
-    const rows = normalizeRows<Record<string, unknown>>(response);
-    const s = rows[0] ?? null;
-    return s ? normalizeSubscription(s) : null;
+    const response = await foroApiClient.get<ApiRow[]>(BASE, { businessId, limit: 1 });
+    const row = (response.data ?? [])[0];
+    return row ? fromApi(row) : null;
   }
 
   static async create(data: CreateBusinessSubscriptionDto): Promise<BusinessSubscription> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE_NAME}/insert`,
-      { data }
-    );
-    const r = response as unknown as Record<string, unknown>;
-    const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizeSubscription(inserted as Record<string, unknown>);
+    const response = await foroApiClient.post<ApiRow>(BASE, toApiBody(data));
+    return fromApi(response.data);
   }
 
   static async update(
     businessId: number,
     data: Partial<CreateBusinessSubscriptionDto>
   ): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.put(
-      `/app-api/database/tables/${TABLE_NAME}/update`,
-      { where: { business_id: businessId }, data }
-    );
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    const existing = await this.findByBusinessId(businessId);
+    if (!existing?.id) return { rowCount: 0 };
+    const response = await foroApiClient.put<ApiRow>(`${BASE}/${existing.id}`, toApiBody(data));
+    return { rowCount: response.data ? 1 : 0 };
   }
 }
 

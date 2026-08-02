@@ -37,12 +37,6 @@ export function useAuth() {
     clearError: store.clearError,
     setError: store.setError,
     setLoading: store.setLoading,
-
-    // Role helpers
-    hasRole: store.hasRole,
-    hasAnyRole: store.hasAnyRole,
-    hasAllRoles: store.hasAllRoles,
-    isAdmin: store.isAdmin,
   };
 }
 

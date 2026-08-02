@@ -1,5 +1,7 @@
 # Teams module
 
+> **Migrated to foro-api.** `teamService.ts` now calls foro-api (`/api/v1/team-invites`, `/api/v1/team-memberships`) instead of Skaftin. One schema addition was needed to preserve the pre-signup invite-link preview flow: `team_invites` gained a `token_hash` column (mirroring `portal_invites`), since foro-api's mirrored schema hadn't included one. See [`client-sdk/requests/02-DOMAIN-RESOURCES.md`](../../client-sdk/requests/02-DOMAIN-RESOURCES.md) for the current request contracts, including the token-based preview/accept endpoints `InviteAccept.tsx`/`InvitePostAuth.tsx` use.
+
 ## Scope
 
 Teams module adds:

@@ -1,60 +1,54 @@
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { AutomationRule, CreateAutomationRuleDto } from '../types/automationRule';
 
-const TABLE_NAME = 'automation_rules';
+const BASE = '/api/v1/automation-rules';
 
-function normalizeRows<T>(response: unknown): T[] {
-  const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
-  return [];
+interface ApiRow {
+  id: number;
+  businessId: number;
+  projectId: number | null;
+  name: string;
+  triggerKey: string;
+  definition: Record<string, unknown>;
+  enabled: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
-function asDefinition(raw: unknown): Record<string, unknown> {
-  if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
-  return {};
-}
-
-function normalizeRule(raw: Record<string, unknown>): AutomationRule {
+function fromApi(row: ApiRow): AutomationRule {
   return {
-    id: raw.id != null ? Number(raw.id) : undefined,
-    business_id: Number(raw.business_id),
-    project_id: raw.project_id != null ? Number(raw.project_id) : null,
-    name: String(raw.name ?? ''),
-    trigger_key: String(raw.trigger_key ?? ''),
-    definition: asDefinition(raw.definition),
-    enabled: raw.enabled === false ? false : true,
-    created_at: raw.created_at != null ? String(raw.created_at) : undefined,
-    updated_at: raw.updated_at != null ? String(raw.updated_at) : undefined,
+    id: row.id,
+    business_id: row.businessId,
+    project_id: row.projectId,
+    name: row.name,
+    trigger_key: row.triggerKey,
+    definition: row.definition ?? {},
+    enabled: row.enabled === false ? false : true,
+    created_at: row.createdAt ?? undefined,
+    updated_at: row.updatedAt ?? undefined,
   };
 }
 
 export class AutomationRuleService {
   static async findByProject(projectId: number, businessId: number): Promise<AutomationRule[]> {
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/select`, {
-      where: { project_id: projectId, business_id: businessId },
-      orderBy: 'id',
-      orderDirection: 'DESC',
+    const response = await foroApiClient.get<ApiRow[]>(BASE, {
+      projectId,
+      businessId,
       limit: 500,
-      offset: 0,
     });
-    return normalizeRows<Record<string, unknown>>(response).map((row) => normalizeRule(row));
+    return (response.data ?? []).map(fromApi).sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
   }
 
   static async create(data: CreateAutomationRuleDto): Promise<AutomationRule> {
-    const row = {
-      business_id: data.business_id,
-      project_id: data.project_id,
+    const response = await foroApiClient.post<ApiRow>(BASE, {
+      businessId: data.business_id,
+      projectId: data.project_id,
       name: data.name,
-      trigger_key: data.trigger_key,
+      triggerKey: data.trigger_key,
       definition: data.definition ?? {},
       enabled: data.enabled ?? true,
-    };
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/insert`, { data: row });
-    const r = response as unknown as Record<string, unknown>;
-    const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizeRule(inserted as Record<string, unknown>);
+    });
+    return fromApi(response.data);
   }
 
   static async update(
@@ -62,20 +56,20 @@ export class AutomationRuleService {
     businessId: number,
     data: Partial<Pick<AutomationRule, 'name' | 'trigger_key' | 'definition' | 'enabled'>> & { updated_at?: string }
   ): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.put(`/app-api/database/tables/${TABLE_NAME}/update`, {
-      where: { id, business_id: businessId },
-      data,
-    });
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    void businessId;
+    const body: Record<string, unknown> = {};
+    if (data.name !== undefined) body.name = data.name;
+    if (data.trigger_key !== undefined) body.triggerKey = data.trigger_key;
+    if (data.definition !== undefined) body.definition = data.definition;
+    if (data.enabled !== undefined) body.enabled = data.enabled;
+    const response = await foroApiClient.put<ApiRow>(`${BASE}/${id}`, body);
+    return { rowCount: response.data ? 1 : 0 };
   }
 
   static async delete(id: number, businessId: number): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.delete(`/app-api/database/tables/${TABLE_NAME}/delete`, {
-      where: { id, business_id: businessId },
-    });
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    void businessId;
+    await foroApiClient.delete(`${BASE}/${id}`);
+    return { rowCount: 1 };
   }
 }
 

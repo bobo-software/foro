@@ -1,8 +1,13 @@
 import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { webSocketService } from '../../backend/services/WebSocketService';
-import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
 
 interface WebSocketContextValue {
+  /**
+   * Kept for API compatibility with existing consumers. Room membership is
+   * now server-authoritative (see WebSocketService doc comment) — this value
+   * is no longer used to join/leave anything, only passed through to hooks
+   * that filter incoming events by business id.
+   */
   projectId: string | null;
 }
 
@@ -12,7 +17,7 @@ const WebSocketContext = createContext<WebSocketContextValue>({
 
 interface WebSocketProviderProps {
   children: ReactNode;
-  /** Project ID to connect to (defaults to SKAFTIN_CONFIG.projectId) */
+  /** Business id to scope event filtering to (server decides actual room membership). */
   projectId?: string | null;
   /** Auto-connect on mount (default: true) */
   autoConnect?: boolean;
@@ -41,7 +46,7 @@ interface WebSocketProviderProps {
  */
 export function WebSocketProvider({
   children,
-  projectId = SKAFTIN_CONFIG.projectId,
+  projectId = null,
   autoConnect = true,
 }: WebSocketProviderProps) {
   useEffect(() => {
@@ -85,5 +90,5 @@ export function useWebSocketContext() {
  */
 export function useProjectId(): string | null {
   const { projectId } = useWebSocketContext();
-  return projectId ?? SKAFTIN_CONFIG.projectId ?? null;
+  return projectId ?? null;
 }

@@ -1,22 +1,17 @@
 /**
  * Storage Service
- * Handles file uploads and downloads via Skaftin MinIO buckets
- * 
- * API Reference: client-sdk/requests/04-STORAGE-REQUESTS.md
+ * Handles file uploads and downloads via foro-api's S3-backed storage endpoints.
+ *
+ * Bucket is server-configured (`S3_BUCKET` env var on foro-api) — the client no
+ * longer chooses/sends a bucket name (Skaftin required one; foro-api owns it).
  */
 
-import { skaftinClient } from '../backend';
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
-import { TokenManager } from './TokenManager';
-
-/** MinIO bucket registered in Skaftin for this project (see list_project_buckets). */
-const BUCKET_NAME = 'foroman';
+import { foroApiClient } from '../backend';
 
 export class StorageService {
   /**
-   * Upload a file using multipart form data (Form with Bucket)
-   * Endpoint: POST /app-api/storage/files
-   * Form fields: file, bucket, path
+   * Upload a file using multipart form data.
+   * Endpoint: POST /api/v1/storage/files (fields: file, path)
    */
   static async upload(
     filePath: string,
@@ -24,59 +19,56 @@ export class StorageService {
   ): Promise<{ fileName: string; size: number; etag: string; url: string }> {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('bucket', BUCKET_NAME);
     formData.append('path', filePath);
 
-    const response = await skaftinClient.postFormData<{
+    const response = await foroApiClient.postFormData<{
       fileName: string;
       size: number;
       etag: string;
       url: string;
-    }>('/app-api/storage/files', formData);
+    }>('/api/v1/storage/files', formData);
     return response.data;
   }
 
   /**
    * Upload a file using base64 encoding
-   * Endpoint: POST /app-api/storage/:bucketName/upload
+   * Endpoint: POST /api/v1/storage/upload-base64
    */
   static async uploadBase64(
     fileName: string,
     fileContent: string,
     contentType?: string,
-    metadata?: Record<string, string>,
   ): Promise<{ fileName: string; size: number; etag: string; url: string }> {
-    const response = await skaftinClient.post<{
+    const response = await foroApiClient.post<{
       fileName: string;
       size: number;
       etag: string;
       url: string;
-    }>(`/app-api/storage/${BUCKET_NAME}/upload`, {
+    }>('/api/v1/storage/upload-base64', {
       filePath: fileName,
       fileContent,
       ...(contentType && { contentType }),
-      ...(metadata && { metadata }),
     });
     return response.data;
   }
 
   /**
    * Get a fresh presigned download URL for a file.
-   * Endpoint: GET /app-api/storage/files/download?bucket=...&path=...&returnUrl=true
+   * Endpoint: GET /api/v1/storage/files/download?path=...
    */
   static async getFileDownloadUrl(filePath: string): Promise<string> {
-    const response = await skaftinClient.get<{ url: string }>(
-      `/app-api/storage/files/download?bucket=${encodeURIComponent(BUCKET_NAME)}&path=${encodeURIComponent(filePath)}&returnUrl=true`
+    const response = await foroApiClient.get<{ url: string }>(
+      `/api/v1/storage/files/download?path=${encodeURIComponent(filePath)}`
     );
     return response.data.url;
   }
 
   /**
    * Delete a file from storage
-   * Endpoint: DELETE /app-api/storage/:bucketName/files/:filePath
+   * Endpoint: DELETE /api/v1/storage/files?path=...
    */
   static async delete(filePath: string): Promise<void> {
-    await skaftinClient.delete(`/app-api/storage/${BUCKET_NAME}/files/${encodeURIComponent(filePath)}`);
+    await foroApiClient.delete(`/api/v1/storage/files?path=${encodeURIComponent(filePath)}`);
   }
 
   /**
@@ -117,26 +109,14 @@ export class StorageService {
   }
 
   /**
-   * Fetch a file from a URL (with auth headers) and return as an object URL for display.
-   * Useful for <img src> where the endpoint requires auth.
+   * Fetch a file from a URL and return as an object URL for display.
+   * `url` is expected to be a presigned S3 URL from `getFileDownloadUrl` —
+   * presigned URLs are self-authenticating, so no auth headers are needed
+   * (unlike the old Skaftin download endpoint, which required them).
    */
   static async fetchFileAsObjectUrl(url: string): Promise<string | null> {
     try {
-      const headers: Record<string, string> = {};
-      
-      // Add API key
-      const apiKey = SKAFTIN_CONFIG.apiKey;
-      if (apiKey) {
-        headers['X-API-Key'] = apiKey;
-      }
-
-      // Add JWT Bearer token if available
-      const token = TokenManager.getAccessToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(url, { headers, credentials: 'include' });
+      const response = await fetch(url);
       if (!response.ok) return null;
 
       const blob = await response.blob();
@@ -148,21 +128,20 @@ export class StorageService {
 
   /**
    * List files in the bucket
-   * Endpoint: GET /app-api/storage/:bucketName/files
+   * Endpoint: GET /api/v1/storage/files?prefix=&maxKeys=
    */
   static async listFiles(prefix?: string, maxKeys?: number): Promise<{
     files: Array<{ name: string; size: number; lastModified: string; etag: string }>;
     isTruncated: boolean;
   }> {
-    const params = new URLSearchParams();
-    if (prefix) params.set('prefix', prefix);
-    if (maxKeys) params.set('maxKeys', String(maxKeys));
-    const qs = params.toString();
+    const params: Record<string, unknown> = {};
+    if (prefix) params.prefix = prefix;
+    if (maxKeys) params.maxKeys = maxKeys;
 
-    const response = await skaftinClient.get<{
+    const response = await foroApiClient.get<{
       files: Array<{ name: string; size: number; lastModified: string; etag: string }>;
       isTruncated: boolean;
-    }>(`/app-api/storage/${BUCKET_NAME}/files${qs ? `?${qs}` : ''}`);
+    }>('/api/v1/storage/files', params);
     return response.data;
   }
 }

@@ -56,7 +56,7 @@ const AppNavbar = () => {
   const currentBusiness = useBusinessStore((s) => s.currentBusiness);
   const setCurrentBusinessById = useBusinessStore((s) => s.setCurrentBusinessById);
 
-  const companyName = currentBusiness?.name || sessionUser?.association_name || sessionUser?.name || 'My Company';
+  const companyName = currentBusiness?.name || sessionUser?.name || 'My Company';
 
   return (
     <header className="shrink-0 flex items-center justify-between gap-4 px-6 py-3 print:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm">

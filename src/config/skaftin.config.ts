@@ -1,18 +1,30 @@
 // src/config/skaftin.config.ts
-import { env } from './env';
+//
+// DEPRECATED: bridging config for the handful of services not yet cut over
+// to foro-api (see migration plan). Reads raw import.meta.env directly
+// since these vars were intentionally dropped from env.ts's schema — do not
+// add new usages of this file. Deleted once every consumer moves to
+// api.config.ts.
 
 export const SKAFTIN_CONFIG = {
   // API URL - your Skaftin backend instance
-  apiUrl: env.VITE_SKAFTIN_API_URL,
-  
-  // API Key - identifies your project (get from Skaftin dashboard)
-  apiKey: env.VITE_SKAFTIN_API_KEY || env.VITE_SKAFTIN_API || '',
-  
+  apiUrl: import.meta.env.VITE_SKAFTIN_API_URL || 'http://localhost:4006',
+
+  // API Key - identifies your project (get from Skaftin dashboard).
+  // Falls back to a placeholder outside production so SkaftinClient's
+  // constructor (which throws without any credential) doesn't crash test/dev
+  // environments that never configured real Skaftin creds — matches the
+  // fallback env.ts used to provide before these vars were dropped from it.
+  apiKey:
+    import.meta.env.VITE_SKAFTIN_API_KEY ||
+    import.meta.env.VITE_SKAFTIN_API ||
+    (import.meta.env.DEV || import.meta.env.MODE === 'test' ? 'dev_placeholder' : ''),
+
   // Access token (alternative to API key)
-  accessToken: env.VITE_SKAFTIN_ACCESS_TOKEN || '',
-  
+  accessToken: import.meta.env.VITE_SKAFTIN_ACCESS_TOKEN || '',
+
   // Project ID
-  projectId: env.VITE_SKAFTIN_PROJECT_ID || null,
+  projectId: import.meta.env.VITE_SKAFTIN_PROJECT_ID || null,
   
   // Token storage key
   tokenStorageKey: 'skaftin_access_token',

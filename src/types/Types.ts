@@ -333,47 +333,20 @@ export interface Notification {
 
 export interface SessionUser {
   // Session-specific fields (required)
-  access: string;
   accessToken: string;
-  association: number; // Derived from organisation_id
-  association_name: string; // From metadata.association_name
-  role: string; // Derived from roles[0].role_key
-  
-  // Database user fields (from skaftin_system_users)
-  id: string | number; // User ID from database
+
+  // Database user fields (from foro-api `users` table)
+  id: number;
   email: string;
-  
-  // Name fields (matching database schema: full_name and last_name)
-  full_name?: string; // Full name from database (name column)
+
+  // Name fields
+  full_name?: string; // Combined display name
   name?: string; // Combined name for backward compatibility
-  last_name?: string; // Last name from database
-  first_name?: string; // Extracted from full_name for convenience
-  
+  last_name?: string;
+  first_name?: string;
+
   // Additional database fields
   phone?: string | null;
-  metadata?: Record<string, any>;
-  organisation_id?: number | null;
-  is_active?: boolean;
-  email_verified?: boolean;
-  phone_verified?: boolean;
-  created_at?: string;
-  updated_at?: string;
-  custom_field_1?: string | null;
-  custom_field_2?: string | null;
-  roles?: Array<{
-    id: number;
-    role_name: string;
-    role_key: string;
-    organisation_field_name?: string;
-    organisation_lookup_table?: string;
-    organisation_lookup_field?: string | null;
-  }>;
-  
-  // From login response data.organisation.is_admin
-  is_admin?: boolean;
-  
-  // Scholar-specific field
-  scholar_association_id?: number; // For scholar section users
 };
 
 // Login Response Types

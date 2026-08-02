@@ -1,8 +1,14 @@
-import { SKAFTIN_CONFIG } from '../../config/skaftin.config';
+import { io, type Socket } from 'socket.io-client';
+import { API_CONFIG } from '../../config/api.config';
+import { TokenManager } from '../../services/TokenManager';
 import { logger } from '../../utils/logger';
 
 /**
- * Database change event types
+ * Database change event types.
+ * Only `insert`/`update`/`delete` are actually emitted by foro-api's realtime
+ * layer — the DDL/cron variants below mirrored Skaftin's platform-level events,
+ * which had no consumer in this app; kept in the union only so existing type
+ * annotations across the codebase don't need touching.
  */
 export type DatabaseEventType =
   | 'insert'
@@ -23,7 +29,10 @@ export type DatabaseEventType =
   | 'import_dump';
 
 /**
- * Database change event
+ * Database change event.
+ * `projectId` here is actually the business id (as a string) — kept under its
+ * old name so existing call sites (`event.projectId`) don't need renaming.
+ * `oldData` is always undefined; foro-api's `db:change` event doesn't send it.
  */
 export interface DatabaseEvent {
   type: DatabaseEventType;
@@ -35,7 +44,10 @@ export interface DatabaseEvent {
 }
 
 /**
- * Project-level event
+ * Project-level event. Skaftin's generic pub/sub `project-event` channel has
+ * no foro-api equivalent — this type and `onProjectEvent`/`useProjectEvents`
+ * are kept for API compatibility but will never fire. No current consumer
+ * was found relying on this at migration time.
  */
 export interface ProjectEvent {
   type: string;
@@ -44,9 +56,6 @@ export interface ProjectEvent {
   timestamp: string;
 }
 
-/**
- * Connection status
- */
 export interface ConnectionStatus {
   isConnected: boolean;
   reconnectAttempts: number;
@@ -55,33 +64,27 @@ export interface ConnectionStatus {
 
 type ConnectionListener = (status: ConnectionStatus) => void;
 
-interface WsMessage {
-  type: string;
-  payload?: unknown;
-  projectId?: string;
-  message?: string;
-}
-
-function isWsMessage(v: unknown): v is WsMessage {
-  return typeof v === 'object' && v !== null && 'type' in v && typeof (v as Record<string, unknown>)['type'] === 'string';
+interface ForoDbChangeEvent {
+  type: 'insert' | 'update' | 'delete';
+  table: string;
+  businessId: number;
+  data?: unknown;
+  timestamp: string;
 }
 
 /**
- * WebSocket service for real-time updates
+ * WebSocket service for real-time updates — thin wrapper around Socket.IO.
  *
- * Automatically connects to Skaftin WebSocket server using API URL from config.
- * Project ID is automatically extracted from API key/token.
+ * Room membership is server-authoritative: on connect, foro-api joins the
+ * socket to `business:<id>` for every business the authenticated user has an
+ * active `team_memberships` row in. There is no client-side "join a project"
+ * concept anymore (unlike Skaftin) — `joinProject`/`leaveProject` are kept as
+ * no-ops for call-site compatibility; the server decides room membership from
+ * the JWT alone.
  */
 class WebSocketService {
-  private socket: WebSocket | null = null;
-  private isConnected = false;
+  private socket: Socket | null = null;
   private reconnectAttempts = 0;
-  private reconnectDelayMs = 1000;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private shouldReconnect = true;
-  private explicitlyDisconnected = false;
-  private currentProjectId: string | null = null; // Backward-compatible getter
-  private subscribedProjects: Set<string> = new Set();
   private connectionListeners: Set<ConnectionListener> = new Set();
   private databaseListeners: Set<(event: DatabaseEvent) => void> = new Set();
   private projectListeners: Set<(event: ProjectEvent) => void> = new Set();
@@ -96,164 +99,70 @@ class WebSocketService {
     logger.log(`[WebSocket][${ts}] ${message}`, payload);
   }
 
-  /**
-   * Initialize and connect to WebSocket server
-   * Call this when your app starts (e.g., in App.tsx or a provider)
-   */
+  /** Initialize and connect to the realtime server. Call this once when the app starts. */
   init() {
     this.debugLog('init() called');
     this.initialized = true;
-    this.shouldReconnect = true;
-    this.explicitlyDisconnected = false;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
     this.connect();
   }
 
-  /**
-   * Connect to WebSocket server
-   */
   private connect() {
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
-      this.debugLog('connect() skipped, socket already active', {
-        readyState: this.socket.readyState,
-      });
+    if (this.socket?.connected) {
+      this.debugLog('connect() skipped, socket already connected');
       return;
     }
 
-    const apiUrl = SKAFTIN_CONFIG.apiUrl.replace(/\/+$/, '');
-    const wsBase = apiUrl.replace(/^http/, 'ws');
-    const apiKey = SKAFTIN_CONFIG.apiKey;
-    const socketUrl = `${wsBase}/app-api/ws${apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : ''}`;
-    this.debugLog('Attempting WebSocket connection', {
-      apiUrl,
-      wsBase,
-      hasApiKey: Boolean(apiKey),
-      socketUrl,
-      reconnectAttempts: this.reconnectAttempts,
-    });
+    const token = TokenManager.getAccessToken();
+    if (!token) {
+      this.debugLog('connect() skipped, no access token yet');
+      return;
+    }
 
-    this.socket = new WebSocket(socketUrl);
+    this.socket?.disconnect();
+    this.socket = io(API_CONFIG.wsUrl, { auth: { token }, reconnection: true });
 
-    this.socket.addEventListener('open', () => {
-      this.isConnected = true;
+    this.socket.on('connect', () => {
       this.reconnectAttempts = 0;
-      this.reconnectDelayMs = 1000;
-      this.debugLog('WebSocket connection opened', {
-        subscribedProjects: Array.from(this.subscribedProjects),
-      });
+      this.debugLog('Socket connected', { id: this.socket?.id });
       this.notifyConnectionListeners();
-
-      // Re-subscribe to all project channels after reconnect.
-      this.subscribedProjects.forEach((projectId) => {
-        this.debugLog('Re-subscribing project after connect', { projectId });
-        this.send({ type: 'subscribe', projectId });
-      });
     });
 
-    this.socket.addEventListener('message', (event) => {
-      this.debugLog('WebSocket message received (raw)', event.data);
-      this.handleMessage(event.data);
-    });
-
-    this.socket.addEventListener('close', (event) => {
-      this.isConnected = false;
-      this.debugLog('WebSocket closed', {
-        code: event.code,
-        reason: event.reason,
-        wasClean: event.wasClean,
-      });
+    this.socket.on('disconnect', (reason) => {
+      this.debugLog('Socket disconnected', { reason });
       this.notifyConnectionListeners();
-      this.scheduleReconnect();
     });
 
-    this.socket.addEventListener('error', (event) => {
+    this.socket.on('connect_error', (err) => {
       this.reconnectAttempts += 1;
-      this.debugLog('WebSocket error event', event);
+      this.debugLog('Socket connect_error', err);
       this.notifyConnectionListeners();
+    });
+
+    this.socket.on('db:change', (event: ForoDbChangeEvent) => {
+      this.debugLog('db:change received', event);
+      const mapped: DatabaseEvent = {
+        type: event.type,
+        projectId: String(event.businessId),
+        tableName: event.table,
+        data: event.data,
+        timestamp: event.timestamp,
+      };
+      this.databaseListeners.forEach((listener) => listener(mapped));
     });
   }
 
-  private send(payload: Record<string, unknown>) {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      this.debugLog('send() skipped, socket not open', {
-        payload,
-        hasSocket: Boolean(this.socket),
-        readyState: this.socket?.readyState ?? null,
-      });
-      return;
-    }
-    this.debugLog('Sending WebSocket payload', payload);
-    this.socket.send(JSON.stringify(payload));
+  /** No-op — room membership is server-authoritative (see class doc). Kept for call-site compatibility. */
+  joinProject(_projectId: string) {
+    this.debugLog('joinProject() is a no-op under foro-api realtime (server-authoritative rooms)');
   }
 
-  private handleMessage(raw: unknown) {
-    if (typeof raw !== 'string') return;
-    let msg: unknown;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      this.debugLog('Failed to parse incoming message as JSON');
-      return;
-    }
-    this.debugLog('Parsed incoming message', msg);
-
-    if (!isWsMessage(msg)) return;
-
-    if (msg.type === 'database-change' && msg.payload) {
-      this.databaseListeners.forEach((listener) => listener(msg.payload as DatabaseEvent));
-      return;
-    }
-
-    if (msg.type === 'project-event' && msg.payload) {
-      this.projectListeners.forEach((listener) => listener(msg.payload as ProjectEvent));
-      return;
-    }
-
-    if (msg.type === 'subscribed' && typeof msg.projectId === 'string') {
-      this.currentProjectId = msg.projectId;
-      return;
-    }
-
-    if (msg.type === 'unsubscribed' && typeof msg.projectId === 'string') {
-      if (this.currentProjectId === msg.projectId) {
-        this.currentProjectId = null;
-      }
-      return;
-    }
-
-    if (msg.type === 'error') {
-      this.debugLog('Server reported WebSocket error', msg);
-      logger.error('WebSocket error:', msg.message || 'Unknown error');
-    }
+  /** No-op — see `joinProject`. */
+  leaveProject(_projectId: string) {
+    this.debugLog('leaveProject() is a no-op under foro-api realtime (server-authoritative rooms)');
   }
 
-  private scheduleReconnect() {
-    if (!this.shouldReconnect || this.explicitlyDisconnected) return;
-    if (this.reconnectTimer) return;
-
-    const delay = Math.min(this.reconnectDelayMs, 10000);
-    this.debugLog('Scheduling reconnect', { delayMs: delay });
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.reconnectAttempts += 1;
-      this.debugLog('Reconnect timer fired', {
-        reconnectAttempts: this.reconnectAttempts,
-      });
-      this.notifyConnectionListeners();
-      this.connect();
-      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 10000);
-    }, delay);
-  }
-
-  /**
-   * Subscribe to connection status changes
-   */
   onConnectionChange(callback: ConnectionListener) {
     this.connectionListeners.add(callback);
-    // Immediately notify with current status
     callback(this.getConnectionStatus());
     return () => {
       this.connectionListeners.delete(callback);
@@ -265,125 +174,54 @@ class WebSocketService {
     this.connectionListeners.forEach((listener) => listener(status));
   }
 
-  /**
-   * Join a project room to receive project-specific updates
-   * Project ID is automatically extracted from your API key/token
-   */
-  joinProject(projectId: string) {
-    this.debugLog('joinProject() called', { projectId });
-    this.currentProjectId = projectId;
-    this.subscribedProjects.add(projectId);
-    this.send({ type: 'subscribe', projectId });
-  }
-
-  /**
-   * Leave a project room
-   */
-  leaveProject(projectId: string) {
-    this.debugLog('leaveProject() called', { projectId });
-    this.subscribedProjects.delete(projectId);
-    this.send({ type: 'unsubscribe', projectId });
-    if (this.currentProjectId === projectId) {
-      this.currentProjectId = null;
-    }
-  }
-
-  /**
-   * Listen for database change events
-   */
   onDatabaseChange(callback: (event: DatabaseEvent) => void) {
     this.databaseListeners.add(callback);
   }
 
-  /**
-   * Remove database change listener
-   */
   offDatabaseChange(callback: (event: DatabaseEvent) => void) {
     this.databaseListeners.delete(callback);
   }
 
-  /**
-   * Listen for project events
-   */
+  /** Never fires — see `ProjectEvent` doc comment. */
   onProjectEvent(callback: (event: ProjectEvent) => void) {
     this.projectListeners.add(callback);
   }
 
-  /**
-   * Remove project event listener
-   */
   offProjectEvent(callback: (event: ProjectEvent) => void) {
     this.projectListeners.delete(callback);
   }
 
-  /**
-   * Get current connection status
-   */
   getConnectionStatus(): ConnectionStatus {
     return {
-      isConnected: this.isConnected,
+      isConnected: Boolean(this.socket?.connected),
       reconnectAttempts: this.reconnectAttempts,
-      socketId: null,
+      socketId: this.socket?.id ?? null,
     };
   }
 
-  /**
-   * Get current project ID
-   */
+  /** @deprecated no client-side project concept anymore; always returns null. */
   getCurrentProjectId(): string | null {
-    return this.currentProjectId;
+    return null;
   }
 
-  /**
-   * Disconnect from server
-   */
   disconnect() {
     this.debugLog('disconnect() called');
-    this.shouldReconnect = false;
-    this.explicitlyDisconnected = true;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-      this.isConnected = false;
-      this.currentProjectId = null;
-      this.notifyConnectionListeners();
-    }
+    this.socket?.disconnect();
+    this.socket = null;
+    this.notifyConnectionListeners();
   }
 
-  /**
-   * Reconnect to server
-   */
   reconnect() {
     this.debugLog('reconnect() called');
-    this.shouldReconnect = true;
-    this.explicitlyDisconnected = false;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
     this.connect();
   }
 
-  /**
-   * Manual debug reconnect for status button clicks.
-   * Keeps existing subscriptions and forces a fresh connect attempt.
-   */
   reconnectWithDebug(reason: string = 'manual-status-button') {
-    this.debugLog('reconnectWithDebug() called', {
-      reason,
-      status: this.getConnectionStatus(),
-      currentProjectId: this.currentProjectId,
-      subscribedProjects: Array.from(this.subscribedProjects),
-    });
+    this.debugLog('reconnectWithDebug() called', { reason, status: this.getConnectionStatus() });
     this.reconnect();
   }
 }
 
-// Export singleton instance
 const webSocketService = new WebSocketService();
 export default webSocketService;
 export { webSocketService };

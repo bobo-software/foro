@@ -3,7 +3,8 @@ import TaskChecklistService from './taskChecklistService';
 import TaskService from './taskService';
 
 vi.mock('../backend', () => ({
-  skaftinClient: {
+  foroApiClient: {
+    get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
@@ -14,9 +15,10 @@ vi.mock('./taskService', () => ({
   default: { findById: vi.fn() },
 }));
 
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 
-const post = vi.mocked(skaftinClient.post);
+const get = vi.mocked(foroApiClient.get);
+const post = vi.mocked(foroApiClient.post);
 const findById = vi.mocked(TaskService.findById);
 
 describe('TaskChecklistService', () => {
@@ -31,14 +33,16 @@ describe('TaskChecklistService', () => {
   });
 
   it('findByTask returns checklists with nested items', async () => {
-    post
+    get
       .mockResolvedValueOnce({
-        data: [{ id: 1, business_id: 7, project_id: 3, task_id: 10, title: 'QA', position: 0 }],
+        success: true,
+        data: [{ id: 1, businessId: 7, projectId: 3, taskId: 10, title: 'QA', position: 0 }],
       })
       .mockResolvedValueOnce({
+        success: true,
         data: [
-          { id: 100, business_id: 7, project_id: 3, checklist_id: 1, label: 'Step 1', is_done: true, position: 0 },
-          { id: 101, business_id: 7, project_id: 3, checklist_id: 1, label: 'Step 2', is_done: false, position: 1 },
+          { id: 100, businessId: 7, projectId: 3, checklistId: 1, label: 'Step 1', isDone: true, position: 0 },
+          { id: 101, businessId: 7, projectId: 3, checklistId: 1, label: 'Step 2', isDone: false, position: 1 },
         ],
       });
 
@@ -70,7 +74,8 @@ describe('TaskChecklistService', () => {
 
   it('createChecklist inserts when task is valid', async () => {
     post.mockResolvedValueOnce({
-      data: { id: 2, business_id: 7, project_id: 3, task_id: 10, title: 'Deploy', position: 0 },
+      success: true,
+      data: { id: 2, businessId: 7, projectId: 3, taskId: 10, title: 'Deploy', position: 0 },
     });
 
     const created = await TaskChecklistService.createChecklist({
@@ -83,10 +88,8 @@ describe('TaskChecklistService', () => {
 
     expect(created.title).toBe('Deploy');
     expect(post).toHaveBeenCalledWith(
-      expect.stringContaining('project_task_checklists/insert'),
-      expect.objectContaining({
-        data: expect.objectContaining({ title: 'Deploy', task_id: 10 }),
-      })
+      expect.stringContaining('project-task-checklists'),
+      expect.objectContaining({ title: 'Deploy', taskId: 10 })
     );
   });
 });

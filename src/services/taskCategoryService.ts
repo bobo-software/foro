@@ -1,38 +1,44 @@
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { TaskCategory, CreateTaskCategoryDto } from '../types/taskCategory';
 import { DEFAULT_TASK_CATEGORIES } from '../types/taskCategory';
 
-const TABLE = 'project_task_statuses';
+const BASE = '/api/v1/project-task-statuses';
 
-function normalizeRows<T>(response: unknown): T[] {
-  const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
-  return [];
+interface ApiRow {
+  id: number;
+  businessId: number;
+  projectId: number;
+  name: string;
+  slug: string;
+  color: string | null;
+  position: number;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
-function normalizeCategory(raw: Record<string, unknown>): TaskCategory {
+function fromApi(row: ApiRow): TaskCategory {
   return {
-    id: raw.id != null ? Number(raw.id) : undefined,
-    business_id: Number(raw.business_id),
-    project_id: Number(raw.project_id),
-    name: String(raw.name ?? ''),
-    slug: String(raw.slug ?? ''),
-    color: raw.color != null ? String(raw.color) : null,
-    position: raw.position != null ? Number(raw.position) : 0,
-    created_at: raw.created_at != null ? String(raw.created_at) : undefined,
-    updated_at: raw.updated_at != null ? String(raw.updated_at) : undefined,
+    id: row.id,
+    business_id: row.businessId,
+    project_id: row.projectId,
+    name: row.name,
+    slug: row.slug,
+    color: row.color,
+    position: row.position ?? 0,
+    created_at: row.createdAt ?? undefined,
+    updated_at: row.updatedAt ?? undefined,
   };
 }
 
 export class TaskCategoryService {
   static async findByProject(projectId: number, businessId: number): Promise<TaskCategory[]> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE}/select`,
-      { where: { project_id: projectId, business_id: businessId }, orderBy: 'position', orderDirection: 'ASC', limit: 100 }
-    );
-    return normalizeRows<Record<string, unknown>>(response).map(normalizeCategory);
+    const response = await foroApiClient.get<ApiRow[]>(BASE, {
+      projectId,
+      businessId,
+      limit: 100,
+    });
+    const rows = (response.data ?? []).map(fromApi);
+    return rows.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }
 
   /** Fetch categories for a project; if none exist, seed defaults and return them. */
@@ -46,39 +52,37 @@ export class TaskCategoryService {
     const results: TaskCategory[] = [];
     for (let i = 0; i < DEFAULT_TASK_CATEGORIES.length; i++) {
       const d = DEFAULT_TASK_CATEGORIES[i];
-      const response = await skaftinClient.post(
-        `/app-api/database/tables/${TABLE}/insert`,
-        { data: { business_id: businessId, project_id: projectId, name: d.name, slug: d.slug, color: d.color, position: i } }
-      );
-      const r = response as unknown as Record<string, unknown>;
-      const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-      results.push(normalizeCategory(inserted as Record<string, unknown>));
+      const response = await foroApiClient.post<ApiRow>(BASE, {
+        businessId,
+        projectId,
+        name: d.name,
+        slug: d.slug,
+        color: d.color,
+        position: i,
+      });
+      results.push(fromApi(response.data));
     }
     return results;
   }
 
   static async create(data: CreateTaskCategoryDto): Promise<TaskCategory> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE}/insert`,
-      { data }
-    );
-    const r = response as unknown as Record<string, unknown>;
-    const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizeCategory(inserted as Record<string, unknown>);
+    const response = await foroApiClient.post<ApiRow>(BASE, {
+      businessId: data.business_id,
+      projectId: data.project_id,
+      name: data.name,
+      slug: data.slug,
+      color: data.color,
+      position: data.position,
+    });
+    return fromApi(response.data);
   }
 
   static async update(id: number, data: { name?: string; color?: string | null; position?: number }): Promise<void> {
-    await skaftinClient.put(
-      `/app-api/database/tables/${TABLE}/update`,
-      { where: { id }, data: { ...data, updated_at: new Date().toISOString() } }
-    );
+    await foroApiClient.put(`${BASE}/${id}`, data);
   }
 
   static async delete(id: number): Promise<void> {
-    await skaftinClient.delete(
-      `/app-api/database/tables/${TABLE}/delete`,
-      { where: { id } }
-    );
+    await foroApiClient.delete(`${BASE}/${id}`);
   }
 }
 

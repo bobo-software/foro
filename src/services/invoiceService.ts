@@ -3,37 +3,104 @@
  * Handles all invoice-related API calls
  */
 
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { Invoice, CreateInvoiceDto } from '../types/invoice';
 import { normalizeDocumentKind } from '../utils/invoiceLedger';
 
+const BASE = '/api/v1/invoices';
+
+interface ApiInvoiceRow {
+  id: number;
+  companyId: number | null;
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string | null;
+  customerAddress: string | null;
+  issueDate: string;
+  dueDate: string;
+  status: string;
+  subtotal: string;
+  taxRate: string | null;
+  taxAmount: string | null;
+  total: string;
+  notes: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  currency: string | null;
+  businessId: number | null;
+  customerVatNumber: string | null;
+  deliveryAddress: string | null;
+  deliveryConditions: string | null;
+  orderNumber: string | null;
+  terms: string | null;
+  discountPercent: string | null;
+  projectId: number | null;
+  documentKind: string | null;
+  creditedInvoiceId: number | null;
+}
+
+function normalizeInvoice(row: ApiInvoiceRow): Invoice {
+  return {
+    id: row.id,
+    business_id: row.businessId,
+    company_id: row.companyId,
+    project_id: row.projectId,
+    document_kind: normalizeDocumentKind(row.documentKind ?? undefined),
+    credited_invoice_id: row.creditedInvoiceId,
+    invoice_number: row.invoiceNumber,
+    customer_name: row.customerName,
+    customer_email: row.customerEmail ?? undefined,
+    customer_address: row.customerAddress ?? undefined,
+    customer_vat_number: row.customerVatNumber ?? undefined,
+    delivery_address: row.deliveryAddress ?? undefined,
+    delivery_conditions: row.deliveryConditions ?? undefined,
+    order_number: row.orderNumber ?? undefined,
+    terms: row.terms ?? undefined,
+    issue_date: row.issueDate,
+    due_date: row.dueDate,
+    status: (row.status as Invoice['status']) ?? 'draft',
+    subtotal: Number(row.subtotal) || 0,
+    tax_rate: row.taxRate != null ? Number(row.taxRate) : undefined,
+    tax_amount: row.taxAmount != null ? Number(row.taxAmount) : undefined,
+    discount_percent: row.discountPercent != null ? Number(row.discountPercent) : undefined,
+    total: Number(row.total) || 0,
+    currency: row.currency ?? undefined,
+    notes: row.notes ?? undefined,
+    created_at: row.createdAt ?? undefined,
+    updated_at: row.updatedAt ?? undefined,
+  };
+}
+
+function toApiBody(data: Partial<CreateInvoiceDto>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (data.business_id !== undefined) body.businessId = data.business_id;
+  if (data.company_id !== undefined) body.companyId = data.company_id;
+  if (data.project_id !== undefined) body.projectId = data.project_id;
+  if (data.document_kind !== undefined) body.documentKind = data.document_kind;
+  if (data.credited_invoice_id !== undefined) body.creditedInvoiceId = data.credited_invoice_id;
+  if (data.invoice_number !== undefined) body.invoiceNumber = data.invoice_number;
+  if (data.customer_name !== undefined) body.customerName = data.customer_name;
+  if (data.customer_email !== undefined) body.customerEmail = data.customer_email;
+  if (data.customer_address !== undefined) body.customerAddress = data.customer_address;
+  if (data.customer_vat_number !== undefined) body.customerVatNumber = data.customer_vat_number;
+  if (data.delivery_address !== undefined) body.deliveryAddress = data.delivery_address;
+  if (data.delivery_conditions !== undefined) body.deliveryConditions = data.delivery_conditions;
+  if (data.order_number !== undefined) body.orderNumber = data.order_number;
+  if (data.terms !== undefined) body.terms = data.terms;
+  if (data.issue_date !== undefined) body.issueDate = data.issue_date;
+  if (data.due_date !== undefined) body.dueDate = data.due_date;
+  if (data.status !== undefined) body.status = data.status;
+  if (data.subtotal !== undefined) body.subtotal = data.subtotal;
+  if (data.tax_rate !== undefined) body.taxRate = data.tax_rate;
+  if (data.tax_amount !== undefined) body.taxAmount = data.tax_amount;
+  if (data.discount_percent !== undefined) body.discountPercent = data.discount_percent;
+  if (data.total !== undefined) body.total = data.total;
+  if (data.currency !== undefined) body.currency = data.currency;
+  if (data.notes !== undefined) body.notes = data.notes;
+  return body;
+}
+
 export class InvoiceService {
-  private static readonly TABLE_NAME = 'invoices';
-
-  /** Normalize select response: API may return { data: T[] } or { rows: T[] } */
-  private static normalizeRows<T>(response: unknown): T[] {
-    const r = response as Record<string, unknown>;
-    if (Array.isArray(r?.data)) return r.data as T[];
-    if (Array.isArray(r?.rows)) return r.rows as T[];
-    if (Array.isArray(r)) return r as T[];
-    return [];
-  }
-
-  private static extractRowCount(response: unknown): number | null {
-    const r = response as Record<string, unknown>;
-    if (typeof r?.rowCount === 'number') return r.rowCount;
-    const data = r?.data;
-    if (typeof data === 'object' && data !== null) {
-      const rc = (data as Record<string, unknown>).rowCount;
-      if (typeof rc === 'number') return rc;
-    }
-    return null;
-  }
-
-  /**
-   * Get all invoices
-   * POST /app-api/database/tables/invoices/select with limit & offset
-   */
   static async findAll(params?: {
     where?: Record<string, unknown>;
     orderBy?: string;
@@ -41,74 +108,39 @@ export class InvoiceService {
     limit?: number;
     offset?: number;
   }): Promise<Invoice[]> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${this.TABLE_NAME}/select`,
-      {
-        limit: params?.limit ?? 5000,
-        offset: params?.offset ?? 0,
-        ...(params?.where && { where: params.where }),
-        ...(params?.orderBy && { orderBy: params.orderBy }),
-        ...(params?.orderDirection && { orderDirection: params.orderDirection }),
-      }
-    );
-    const rows = this.normalizeRows<Record<string, unknown>>(response);
-    return rows.map((inv) => this.normalizeInvoice(inv));
+    const where = (params?.where ?? {}) as Record<string, unknown>;
+    const response = await foroApiClient.get<ApiInvoiceRow[]>(BASE, {
+      limit: params?.limit ?? 5000,
+      offset: params?.offset ?? 0,
+      ...((where.company_id ?? where.companyId) !== undefined && { companyId: where.company_id ?? where.companyId }),
+      ...((where.business_id ?? where.businessId) !== undefined && { businessId: where.business_id ?? where.businessId }),
+      ...((where.project_id ?? where.projectId) !== undefined && { projectId: where.project_id ?? where.projectId }),
+      ...(where.status !== undefined && { status: where.status }),
+    });
+    let rows = (response.data ?? []).map(normalizeInvoice);
+    if (params?.orderBy) {
+      const dir = params.orderDirection === 'DESC' ? -1 : 1;
+      const key = params.orderBy as keyof Invoice;
+      rows = [...rows].sort((a, b) => {
+        const av = a[key];
+        const bv = b[key];
+        if (av == null && bv == null) return 0;
+        if (av == null) return -1 * dir;
+        if (bv == null) return 1 * dir;
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+      });
+    }
+    return rows;
   }
 
-  /**
-   * Get invoice by ID
-   * POST /app-api/database/tables/invoices/select with limit & offset
-   */
   static async findById(id: number): Promise<Invoice | null> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${this.TABLE_NAME}/select`,
-      {
-        where: { id },
-        limit: 1,
-        offset: 0,
-      }
-    );
-    const rows = this.normalizeRows<Record<string, unknown>>(response);
-    const inv = rows[0] ?? null;
-    return inv ? this.normalizeInvoice(inv) : null;
-  }
-
-  /** Ensure numeric fields are numbers (API may return strings) */
-  private static normalizeInvoice(raw: Record<string, unknown>): Invoice {
-    const creditedRaw = raw.credited_invoice_id;
-    let credited_invoice_id: number | null | undefined;
-    if (creditedRaw === null) credited_invoice_id = null;
-    else if (creditedRaw !== undefined && creditedRaw !== '')
-      credited_invoice_id = Number(creditedRaw);
-    return {
-      id: raw.id != null ? Number(raw.id) : undefined,
-      business_id: raw.business_id != null ? Number(raw.business_id) : undefined,
-      company_id: raw.company_id != null ? Number(raw.company_id) : null,
-      project_id: raw.project_id != null ? Number(raw.project_id) : null,
-      document_kind: normalizeDocumentKind(raw.document_kind),
-      credited_invoice_id,
-      invoice_number: String(raw.invoice_number ?? ''),
-      customer_name: String(raw.customer_name ?? ''),
-      customer_email: raw.customer_email != null ? String(raw.customer_email) : undefined,
-      customer_address: raw.customer_address != null ? String(raw.customer_address) : undefined,
-      customer_vat_number: raw.customer_vat_number != null ? String(raw.customer_vat_number) : undefined,
-      delivery_address: raw.delivery_address != null ? String(raw.delivery_address) : undefined,
-      delivery_conditions: raw.delivery_conditions != null ? String(raw.delivery_conditions) : undefined,
-      order_number: raw.order_number != null ? String(raw.order_number) : undefined,
-      terms: raw.terms != null ? String(raw.terms) : undefined,
-      issue_date: String(raw.issue_date ?? ''),
-      due_date: String(raw.due_date ?? ''),
-      status: (raw.status as Invoice['status']) ?? 'draft',
-      subtotal: Number(raw.subtotal) || 0,
-      tax_rate: raw.tax_rate != null ? Number(raw.tax_rate) : undefined,
-      tax_amount: raw.tax_amount != null ? Number(raw.tax_amount) : undefined,
-      discount_percent: raw.discount_percent != null ? Number(raw.discount_percent) : undefined,
-      total: Number(raw.total) || 0,
-      currency: raw.currency != null ? String(raw.currency) : undefined,
-      notes: raw.notes != null ? String(raw.notes) : undefined,
-      created_at: raw.created_at != null ? String(raw.created_at) : undefined,
-      updated_at: raw.updated_at != null ? String(raw.updated_at) : undefined,
-    };
+    try {
+      const response = await foroApiClient.get<ApiInvoiceRow>(`${BASE}/${id}`);
+      return response.data ? normalizeInvoice(response.data) : null;
+    } catch (err: unknown) {
+      if ((err as { status?: number }).status === 404) return null;
+      throw err;
+    }
   }
 
   /**
@@ -116,18 +148,8 @@ export class InvoiceService {
    */
   static async create(data: CreateInvoiceDto): Promise<Invoice> {
     const { items: _items, ...invoiceRow } = data;
-    const response = await skaftinClient.post<unknown>(
-      `/app-api/database/tables/${this.TABLE_NAME}/insert`,
-      { data: invoiceRow }
-    );
-    const inner = response.data;
-    const inserted = Array.isArray(inner)
-      ? (inner[0] as Record<string, unknown> | undefined)
-      : (inner as Record<string, unknown> | undefined);
-    if (!inserted || typeof inserted !== 'object') {
-      throw new Error('Invalid response from invoice create: missing inserted row');
-    }
-    return this.normalizeInvoice(inserted);
+    const response = await foroApiClient.post<ApiInvoiceRow>(BASE, toApiBody(invoiceRow));
+    return normalizeInvoice(response.data);
   }
 
   /**
@@ -135,32 +157,15 @@ export class InvoiceService {
    */
   static async update(id: number, data: Partial<CreateInvoiceDto>): Promise<{ rowCount: number }> {
     const { items: _items, ...invoiceRow } = data;
-    const response = await skaftinClient.put<{ rowCount: number }>(
-      `/app-api/database/tables/${this.TABLE_NAME}/update`,
-      {
-        where: { id },
-        data: invoiceRow,
-      }
-    );
-    return response.data;
+    const response = await foroApiClient.put<ApiInvoiceRow>(`${BASE}/${id}`, toApiBody(invoiceRow));
+    return { rowCount: response.data ? 1 : 0 };
   }
 
-  /**
-   * Delete an invoice
-   */
   static async delete(id: number): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.delete<{ rowCount: number }>(
-      `/app-api/database/tables/${this.TABLE_NAME}/delete`,
-      {
-        where: { id },
-      }
-    );
-    return response.data;
+    await foroApiClient.delete(`${BASE}/${id}`);
+    return { rowCount: 1 };
   }
 
-  /**
-   * Get invoices by status
-   */
   static async findByStatus(status: string): Promise<Invoice[]> {
     return this.findAll({
       where: { status },
@@ -169,22 +174,9 @@ export class InvoiceService {
     });
   }
 
-  /**
-   * Count invoices
-   * POST /app-api/database/tables/invoices/select with limit & offset
-   */
   static async count(where?: Record<string, unknown>): Promise<number> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${this.TABLE_NAME}/select`,
-      {
-        ...(where && { where }),
-        limit: 1,
-        offset: 0,
-      }
-    );
-    const rc = this.extractRowCount(response);
-    if (rc !== null) return rc;
-    return this.normalizeRows(response).length;
+    const rows = await this.findAll({ where, limit: 5000 });
+    return rows.length;
   }
 }
 

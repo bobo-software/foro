@@ -2,14 +2,14 @@
 
 import { useEffect, useRef } from 'react';
 import useAuthStore from '../stores/data/AuthStore';
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { API_CONFIG } from '../config/api.config';
 import { logger } from '../utils/logger';
 
 /**
  * Periodically verify the session is still valid
  * @param intervalMs - How often to check (default: 5 minutes)
  */
-export function useSessionCheck(intervalMs = SKAFTIN_CONFIG.sessionCheckInterval) {
+export function useSessionCheck(intervalMs = API_CONFIG.sessionCheckInterval) {
   const sessionUser = useAuthStore((s) => s.sessionUser);
   const accessToken = useAuthStore((s) => s.accessToken);
   const verifySession = useAuthStore((s) => s.verifySession);

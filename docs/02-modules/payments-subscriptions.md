@@ -2,6 +2,8 @@
 
 Every business starts on an active Free plan automatically, with usage capped by tier. Owners can upgrade any time from Settings → Billing, which integrates the Skaftin Payment API (Paystack) for the paid tiers.
 
+> **Migration status:** `subscriptionService.ts` (CRUD on `business_subscriptions`) has been migrated to foro-api (`/api/v1/business-subscriptions`) — see [`client-sdk/requests/02-DOMAIN-RESOURCES.md`](../../client-sdk/requests/02-DOMAIN-RESOURCES.md). `paymentGatewayService.ts` (the actual Paystack/PayFast payment-initiation passthrough referenced above) has **not** been migrated — foro-api has no payment-provider integration yet, so it still calls Skaftin directly. This is a known, separately-tracked gap: whoever picks it up needs to decide whether foro-api integrates with Paystack/PayFast directly or keeps proxying through Skaftin for this one flow.
+
 ## Why
 
 The Landing page has always marketed four tiers (Free / Bronze / Silver / Gold), but nothing enforced them — every account got unlimited access regardless of plan. This module makes the tiers real without putting a wall in front of the app: businesses are auto-enrolled on Free and simply capped once they hit its limits, with an upgrade path always available. See `docs/03-database/payments-schema-contract.md` for the data model.

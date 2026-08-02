@@ -25,24 +25,16 @@ export function Register() {
   const error = useAuthStore((s) => s.error);
   const sessionUser = useAuthStore((s) => s.sessionUser);
   const accessToken = useAuthStore((s) => s.accessToken);
-  const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
   const clearError = useAuthStore((s) => s.clearError);
 
   const isAuthenticated = !!(sessionUser?.accessToken || accessToken);
 
-  // Redirect if already signed in (OTP first when verification is still pending)
+  // Redirect if already signed in
   useEffect(() => {
-    if (requiresOtpVerification && sessionUser?.email) {
-      navigate('/verify-otp', {
-        replace: true,
-        state: { email: sessionUser.email, userId: sessionUser.id },
-      });
-      return;
-    }
-    if (isAuthenticated && !requiresOtpVerification) {
+    if (isAuthenticated) {
       navigate(from ?? '/app', { replace: true });
     }
-  }, [isAuthenticated, requiresOtpVerification, sessionUser, navigate, from]);
+  }, [isAuthenticated, navigate, from]);
 
   // Clear errors on unmount
   useEffect(() => {
@@ -72,21 +64,15 @@ export function Register() {
     }
     
     try {
-      const result = await authService.register({
+      await authService.register({
         name: name.trim(),
         last_name: lastName.trim() || undefined,
         email: email.trim(),
         password,
-        otp_method: 'email',
       });
-      
-      if (result.requiresOtp) {
-        toast.success('Check your email for the verification code');
-        navigate('/verify-otp', { replace: true, state: { email: email.trim(), userId: result.userId } });
-      } else {
-        toast.success('Account created');
-        navigate(from ?? '/onboard', { replace: true });
-      }
+
+      toast.success('Account created');
+      navigate(from ?? '/onboard', { replace: true });
     } catch (err: unknown) {
       // Error is already set in the store by authService
       const message = err instanceof Error ? err.message : 'Registration failed';

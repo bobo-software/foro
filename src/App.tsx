@@ -8,7 +8,7 @@ import { RouteLoadingFallback } from './components/error/RouteLoadingFallback';
 import { useAuthSync } from './hooks/useAuthSync';
 import { useTokenRefresh } from './hooks/useTokenRefresh';
 import { webSocketService } from './backend/services/WebSocketService';
-import { SKAFTIN_CONFIG } from './config/skaftin.config';
+import useAuthStore from './stores/data/AuthStore';
 import useThemeStore from './stores/state/ThemeStore';
 import './App.css';
 
@@ -70,20 +70,25 @@ function AuthHooks() {
   useAuthSync();
   useTokenRefresh();
 
-  // Initialize WebSocket and join project room
-  useEffect(() => {
-    webSocketService.init();
+  // This component mounts on app load regardless of auth state (it lives
+  // above the public routes), so the socket connection must react to
+  // isAuthenticated changing rather than only running once on mount —
+  // otherwise a visitor who logs in without a full page reload never gets
+  // a realtime connection.
+  const isAuthenticated = useAuthStore((s) => !!(s.sessionUser?.accessToken || s.accessToken));
 
-    // Join project room if project ID is configured
-    const projectId = SKAFTIN_CONFIG.projectId;
-    if (projectId) {
-      webSocketService.joinProject(projectId);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      webSocketService.disconnect();
+      return;
     }
+
+    webSocketService.init();
 
     return () => {
       webSocketService.disconnect();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   return null;
 }

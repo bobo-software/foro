@@ -18,7 +18,7 @@ export const useCompanyStore = create<CompanyState>((set, get) => ({
 
   fetchCompanies: async () => {
     const businessId = useBusinessStore.getState().currentBusiness?.id;
-    const where = businessId != null ? { business_id: businessId } : undefined;
+    const where = businessId != null ? { businessId } : undefined;
     set({ loading: true, error: null });
     try {
       const data = await CompanyService.findAll({

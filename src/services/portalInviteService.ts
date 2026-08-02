@@ -1,28 +1,32 @@
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { PortalInvite, PortalInviteSummary } from '../types/portalInvite';
 import { sha256Hex } from '../utils/sha256Hex';
 
-const TABLE_NAME = 'portal_invites';
+const BASE = '/api/v1/portal-invites';
 
-function normalizeRows<T>(response: unknown): T[] {
-  const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
-  return [];
+interface ApiRow {
+  id: number;
+  businessId: number;
+  projectId: number;
+  tokenHash: string;
+  label: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
-function normalizeInvite(raw: Record<string, unknown>): PortalInvite {
+function fromApi(row: ApiRow): PortalInvite {
   return {
-    id: raw.id != null ? Number(raw.id) : undefined,
-    business_id: Number(raw.business_id),
-    project_id: Number(raw.project_id),
-    token_hash: String(raw.token_hash ?? ''),
-    label: raw.label != null ? String(raw.label) : undefined,
-    expires_at: String(raw.expires_at ?? ''),
-    revoked_at: raw.revoked_at != null ? String(raw.revoked_at) : null,
-    created_at: raw.created_at != null ? String(raw.created_at) : undefined,
-    updated_at: raw.updated_at != null ? String(raw.updated_at) : undefined,
+    id: row.id,
+    business_id: row.businessId,
+    project_id: row.projectId,
+    token_hash: row.tokenHash,
+    label: row.label,
+    expires_at: row.expiresAt,
+    revoked_at: row.revokedAt,
+    created_at: row.createdAt ?? undefined,
+    updated_at: row.updatedAt ?? undefined,
   };
 }
 
@@ -36,15 +40,11 @@ function generatePlaintextToken(): string {
 export class PortalInviteService {
   /** Lookup by SHA-256 hex of the URL token (64 chars). */
   static async findActiveByTokenHash(tokenHash: string): Promise<PortalInvite | null> {
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/select`, {
-      where: { token_hash: tokenHash },
-      limit: 5,
-      offset: 0,
-    });
-    const rows = normalizeRows<Record<string, unknown>>(response);
+    const response = await foroApiClient.get<ApiRow[]>(BASE, { limit: 500 });
     const now = Date.now();
-    for (const raw of rows) {
-      const inv = normalizeInvite(raw);
+    for (const raw of response.data ?? []) {
+      const inv = fromApi(raw);
+      if (inv.token_hash !== tokenHash) continue;
       if (inv.revoked_at) continue;
       const ex = new Date(inv.expires_at).getTime();
       if (Number.isFinite(ex) && ex > now) return inv;
@@ -53,18 +53,11 @@ export class PortalInviteService {
   }
 
   static async findByProject(projectId: number, businessId: number): Promise<PortalInviteSummary[]> {
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/select`, {
-      where: { project_id: projectId, business_id: businessId },
-      orderBy: 'id',
-      orderDirection: 'DESC',
-      limit: 100,
-      offset: 0,
-    });
-    return normalizeRows<Record<string, unknown>>(response).map((raw) => {
-      const inv = normalizeInvite(raw);
-      const { token_hash: _t, ...rest } = inv;
-      return rest;
-    });
+    const response = await foroApiClient.get<ApiRow[]>(BASE, { projectId, businessId, limit: 100 });
+    return (response.data ?? [])
+      .map(fromApi)
+      .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
+      .map(({ token_hash: _t, ...rest }) => rest);
   }
 
   /** Returns plaintext token once; caller must show/copy it — it cannot be recovered later. */
@@ -75,30 +68,24 @@ export class PortalInviteService {
     expiresAt: Date;
   }): Promise<{ plaintextToken: string; summary: PortalInviteSummary }> {
     const plaintextToken = generatePlaintextToken();
-    const token_hash = await sha256Hex(plaintextToken);
-    const data = {
-      business_id: params.business_id,
-      project_id: params.project_id,
-      token_hash,
+    const tokenHash = await sha256Hex(plaintextToken);
+    const response = await foroApiClient.post<ApiRow>(BASE, {
+      businessId: params.business_id,
+      projectId: params.project_id,
+      tokenHash,
       label: params.label ?? null,
-      expires_at: params.expiresAt.toISOString(),
-    };
-    const response = await skaftinClient.post(`/app-api/database/tables/${TABLE_NAME}/insert`, { data });
-    const r = response as unknown as Record<string, unknown>;
-    const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    const inv = normalizeInvite(inserted as Record<string, unknown>);
+      expiresAt: params.expiresAt.toISOString().slice(0, 23).replace('T', ' '),
+    });
+    const inv = fromApi(response.data);
     const { token_hash: _t, ...summary } = inv;
     return { plaintextToken, summary };
   }
 
   static async revoke(id: number, businessId: number): Promise<{ rowCount: number }> {
-    const ts = new Date().toISOString();
-    const response = await skaftinClient.put(`/app-api/database/tables/${TABLE_NAME}/update`, {
-      where: { id, business_id: businessId },
-      data: { revoked_at: ts, updated_at: ts },
-    });
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    void businessId;
+    const ts = new Date().toISOString().slice(0, 23).replace('T', ' ');
+    const response = await foroApiClient.put<ApiRow>(`${BASE}/${id}`, { revokedAt: ts });
+    return { rowCount: response.data ? 1 : 0 };
   }
 }
 

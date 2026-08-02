@@ -1,18 +1,18 @@
-# Storage and logos (MinIO)
+# Storage and logos (S3-backed via foro-api)
 
-Foro stores uploaded assets (company logos, PDF embeds) in **Skaftin MinIO** via the app-api storage endpoints. API shapes are defined in [`client-sdk/requests/04-STORAGE-REQUESTS.md`](../../client-sdk/requests/04-STORAGE-REQUESTS.md).
+> **Migrated off Skaftin/MinIO.** Foro now stores uploaded assets (company logos, PDF embeds) via **foro-api**'s S3-backed storage endpoints (`/api/v1/storage/*`), not Skaftin MinIO. API shapes are defined in [`client-sdk/requests/03-STORAGE-REQUESTS.md`](../../client-sdk/requests/03-STORAGE-REQUESTS.md).
 
-Database semantics for `logo_url` are in [storage-and-logos-schema-contract.md](../03-database/storage-and-logos-schema-contract.md).
+Database semantics for `logo_url` are unchanged conceptually — still a stored file **path**, not a URL — but the schema itself lives in foro-api's MySQL `companies` table now; see `foro-api/docs/database.md` rather than the stale `storage-and-logos-schema-contract.md` in this repo (Postgres/Skaftin-era, not authoritative post-migration).
 
-## Project bucket
+## Bucket
 
 | Setting | Value |
 |---------|--------|
-| MinIO / Skaftin bucket | **`foroman`** |
-| Code constant | [`storageService.ts`](../../src/services/storageService.ts) → `BUCKET_NAME` |
-| Skaftin project schema | `project_foroman_*` |
+| Bucket | **`foroman`** (unchanged), configurable via foro-api's `S3_BUCKET` env var |
+| Client code | [`storageService.ts`](../../src/services/storageService.ts) |
+| Bucket ownership | **Server-side only** now — the client no longer sends a bucket name in requests (Skaftin required one; foro-api's `S3_BUCKET` env var owns it) |
 
-The bucket must exist in Skaftin **and** be provisioned in MinIO. A bucket row in Skaftin without a backing MinIO bucket causes **`POST /app-api/storage/files`** to return **HTTP 500** (`Failed to upload file`). Do not use a name that only exists in the Skaftin UI (e.g. a stray `foro` bucket) unless MinIO upload has been verified.
+**Verification gap:** actual S3 upload/download/delete was not live-tested against a real bucket during the migration (no S3 credentials configured in that environment) — request validation and auth-gating were verified, the S3 I/O itself was not. Verify before relying on this in production.
 
 Verify with Skaftin MCP `list_project_buckets` or a test upload:
 

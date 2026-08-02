@@ -1,34 +1,52 @@
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { ProjectTask, CreateProjectTaskDto } from '../types/task';
 
-const TABLE_NAME = 'project_tasks';
+const BASE = '/api/v1/project-tasks';
 
-/**
- * CRUD for `project_tasks`. `business_id` is not FK-enforced in DB; callers must align with the parent `projects` row.
- */
-function normalizeRows<T>(response: unknown): T[] {
-  const r = response as Record<string, unknown>;
-  if (Array.isArray(r?.data)) return r.data as T[];
-  if (Array.isArray(r?.rows)) return r.rows as T[];
-  if (Array.isArray(r)) return r as T[];
-  return [];
+interface ApiTaskRow {
+  id: number;
+  businessId: number;
+  projectId: number;
+  title: string;
+  description: string | null;
+  status: string | null;
+  priority: string | null;
+  dueOn: string | null;
+  assignedToUserId: number | null;
+  position: number;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
-function normalizeTask(raw: Record<string, unknown>): ProjectTask {
+function fromApi(row: ApiTaskRow): ProjectTask {
   return {
-    ...raw,
-    id: raw.id != null ? Number(raw.id) : undefined,
-    business_id: Number(raw.business_id),
-    project_id: Number(raw.project_id),
-    title: String(raw.title ?? ''),
-    description: raw.description != null ? String(raw.description) : undefined,
-    status: raw.status != null ? String(raw.status) : undefined,
-    priority: raw.priority != null ? String(raw.priority) : undefined,
-    due_on: raw.due_on != null ? String(raw.due_on).slice(0, 10) : undefined,
-    assigned_to_user_id:
-      raw.assigned_to_user_id != null ? Number(raw.assigned_to_user_id) : undefined,
-    position: raw.position != null ? Number(raw.position) : 0,
-  } as ProjectTask;
+    id: row.id,
+    business_id: row.businessId,
+    project_id: row.projectId,
+    title: row.title,
+    description: row.description ?? undefined,
+    status: row.status ?? undefined,
+    priority: row.priority ?? undefined,
+    due_on: row.dueOn ?? undefined,
+    assigned_to_user_id: row.assignedToUserId ?? undefined,
+    position: row.position ?? 0,
+    created_at: row.createdAt ?? undefined,
+    updated_at: row.updatedAt ?? undefined,
+  };
+}
+
+function toApiBody(data: Partial<CreateProjectTaskDto> & { updated_at?: string }): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (data.business_id !== undefined) body.businessId = data.business_id;
+  if (data.project_id !== undefined) body.projectId = data.project_id;
+  if (data.title !== undefined) body.title = data.title;
+  if (data.description !== undefined) body.description = data.description;
+  if (data.status !== undefined) body.status = data.status;
+  if (data.priority !== undefined) body.priority = data.priority;
+  if (data.due_on !== undefined) body.dueOn = data.due_on;
+  if (data.assigned_to_user_id !== undefined) body.assignedToUserId = data.assigned_to_user_id;
+  if (data.position !== undefined) body.position = data.position;
+  return body;
 }
 
 export class TaskService {
@@ -39,59 +57,59 @@ export class TaskService {
     limit?: number;
     offset?: number;
   }): Promise<ProjectTask[]> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE_NAME}/select`,
-      {
-        limit: params?.limit ?? 5000,
-        offset: params?.offset ?? 0,
-        ...(params?.where && { where: params.where }),
-        ...(params?.orderBy && { orderBy: params.orderBy }),
-        ...(params?.orderDirection && { orderDirection: params.orderDirection }),
-      }
-    );
-    const rows = normalizeRows<Record<string, unknown>>(response);
-    return rows.map((row) => normalizeTask(row));
+    const where = (params?.where ?? {}) as Record<string, unknown>;
+    const response = await foroApiClient.get<ApiTaskRow[]>(BASE, {
+      limit: params?.limit ?? 5000,
+      offset: params?.offset ?? 0,
+      ...((where.business_id ?? where.businessId) !== undefined && { businessId: where.business_id ?? where.businessId }),
+      ...((where.project_id ?? where.projectId) !== undefined && { projectId: where.project_id ?? where.projectId }),
+      ...(where.status !== undefined && { status: where.status }),
+      ...((where.assigned_to_user_id ?? where.assignedToUserId) !== undefined && {
+        assignedToUserId: where.assigned_to_user_id ?? where.assignedToUserId,
+      }),
+    });
+    let rows = (response.data ?? []).map(fromApi);
+    if (params?.orderBy) {
+      const dir = params.orderDirection === 'DESC' ? -1 : 1;
+      const key = params.orderBy as keyof ProjectTask;
+      rows = [...rows].sort((a, b) => {
+        const av = a[key];
+        const bv = b[key];
+        if (av == null && bv == null) return 0;
+        if (av == null) return -1 * dir;
+        if (bv == null) return 1 * dir;
+        return av < bv ? -1 * dir : av > bv ? 1 * dir : 0;
+      });
+    }
+    return rows;
   }
 
   static async findById(id: number): Promise<ProjectTask | null> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE_NAME}/select`,
-      { where: { id }, limit: 1, offset: 0 }
-    );
-    const rows = normalizeRows<Record<string, unknown>>(response);
-    const row = rows[0] ?? null;
-    return row ? normalizeTask(row) : null;
+    try {
+      const response = await foroApiClient.get<ApiTaskRow>(`${BASE}/${id}`);
+      return response.data ? fromApi(response.data) : null;
+    } catch (err: unknown) {
+      if ((err as { status?: number }).status === 404) return null;
+      throw err;
+    }
   }
 
   static async create(data: CreateProjectTaskDto): Promise<ProjectTask> {
-    const response = await skaftinClient.post(
-      `/app-api/database/tables/${TABLE_NAME}/insert`,
-      { data }
-    );
-    const r = response as unknown as Record<string, unknown>;
-    const inserted = (Array.isArray(r?.data) ? r?.data?.[0] : r?.data) ?? r;
-    return normalizeTask(inserted as Record<string, unknown>);
+    const response = await foroApiClient.post<ApiTaskRow>(BASE, toApiBody(data));
+    return fromApi(response.data);
   }
 
   static async update(
     id: number,
     data: Partial<CreateProjectTaskDto> & { updated_at?: string }
   ): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.put(
-      `/app-api/database/tables/${TABLE_NAME}/update`,
-      { where: { id }, data }
-    );
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    const response = await foroApiClient.put<ApiTaskRow>(`${BASE}/${id}`, toApiBody(data));
+    return { rowCount: response.data ? 1 : 0 };
   }
 
   static async delete(id: number): Promise<{ rowCount: number }> {
-    const response = await skaftinClient.delete(
-      `/app-api/database/tables/${TABLE_NAME}/delete`,
-      { where: { id } }
-    );
-    const r = response as unknown as Record<string, unknown>;
-    return { rowCount: (r?.rowCount as number) ?? 0 };
+    await foroApiClient.delete(`${BASE}/${id}`);
+    return { rowCount: 1 };
   }
 }
 

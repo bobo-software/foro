@@ -1,36 +1,43 @@
 /**
- * Bill of materials lines for manufactured stock items (Skaftin table stock_item_bom_lines).
+ * Bill of materials lines for manufactured stock items.
  */
 
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import type { StockItemBomLine, StockItemBomLineInput } from '../types/item';
 
-const TABLE_NAME = 'stock_item_bom_lines';
+const BASE = '/api/v1/stock-item-bom-lines';
+
+interface ApiBomLineRow {
+  id: number;
+  parentItemId: number;
+  componentItemId: number;
+  quantityPer: string;
+  createdAt: string | null;
+}
+
+function fromApi(row: ApiBomLineRow): StockItemBomLine {
+  return {
+    id: row.id,
+    parent_item_id: row.parentItemId,
+    component_item_id: row.componentItemId,
+    quantity_per: Number(row.quantityPer),
+    created_at: row.createdAt ?? undefined,
+  };
+}
 
 export class StockItemBomService {
-  static async findAll(params?: {
-    where?: Record<string, unknown>;
-    limit?: number;
-    offset?: number;
-  }): Promise<StockItemBomLine[]> {
-    const response = await skaftinClient.post<
-      { rows: StockItemBomLine[]; rowCount: number } | StockItemBomLine[]
-    >(`/app-api/database/tables/${TABLE_NAME}/select`, {
+  static async findAll(params?: { where?: Record<string, unknown>; limit?: number; offset?: number }): Promise<StockItemBomLine[]> {
+    const parentItemId = (params?.where as Record<string, unknown> | undefined)?.parent_item_id;
+    const response = await foroApiClient.get<ApiBomLineRow[]>(BASE, {
       limit: params?.limit ?? 10000,
       offset: params?.offset ?? 0,
-      ...(params?.where && { where: params.where }),
+      ...(parentItemId !== undefined && { parentItemId }),
     });
-    const data = response.data;
-    if (Array.isArray(data)) return data;
-    return data?.rows || [];
+    return (response.data ?? []).map(fromApi);
   }
 
   static async findByParentId(parentItemId: number): Promise<StockItemBomLine[]> {
-    const rows = await this.findAll({
-      where: { parent_item_id: parentItemId },
-      limit: 500,
-    });
-    return rows;
+    return this.findAll({ where: { parent_item_id: parentItemId }, limit: 500 });
   }
 
   static async deleteByParentId(parentItemId: number): Promise<{ rowCount: number }> {
@@ -38,19 +45,17 @@ export class StockItemBomService {
     if (existing.length === 0) {
       return { rowCount: 0 };
     }
-    const response = await skaftinClient.delete<{ rowCount: number }>(
-      `/app-api/database/tables/${TABLE_NAME}/delete`,
-      { where: { parent_item_id: parentItemId } },
-    );
-    return response.data;
+    await Promise.all(existing.map((line) => (line.id ? foroApiClient.delete(`${BASE}/${line.id}`) : Promise.resolve())));
+    return { rowCount: existing.length };
   }
 
   static async insertLine(data: StockItemBomLineInput): Promise<StockItemBomLine> {
-    const response = await skaftinClient.post<StockItemBomLine>(
-      `/app-api/database/tables/${TABLE_NAME}/insert`,
-      { data },
-    );
-    return response.data;
+    const response = await foroApiClient.post<ApiBomLineRow>(BASE, {
+      parentItemId: data.parent_item_id,
+      componentItemId: data.component_item_id,
+      quantityPer: data.quantity_per,
+    });
+    return fromApi(response.data);
   }
 
   /**
@@ -65,10 +70,7 @@ export class StockItemBomService {
     if (existing.length === 0 && lines.length === 0) return;
 
     if (existing.length > 0) {
-      await skaftinClient.delete<{ rowCount: number }>(
-        `/app-api/database/tables/${TABLE_NAME}/delete`,
-        { where: { parent_item_id: parentItemId } },
-      );
+      await Promise.all(existing.map((line) => (line.id ? foroApiClient.delete(`${BASE}/${line.id}`) : Promise.resolve())));
     }
 
     for (const line of lines) {

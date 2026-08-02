@@ -4,47 +4,24 @@ import useAuthStore from '../../stores/data/AuthStore';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   /**
-   * Required roles (user must have at least one)
-   */
-  requiredRoles?: string[];
-  /**
-   * Require ALL roles instead of ANY
-   */
-  requireAllRoles?: boolean;
-  /**
    * Redirect path for unauthenticated users
    */
   loginPath?: string;
   /**
-   * Redirect path for unauthorized users (wrong role)
-   */
-  unauthorizedPath?: string;
-  /**
    * Custom loading component
    */
   loadingComponent?: React.ReactNode;
-  /**
-   * Custom unauthorized component
-   */
-  unauthorizedComponent?: React.ReactNode;
 }
 
 export function ProtectedRoute({
   children,
-  requiredRoles = [],
-  requireAllRoles = false,
   loginPath = '/login',
-  unauthorizedPath = '/unauthorized',
   loadingComponent,
-  unauthorizedComponent,
 }: ProtectedRouteProps) {
   const location = useLocation();
   const accessToken = useAuthStore((s) => s.accessToken);
   const sessionUser = useAuthStore((s) => s.sessionUser);
-  const requiresOtpVerification = useAuthStore((s) => s.requiresOtpVerification);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const hasAnyRole = useAuthStore((s) => s.hasAnyRole);
-  const hasAllRoles = useAuthStore((s) => s.hasAllRoles);
 
   const isAuthenticated = !!(accessToken || sessionUser?.accessToken);
 
@@ -53,7 +30,7 @@ export function ProtectedRoute({
     if (loadingComponent) {
       return <>{loadingComponent}</>;
     }
-    
+
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900">
         <div className="flex flex-col items-center gap-3">
@@ -67,34 +44,6 @@ export function ProtectedRoute({
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to={loginPath} state={{ from: location }} replace />;
-  }
-
-  // Email / SMS OTP must be completed before onboarding or the app shell
-  if (requiresOtpVerification) {
-    return (
-      <Navigate
-        to="/verify-otp"
-        replace
-        state={{
-          email: sessionUser?.email,
-          userId: sessionUser?.id != null ? Number(sessionUser.id) : undefined,
-        }}
-      />
-    );
-  }
-
-  // Check roles if specified
-  if (requiredRoles.length > 0) {
-    const hasRequiredRoles = requireAllRoles
-      ? hasAllRoles(requiredRoles)
-      : hasAnyRole(requiredRoles);
-
-    if (!hasRequiredRoles) {
-      if (unauthorizedComponent) {
-        return <>{unauthorizedComponent}</>;
-      }
-      return <Navigate to={unauthorizedPath} replace />;
-    }
   }
 
   return <>{children}</>;

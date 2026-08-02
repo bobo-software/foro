@@ -2,9 +2,9 @@
 
 import { useEffect, useRef } from 'react';
 import { TokenManager } from '../services/TokenManager';
-import { skaftinClient } from '../backend';
+import { foroApiClient } from '../backend';
 import useAuthStore from '../stores/data/AuthStore';
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
+import { API_CONFIG } from '../config/api.config';
 import { logger } from '../utils/logger';
 
 /**
@@ -28,17 +28,21 @@ export function useTokenRefresh() {
     }
 
     const checkAndRefresh = async () => {
-      // Check if token will expire soon
-      if (TokenManager.isTokenExpired(SKAFTIN_CONFIG.tokenRefreshBuffer)) {
+      if (TokenManager.isTokenExpired(API_CONFIG.tokenRefreshBuffer)) {
         logger.log('Token expiring soon, proactively refreshing...');
-        
+
+        const refreshToken = TokenManager.getRefreshToken();
+        if (!refreshToken) return;
+
         try {
-          const response = await skaftinClient.post<{ accessToken?: string }>(
-            SKAFTIN_CONFIG.endpoints.sessionRefresh
+          const response = await foroApiClient.post<{ accessToken?: string; refreshToken?: string }>(
+            API_CONFIG.endpoints.refresh,
+            { refreshToken }
           );
-          
-          if (response.data?.accessToken) {
+
+          if (response.data?.accessToken && response.data?.refreshToken) {
             TokenManager.setAccessToken(response.data.accessToken);
+            TokenManager.setRefreshToken(response.data.refreshToken);
             logger.log('Token proactively refreshed');
           }
         } catch (error) {
