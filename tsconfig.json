@@ -6,31 +6,30 @@
       "dom.iterable",
       "esnext"
     ],
-    "baseUrl": "./",
     "paths": {
       "@/*": [
-        "src/*"
+        "./src/*"
       ],
       "@assets/*": [
-        "src/assets/*"
+        "./src/assets/*"
       ],
       "@components/*": [
-        "src/components/*"
+        "./src/components/*"
       ],
       "@hooks/*": [
-        "src/hooks/*"
+        "./src/hooks/*"
       ],
       "@pages/*": [
-        "src/pages/*"
+        "./src/pages/*"
       ],
       "@routes/*": [
-        "src/routes/*"
+        "./src/routes/*"
       ],
       "@stores/*": [
-        "src/stores/*"
+        "./src/stores/*"
       ],
       "@utils/*": [
-        "src/utils/*"
+        "./src/utils/*"
       ]
     },
     "allowJs": true,
@@ -42,7 +41,8 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
+    "types": ["node"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
