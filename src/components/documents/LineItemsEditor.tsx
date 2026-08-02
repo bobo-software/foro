@@ -3,10 +3,11 @@
  * Provides single-row edit mode, qty/hrs toggle, catalogue search, and compact view rows.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { Item } from '../../types/item';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import { formatCurrency } from '../../utils/currency';
+import { computeStockAvailability } from '../../utils/stockAvailability';
 
 export interface LineRow {
   id: string;
@@ -29,6 +30,18 @@ interface LineItemsEditorProps {
   stockItems: Item[];
   currency: string;
   onChange: (rows: LineRow[]) => void;
+  /**
+   * itemId -> quantity to add back onto live stock before comparing — pass the
+   * originally-loaded invoice's own line quantities when editing an existing
+   * invoice. Omit for quotations and new invoices.
+   */
+  stockBaseline?: Record<number, number>;
+  /**
+   * When true (credit notes), still show the live "in stock" count per row but
+   * never render the short/insufficient styling — restoring stock is never
+   * insufficient.
+   */
+  disableStockWarnings?: boolean;
 }
 
 const inputClass =
@@ -37,8 +50,20 @@ const readonlyClass = 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed';
 const labelClass = 'mb-1 text-sm font-medium text-gray-700 dark:text-gray-300';
 const groupClass = 'flex flex-col';
 
-export function LineItemsEditor({ rows, stockItems, currency, onChange }: LineItemsEditorProps) {
+export function LineItemsEditor({
+  rows,
+  stockItems,
+  currency,
+  onChange,
+  stockBaseline,
+  disableStockWarnings,
+}: LineItemsEditorProps) {
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
+
+  const availability = useMemo(
+    () => computeStockAvailability(rows, stockItems, stockBaseline),
+    [rows, stockItems, stockBaseline]
+  );
 
   const addLine = useCallback(() => {
     const id = crypto.randomUUID?.() ?? `line-${Date.now()}`;
@@ -160,6 +185,18 @@ export function LineItemsEditor({ rows, stockItems, currency, onChange }: LineIt
                               </button>
                             </div>
                           </div>
+                          {row.itemId != null && (() => {
+                            const entry = availability.get(row.itemId);
+                            if (!entry) return null;
+                            const short = entry.short && !disableStockWarnings;
+                            return (
+                              <div className={`mt-1 text-xs ${short ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
+                                {short
+                                  ? `Only ${entry.available} available (need ${entry.requested})`
+                                  : `${entry.available} in stock`}
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className={`${groupClass} md:col-span-1`}>
                           <label className={labelClass}>Unit price</label>
@@ -225,8 +262,20 @@ export function LineItemsEditor({ rows, stockItems, currency, onChange }: LineIt
                     <td className={tdCls}>
                       {row.description || <span className="italic text-gray-400">No description</span>}
                     </td>
-                    <td className={`${tdCls} text-right tabular-nums text-green-600 dark:text-green-400 font-medium`}>
-                      {row.quantity}{row.unit_type === 'hrs' ? ' hrs' : ''}
+                    <td className={`${tdCls} text-right tabular-nums`}>
+                      <div className="text-green-600 dark:text-green-400 font-medium">
+                        {row.quantity}{row.unit_type === 'hrs' ? ' hrs' : ''}
+                      </div>
+                      {row.itemId != null && (() => {
+                        const entry = availability.get(row.itemId);
+                        if (!entry) return null;
+                        const short = entry.short && !disableStockWarnings;
+                        return (
+                          <div className={`text-[11px] ${short ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+                            {short ? `Only ${entry.available} available` : `${entry.available} in stock`}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className={`${tdCls} text-right tabular-nums`}>{formatCurrency(row.unit_price, currency)}</td>
                     <td className={`${tdCls} text-right tabular-nums text-gray-500`}>

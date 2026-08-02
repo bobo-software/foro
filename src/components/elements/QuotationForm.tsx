@@ -1,20 +1,22 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LuPencil, LuCheck } from 'react-icons/lu';
-import type { CreateQuotationDto, QuotationStatus, QuotationLine } from '../../types/quotation';
+import toast from 'react-hot-toast';
+import type { CreateQuotationDto, QuotationStatus } from '../../types/quotation';
 import type { Company } from '../../types/company';
 import type { Project } from '../../types/project';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { useCompanyStore } from '../../stores/data/CompanyStore';
 import { useItemStore } from '../../stores/data/ItemStore';
 import { useProjectStore } from '../../stores/data/ProjectStore';
-import { useQuotationStore } from '../../stores/data/QuotationStore';
+import { useQuotationStore, type QuotationLineInput } from '../../stores/data/QuotationStore';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import AppText from '../text/AppText';
 import { formatCurrency } from '../../utils/currency';
 import { logger } from '../../utils/logger';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
 import { QuotationHeaderFields } from './QuotationHeaderFields';
+import { computeStockAvailability, hasInsufficientStock, formatInsufficientStockMessage } from '../../utils/stockAvailability';
 
 const NO_PROJECT_ID = -1;
 const NO_PROJECT_OPTION: Project = {
@@ -207,6 +209,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
         }
         const rows: LineRow[] = (items || []).map((item) => ({
           id: `line-${item.id ?? Math.random()}`,
+          itemId: item.item_id,
           sku: item.sku || '',
           description: item.description,
           quantity: item.quantity || 1,
@@ -305,9 +308,17 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
       setError('Quotation number and company are required');
       return;
     }
-    const items: Omit<QuotationLine, 'id' | 'quotation_id'>[] = lineRows
-      .filter((r) => r.description && r.quantity > 0)
+    const submittableRows = lineRows.filter((r) => r.description && r.quantity > 0);
+    const availability = computeStockAvailability(submittableRows, stockItems);
+    if (hasInsufficientStock(availability)) {
+      const message = formatInsufficientStockMessage(availability);
+      setError(message);
+      toast.error(message);
+      return;
+    }
+    const items: QuotationLineInput[] = submittableRows
       .map((r) => ({
+        item_id: r.itemId,
         sku: r.sku || undefined,
         description: r.description,
         quantity: r.quantity,

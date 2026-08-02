@@ -19,6 +19,7 @@ import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import AppInputLabeled from '../forms/AppLabledInput';
 import { formatCurrency } from '../../utils/currency';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
+import { computeBaselineQuantities, computeStockAvailability, hasInsufficientStock, formatInsufficientStockMessage } from '../../utils/stockAvailability';
 
 const NO_PROJECT_ID = -1;
 const NO_PROJECT_OPTION: Project = {
@@ -59,6 +60,7 @@ export function InvoiceForm({
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(NO_PROJECT_OPTION);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
+  const [baselineQuantities, setBaselineQuantities] = useState<Record<number, number>>({});
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
   const [initialProjectApplied, setInitialProjectApplied] = useState(false);
@@ -339,6 +341,7 @@ export function InvoiceForm({
           unit_type: (item.unit_type as 'qty' | 'hrs') ?? 'qty',
         }));
         setLineRows(rows);
+        setBaselineQuantities(computeBaselineQuantities(rows));
         setGlobalDiscountPercent(Number(invoice.discount_percent ?? 0));
       }
     } catch (err: unknown) {
@@ -526,8 +529,18 @@ export function InvoiceForm({
       setError('Invoice number and company are required');
       return;
     }
-    const items = lineRows
-      .filter((r) => r.description && r.quantity > 0)
+    const submittableRows = lineRows.filter((r) => r.description && r.quantity > 0);
+    if (formData.document_kind !== 'credit_note') {
+      const baseline = invoiceId ? baselineQuantities : {};
+      const availability = computeStockAvailability(submittableRows, stockItems, baseline);
+      if (hasInsufficientStock(availability)) {
+        const message = formatInsufficientStockMessage(availability);
+        setError(message);
+        toast.error(message);
+        return;
+      }
+    }
+    const items = submittableRows
       .map((r) => ({
         sku: r.sku || undefined,
         description: r.description,
@@ -706,6 +719,8 @@ export function InvoiceForm({
             stockItems={stockItems}
             currency={formData.currency || 'ZAR'}
             onChange={setLineRows}
+            stockBaseline={invoiceId && !isCreditNote ? baselineQuantities : undefined}
+            disableStockWarnings={isCreditNote}
           />
         </div>
 
