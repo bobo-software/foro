@@ -271,9 +271,8 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
   const vatAmount = (subtotal * vatRate) / 100;
   const total = subtotal + vatAmount;
 
-  const hasPage2 = !!quotation.notes;
-
   const isConvertedReadOnly = quotation.status === 'converted';
+  const notesText = quotation.notes?.trim() ?? '';
 
   const thClass = 'px-2 py-1.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide';
 
@@ -452,7 +451,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           )}
         </div>
 
-        {/* ── Banking + Totals — pushed to bottom ── */}
+        {/* ── Banking + Totals + Notes — fill remaining A4 space ── */}
         <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
           <div className="grid grid-cols-2 gap-8 items-start print:break-inside-avoid">
             {/* Banking */}
@@ -503,10 +502,19 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
               </div>
             </div>
           </div>
+
+          {notesText ? (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
+              <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
+              <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
+                {notesText}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* ── Footer ── */}
-        <div className="mt-auto pt-6 text-center">
+        <div className="pt-6 text-center">
           <p className="text-xs text-gray-300 dark:text-gray-600">Foro by Bobo Softwares (2026)</p>
         </div>
       </div>
@@ -526,21 +534,6 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
         total={total}
         currency={quotation.currency}
       />
-
-      {/* ── Page 2 — notes ── */}
-      {hasPage2 && (
-        <div className="quotation-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
-          <div className="pb-4 mb-4 border-b border-gray-200 dark:border-gray-700">
-            <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
-            <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
-              {quotation.notes}
-            </p>
-          </div>
-          <div className="mt-auto pt-6 text-center">
-            <p className="text-xs text-gray-300 dark:text-gray-600">Foro by Bobo Softwares (2026)</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

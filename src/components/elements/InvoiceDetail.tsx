@@ -153,7 +153,11 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   const total = subtotal + vatAmount;
 
   const isCn = isCreditNoteInvoice(invoice);
-  const hasPage2 = !!invoice.notes || (!!creditedInvoiceLabel && isCn);
+  const creditNoteNote = isCn && creditedInvoiceLabel
+    ? `This credit note relates to invoice #${creditedInvoiceLabel}.`
+    : '';
+  const notesBody = invoice.notes?.trim() ?? '';
+  const page1Notes = [creditNoteNote, notesBody].filter(Boolean).join('\n\n');
 
   const creditNoteCreateSearch = new URLSearchParams();
   creditNoteCreateSearch.set('credit_from', String(invoiceId));
@@ -369,34 +373,22 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
               </div>
             </div>
           </div>
+
+          {page1Notes ? (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
+              <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
+              <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
+                {page1Notes}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* ── Footer ── */}
-        <div className="mt-auto pt-6 text-center">
+        <div className="pt-6 text-center">
           <p className="text-xs text-gray-300 dark:text-gray-600">Foro by Bobo Softwares (2026)</p>
         </div>
       </div>
-
-      {/* ── Page 2 — notes ── */}
-      {hasPage2 && (
-        <div className="invoice-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
-          <div className="pb-4 mb-4 border-b border-gray-200 dark:border-gray-700">
-            <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
-            <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
-              {isCn && creditedInvoiceLabel && (
-                <>
-                  This credit note relates to invoice #{creditedInvoiceLabel}.
-                  {invoice.notes?.trim() ? '\n\n' : ''}
-                </>
-              )}
-              {invoice.notes}
-            </p>
-          </div>
-          <div className="mt-auto pt-6 text-center">
-            <p className="text-xs text-gray-300 dark:text-gray-600">Foro by Bobo Softwares (2026)</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
