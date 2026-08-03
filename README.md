@@ -143,8 +143,19 @@ MIT
 - Base Directory: `/`
 - Dockerfile Location: `/dockerfile`
 - Container Port: `80`
-- Build-time variables:
-  - `INFISICAL_TOKEN=<service-token>`
-  - `INFISICAL_ENV=prod`
-  - `INFISICAL_DOMAIN=https://infisical.bobosoftware.co.za`
+- Build-time variables (Vite embeds these into the static bundle):
+  - `VITE_API_URL` — foro-api base URL (required), e.g. `https://api.example.com`
+  - `VITE_WS_URL` — optional WebSocket URL (defaults to `VITE_API_URL`)
+  - `VITE_GOOGLE_MAPS_API_KEY` — optional Google Maps Places key
 - Remove backend-only pre-deploy commands (for example `php artisan migrate`) for this frontend service.
+
+Example local build:
+
+```bash
+docker build \
+  --build-arg VITE_API_URL=https://api.example.com \
+  -t foro-web \
+  -f dockerfile \
+  .
+```
+
