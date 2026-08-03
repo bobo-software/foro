@@ -11,11 +11,9 @@ COPY . .
 
 # Vite bakes VITE_* into the client bundle at build time.
 ARG VITE_API_URL
-ARG VITE_WS_URL=
 ARG VITE_GOOGLE_MAPS_API_KEY=
 
 ENV VITE_API_URL=$VITE_API_URL \
-    VITE_WS_URL=$VITE_WS_URL \
     VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 
 RUN if [ -z "$VITE_API_URL" ]; then \
