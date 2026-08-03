@@ -7,7 +7,6 @@
  */
 
 import { StorageService } from '../services/storageService';
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
 import { logger } from './logger';
 import { TokenManager } from '../services/TokenManager';
 
@@ -42,10 +41,8 @@ export async function fetchLogoAsBase64(logoFilePath: string): Promise<LogoData 
     // Get presigned download URL
     const downloadUrl = await StorageService.getFileDownloadUrl(logoFilePath);
 
-    // Fetch the image with auth headers
+    // Fetch the image with auth headers when the URL requires a session
     const headers: Record<string, string> = {};
-    const apiKey = SKAFTIN_CONFIG.apiKey;
-    if (apiKey) headers['X-API-Key'] = apiKey;
     const token = TokenManager.getAccessToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
