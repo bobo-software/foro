@@ -11,6 +11,7 @@
 | [Teams rollout](00-overview/teams-rollout-plan.md) | Delivery phases, MCP validation, readiness checks |
 | [Teams roles](01-roles/teams-permissions-model.md) | Role matrix and authorization rules |
 | [Teams module](02-modules/teams-invitations-and-memberships.md) | Invite/accept/member-management UX and architecture |
+| [Auth password recovery](02-modules/auth-password-recovery.md) | Forgot-password OTP + reset-token flow against `foro-api` auth routes |
 | [Project tasks (MVP)](02-modules/project-tasks.md) | Routes, `TaskService`, `project_tasks` — list + board (Kanban) on project detail |
 | [PM / tasks progress](plans/project-task-management/PROGRESS.md) | Rolling status for project & task management phases |
 | [Updating PM plans (Cursor rule)](../.cursor/rules/project-plan-updates.mdc) | Keep PROGRESS + phase docs in sync when shipping task/project work |
