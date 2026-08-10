@@ -92,11 +92,11 @@ export function CompanyDetailPage() {
   }, [company?.id, loadProjects]);
 
   useEffect(() => {
-    if (!company?.name) return;
+    if (!company?.id) return;
     let cancelled = false;
     setDocsLoading(true);
-    const invoiceWhere: Record<string, unknown> = { customer_name: company.name };
-    const quotationWhere: Record<string, unknown> = { customer_name: company.name };
+    const invoiceWhere: Record<string, unknown> = { company_id: company.id };
+    const quotationWhere: Record<string, unknown> = { company_id: company.id };
     const paymentOptions = selectedProjectId !== 'all'
       ? { projectId: selectedProjectId }
       : undefined;
@@ -115,7 +115,7 @@ export function CompanyDetailPage() {
         where: quotationWhere,
         limit: 200,
       }).catch(() => [] as Quotation[]),
-      PaymentService.findByCompany(company.name, paymentOptions).catch(() => [] as Payment[]),
+      PaymentService.findByCompanyId(company.id, paymentOptions).catch(() => [] as Payment[]),
     ])
       .then(([inv, quot, pay]) => {
         if (!cancelled) {
@@ -130,7 +130,7 @@ export function CompanyDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [company?.name, selectedProjectId, docsRefreshTick]);
+  }, [company?.id, company?.name, selectedProjectId, docsRefreshTick]);
 
   useEffect(() => {
     if (selectedProjectId === 'all') return;

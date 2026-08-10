@@ -313,9 +313,11 @@ export const classicTemplate: PdfTemplateFunctions = {
     doc.text(formatCurrency(data.subtotal, data.currency), rightEdge, totalsY, { align: 'right' });
     totalsY += lh;
 
-    doc.text(`VAT (${data.vatRate}%):`, totalsLabelX, totalsY);
-    doc.text(formatCurrency(data.vatAmount, data.currency), rightEdge, totalsY, { align: 'right' });
-    totalsY += lh;
+    if (data.showVat !== false) {
+      doc.text(`VAT (${data.vatRate}%):`, totalsLabelX, totalsY);
+      doc.text(formatCurrency(data.vatAmount, data.currency), rightEdge, totalsY, { align: 'right' });
+      totalsY += lh;
+    }
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(pdfFs(config, 12));

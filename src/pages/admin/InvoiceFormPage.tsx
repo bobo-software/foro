@@ -24,8 +24,11 @@ export function InvoiceFormPage() {
       initialCompanyId={initialCompanyId}
       initialProjectId={initialProjectId}
       onSuccess={(createdId) => {
-        if (createdId != null) navigate(`/app/invoices/${createdId}`);
-        else navigate(-1);
+        if (createdId != null) {
+          navigate(`/app/invoices/${createdId}${fromCompany ? `?from_company=${fromCompany}` : ''}`);
+        } else {
+          navigate(-1);
+        }
       }}
       onCancel={() => {
         if (invoiceId) navigate(`/app/invoices/${invoiceId}`);

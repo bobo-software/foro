@@ -260,11 +260,14 @@ export const minimalTemplate: PdfTemplateFunctions = {
     doc.text(formatCurrency(data.subtotal, data.currency), rightEdge, totalsY, { align: 'right' });
     totalsY += lh;
 
-    doc.setTextColor(...config.secondaryTextColor);
-    doc.text(`VAT (${data.vatRate}%)`, totalsLabelX, totalsY);
-    doc.setTextColor(...config.textColor);
-    doc.text(formatCurrency(data.vatAmount, data.currency), rightEdge, totalsY, { align: 'right' });
-    totalsY += lh + 3;
+    if (data.showVat !== false) {
+      doc.setTextColor(...config.secondaryTextColor);
+      doc.text(`VAT (${data.vatRate}%)`, totalsLabelX, totalsY);
+      doc.setTextColor(...config.textColor);
+      doc.text(formatCurrency(data.vatAmount, data.currency), rightEdge, totalsY, { align: 'right' });
+      totalsY += lh;
+    }
+    totalsY += 3;
 
     // Thin separator
     doc.setDrawColor(...config.primaryColor);

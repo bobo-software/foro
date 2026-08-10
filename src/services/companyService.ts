@@ -29,6 +29,9 @@ interface ApiCompanyRow {
   website: string | null;
   notes: string | null;
   isOwnerCompany: boolean | null;
+  documentTemplate: string | null;
+  showLogoOnDocuments: boolean | null;
+  taxEnabled: boolean | null;
 }
 
 function fromApi(row: ApiCompanyRow): Company {
@@ -51,6 +54,9 @@ function fromApi(row: ApiCompanyRow): Company {
     website: row.website ?? undefined,
     notes: row.notes ?? undefined,
     logo_url: row.logoUrl ?? undefined,
+    document_template: row.documentTemplate ?? undefined,
+    show_logo_on_documents: row.showLogoOnDocuments ?? undefined,
+    tax_enabled: row.taxEnabled ?? undefined,
     created_at: row.createdAt ?? undefined,
     updated_at: row.updatedAt ?? undefined,
   };
@@ -75,6 +81,9 @@ function toApiBody(data: Partial<CreateCompanyDto>): Record<string, unknown> {
   if (data.website !== undefined) body.website = data.website;
   if (data.notes !== undefined) body.notes = data.notes;
   if (data.logo_url !== undefined) body.logoUrl = data.logo_url;
+  if (data.document_template !== undefined) body.documentTemplate = data.document_template;
+  if (data.show_logo_on_documents !== undefined) body.showLogoOnDocuments = data.show_logo_on_documents;
+  if (data.tax_enabled !== undefined) body.taxEnabled = data.tax_enabled;
   return body;
 }
 

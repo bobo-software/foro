@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { LuPrinter } from 'react-icons/lu';
+import { LuPrinter, LuArrowLeft } from 'react-icons/lu';
 import type { Invoice, InvoiceItem } from '../../types/invoice';
 import { ACCOUNT_TYPES } from '../../types/bankingDetails';
 import StorageService from '../../services/storageService';
@@ -13,11 +13,12 @@ import InvoiceService from '../../services/invoiceService';
 
 interface InvoiceDetailProps {
   invoiceId: number;
+  fromCompanyId?: string | null;
   onEdit?: () => void;
   onDelete?: () => void;
 }
 
-export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProps) {
+export function InvoiceDetail({ invoiceId, fromCompanyId, onEdit, onDelete }: InvoiceDetailProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [lineItems, setLineItems] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +143,8 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
     );
   }
 
-  const vatRate = Number(invoice.tax_rate) || 0;
+  const taxEnabled = business?.tax_enabled ?? true;
+  const vatRate = taxEnabled ? Number(invoice.tax_rate) || 0 : 0;
   const globalDiscountPercent = Number(invoice.discount_percent) || 0;
   const linesSubtotal = lineItems.length > 0
     ? lineItems.reduce((sum, item) => sum + Number(item.total || 0), 0)
@@ -180,6 +182,14 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           </span>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
+          {fromCompanyId && (
+            <Link
+              to={`/app/companies/${fromCompanyId}?tab=invoices`}
+              className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors no-underline"
+            >
+              <LuArrowLeft size={15} aria-hidden />Back to company
+            </Link>
+          )}
           <button
             type="button"
             onClick={handlePrint}
@@ -248,7 +258,7 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           <div>
             <p className="mb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bill To</p>
             <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{invoice.customer_name}</p>
-            {invoice.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {invoice.customer_vat_number}</p>}
+            {!!business?.vat_number && invoice.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {invoice.customer_vat_number}</p>}
             {invoice.customer_address && <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-line">{invoice.customer_address}</p>}
             {invoice.customer_email && <p className="text-xs text-gray-500 dark:text-gray-400">{invoice.customer_email}</p>}
           </div>
@@ -359,10 +369,12 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal, invoice.currency)}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
-                <span>VAT ({vatRate}%)</span>
-                <span>{formatCurrency(vatAmount, invoice.currency)}</span>
-              </div>
+              {taxEnabled && (
+                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                  <span>VAT ({vatRate}%)</span>
+                  <span>{formatCurrency(vatAmount, invoice.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-700 dark:border-gray-300 text-sm font-bold text-gray-900 dark:text-gray-100">
                 <span>Total</span>
                 <span>{formatCurrency(total, invoice.currency)}</span>

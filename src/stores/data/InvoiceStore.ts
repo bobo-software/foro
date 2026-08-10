@@ -5,6 +5,7 @@ import QuotationService from '../../services/quotationService';
 import { useBusinessStore } from './BusinessStore';
 import type { Invoice, CreateInvoiceDto, InvoiceItem } from '../../types/invoice';
 import { computeNextDocumentNumber } from '../../utils/documentNumber';
+import { computeOrderNumber } from '../../utils/orderNumber';
 
 export type InvoiceLineInput = Omit<InvoiceItem, 'id' | 'invoice_id'> & { item_id?: number };
 
@@ -18,6 +19,12 @@ interface InvoiceState {
   fetchInvoiceWithItems: (id: number) => Promise<{ invoice: Invoice | null; items: InvoiceItem[] }>;
   peekNextInvoiceNumber: () => Promise<string>;
   peekNextCreditNoteNumber: () => Promise<string>;
+  peekNextOrderNumber: (
+    companyId: number,
+    companyName: string,
+    issueDate: string,
+    isCreditNote: boolean
+  ) => Promise<string>;
   createInvoiceWithLines: (header: CreateInvoiceDto, lines: InvoiceLineInput[]) => Promise<number>;
   saveInvoiceWithLines: (
     invoiceId: number,
@@ -93,6 +100,16 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
     if (businessId != null) where.business_id = businessId;
     const rows = await InvoiceService.findAll({ where });
     return computeNextDocumentNumber(rows.map((r) => r.invoice_number ?? ''), 'CN-');
+  },
+
+  peekNextOrderNumber: async (companyId, companyName, issueDate, isCreditNote) => {
+    const rows = await InvoiceService.findAll({ where: { company_id: companyId } });
+    return computeOrderNumber({
+      type: isCreditNote ? 'CN' : 'IN',
+      companyName,
+      issueDate,
+      existingOrderNumbers: rows.map((r) => r.order_number ?? ''),
+    });
   },
 
   createInvoiceWithLines: async (header, lines) => {

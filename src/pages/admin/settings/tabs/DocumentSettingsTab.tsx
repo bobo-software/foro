@@ -21,6 +21,7 @@ export function DocumentSettingsTab() {
 
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplateId>('classic');
   const [showLogo, setShowLogo] = useState(false);
+  const [taxEnabled, setTaxEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [previewing, setPreviewing] = useState<DocumentTemplateId | null>(null);
@@ -30,6 +31,7 @@ export function DocumentSettingsTab() {
     if (business) {
       setSelectedTemplate((business.document_template as DocumentTemplateId) || 'classic');
       setShowLogo(business.show_logo_on_documents ?? false);
+      setTaxEnabled(business.tax_enabled ?? true);
     }
   }, [business]);
 
@@ -40,6 +42,11 @@ export function DocumentSettingsTab() {
 
   const handleToggleLogo = useCallback(() => {
     setShowLogo((prev) => !prev);
+    setDirty(true);
+  }, []);
+
+  const handleToggleTax = useCallback(() => {
+    setTaxEnabled((prev) => !prev);
     setDirty(true);
   }, []);
 
@@ -62,12 +69,14 @@ export function DocumentSettingsTab() {
       await BusinessService.update(business.id, {
         document_template: selectedTemplate,
         show_logo_on_documents: showLogo,
+        tax_enabled: taxEnabled,
       });
       // Update local store
       setCurrentBusiness({
         ...business,
         document_template: selectedTemplate,
         show_logo_on_documents: showLogo,
+        tax_enabled: taxEnabled,
       });
       clearLogoCache();
       setDirty(false);
@@ -78,7 +87,7 @@ export function DocumentSettingsTab() {
     } finally {
       setSaving(false);
     }
-  }, [business, selectedTemplate, showLogo, setCurrentBusiness]);
+  }, [business, selectedTemplate, showLogo, taxEnabled, setCurrentBusiness]);
 
   const hasLogo = Boolean(business?.logo_url);
 
@@ -199,6 +208,33 @@ export function DocumentSettingsTab() {
             <span
               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                 showLogo && hasLogo ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Tax Toggle */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">
+          Tax
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+          Charge tax on invoices and quotations. Turn this off if your business doesn't charge tax — the Tax field and tax line disappear from new and existing documents.
+        </p>
+
+        <div className="flex items-center justify-between py-3">
+          <p className="font-medium text-slate-800 dark:text-slate-100">Apply tax to documents</p>
+          <button
+            type="button"
+            onClick={handleToggleTax}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              taxEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                taxEnabled ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
           </button>

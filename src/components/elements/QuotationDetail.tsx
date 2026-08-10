@@ -261,7 +261,8 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
     );
   }
 
-  const vatRate = Number(quotation.tax_rate) || 0;
+  const taxEnabled = business?.tax_enabled ?? true;
+  const vatRate = taxEnabled ? Number(quotation.tax_rate) || 0 : 0;
   const globalDiscountPercent = Number(quotation.discount_percent) || 0;
   const linesSubtotal = lineItems.length > 0
     ? lineItems.reduce((sum, item) => sum + Number(item.total || 0), 0)
@@ -380,7 +381,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           <div>
             <p className="mb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bill To</p>
             <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{quotation.customer_name}</p>
-            {quotation.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {quotation.customer_vat_number}</p>}
+            {!!business?.vat_number && quotation.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {quotation.customer_vat_number}</p>}
             {quotation.customer_address && <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-line">{quotation.customer_address}</p>}
             {quotation.customer_email && <p className="text-xs text-gray-500 dark:text-gray-400">{quotation.customer_email}</p>}
           </div>
@@ -493,10 +494,12 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal, quotation.currency)}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
-                <span>VAT ({vatRate}%)</span>
-                <span>{formatCurrency(vatAmount, quotation.currency)}</span>
-              </div>
+              {taxEnabled && (
+                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                  <span>VAT ({vatRate}%)</span>
+                  <span>{formatCurrency(vatAmount, quotation.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-700 dark:border-gray-300 text-sm font-bold text-gray-900 dark:text-gray-100">
                 <span>Total</span>
                 <span>{formatCurrency(total, quotation.currency)}</span>

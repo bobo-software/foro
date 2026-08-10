@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LuPencil, LuCheck } from 'react-icons/lu';
 import toast from 'react-hot-toast';
@@ -18,13 +18,6 @@ import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItems
 import { QuotationHeaderFields } from './QuotationHeaderFields';
 import { computeStockAvailability, hasInsufficientStock, formatInsufficientStockMessage } from '../../utils/stockAvailability';
 
-const NO_PROJECT_ID = -1;
-const NO_PROJECT_OPTION: Project = {
-  id: NO_PROJECT_ID,
-  company_id: 0,
-  name: 'No project',
-};
-
 interface QuotationFormProps {
   quotationId?: number;
   initialCompanyId?: number;
@@ -40,7 +33,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(NO_PROJECT_OPTION);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
   const [initialCompanyApplied, setInitialCompanyApplied] = useState(false);
@@ -53,6 +46,8 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   const fetchItems = useItemStore((s) => s.fetchItems);
   const companies = useCompanyStore((s) => s.companies);
   const stockItems = useItemStore((s) => s.items);
+  const taxEnabled = useBusinessStore((s) => s.currentBusiness?.tax_enabled ?? true);
+  const businessVatNumber = useBusinessStore((s) => s.currentBusiness?.vat_number);
 
   const [formData, setFormData] = useState<CreateQuotationDto>({
     company_id: undefined,
@@ -82,6 +77,30 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     void fetchItems();
   }, [fetchCompanies, fetchItems]);
 
+  /** Tracks the last auto-computed order_number so later issue_date changes only refresh it if the user hasn't typed a custom value. */
+  const autoOrderNumberRef = useRef<string | null>(null);
+
+  const refreshOrderNumber = useCallback(
+    (companyId: number, companyName: string, issueDate: string) => {
+      useQuotationStore
+        .getState()
+        .peekNextOrderNumber(companyId, companyName, issueDate)
+        .then((num) => {
+          // Snapshot the ref before scheduling the update: setFormData's updater runs later
+          // (and may run twice under StrictMode), so it must close over an immutable value
+          // rather than read/write the mutable ref itself.
+          const expectedAuto = autoOrderNumberRef.current;
+          setFormData((prev) => {
+            const prevWasAuto = !prev.order_number || prev.order_number === expectedAuto;
+            return prevWasAuto ? { ...prev, order_number: num } : prev;
+          });
+          autoOrderNumberRef.current = num;
+        })
+        .catch((err: unknown) => logger.error('Failed to peek next order number:', err));
+    },
+    []
+  );
+
   const loadProjectsForCompany = useCallback(async (companyId: number) => {
     const projectList = await useProjectStore.getState().fetchProjectsForCompany(companyId);
     setProjects(projectList);
@@ -103,13 +122,16 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
           customer_vat_number: company.vat_number ?? '',
           delivery_address: company.address ?? '',
         }));
-        setSelectedProject(NO_PROJECT_OPTION);
+        setSelectedProject(null);
         setInitialProjectApplied(false);
         loadProjectsForCompany(company.id!);
         setInitialCompanyApplied(true);
+        if (company.id != null) {
+          refreshOrderNumber(company.id, company.name, formData.issue_date);
+        }
       }
     }
-  }, [initialCompanyId, companies, initialCompanyApplied, quotationId, loadProjectsForCompany]);
+  }, [initialCompanyId, companies, initialCompanyApplied, quotationId, loadProjectsForCompany, refreshOrderNumber]);
 
   useEffect(() => {
     if (!quotationId && initialProjectId && projects.length > 0 && !initialProjectApplied) {
@@ -199,13 +221,13 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
             const matchedProject = projectList.find((p) => p.id === quotation.project_id) ?? null;
             setSelectedProject(matchedProject);
           } else {
-            setSelectedProject(NO_PROJECT_OPTION);
+            setSelectedProject(null);
           }
         } else if (quotation.project_id != null) {
           const project = await useProjectStore.getState().findProjectById(quotation.project_id);
           setSelectedProject(project);
         } else {
-          setSelectedProject(NO_PROJECT_OPTION);
+          setSelectedProject(null);
         }
         const rows: LineRow[] = (items || []).map((item) => ({
           id: `line-${item.id ?? Math.random()}`,
@@ -231,13 +253,19 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
     const linesSubtotal = lineRows.reduce((sum, row) => sum + lineTotal(row), 0);
     const discountAmount = (linesSubtotal * globalDiscountPercent) / 100;
     const subtotalAfterDiscount = linesSubtotal - discountAmount;
-    const taxRate = formData.tax_rate ?? 0;
+    const taxRate = taxEnabled ? formData.tax_rate ?? 0 : 0;
     const taxAmount = (subtotalAfterDiscount * taxRate) / 100;
     const total = subtotalAfterDiscount + taxAmount;
     return { linesSubtotal, discountAmount, subtotalAfterDiscount, taxAmount, total };
-  }, [lineRows, globalDiscountPercent, formData.tax_rate]);
+  }, [lineRows, globalDiscountPercent, formData.tax_rate, taxEnabled]);
 
-  const projectOptions = useMemo(() => [NO_PROJECT_OPTION, ...projects], [projects]);
+  // Keep tax_rate at 0 while the business has tax disabled, so a hidden/stale rate
+  // (e.g. loaded from an older quotation, or the default) never resurfaces on save.
+  useEffect(() => {
+    if (!taxEnabled && formData.tax_rate) {
+      setFormData((prev) => ({ ...prev, tax_rate: 0 }));
+    }
+  }, [taxEnabled, formData.tax_rate]);
 
   useEffect(() => {
     setFormData((prev) => ({
@@ -249,8 +277,20 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   }, [totals.subtotalAfterDiscount, totals.taxAmount, totals.total]);
 
   const handleChange = useCallback((field: keyof CreateQuotationDto, value: unknown) => {
+    if (field === 'order_number') {
+      autoOrderNumberRef.current = null;
+      setFormData((prev) => ({ ...prev, order_number: value as string }));
+      return;
+    }
+    if (field === 'issue_date' && typeof value === 'string' && value) {
+      setFormData((prev) => ({ ...prev, issue_date: value }));
+      if (!quotationId && selectedCompany?.id != null) {
+        refreshOrderNumber(selectedCompany.id, selectedCompany.name, value);
+      }
+      return;
+    }
     setFormData((prev) => ({ ...prev, [field]: value }));
-  }, []);
+  }, [quotationId, selectedCompany, refreshOrderNumber]);
 
   const handleCompanySelect = useCallback((company: Company) => {
     setSelectedCompany(company);
@@ -264,15 +304,18 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
       customer_vat_number: company.vat_number || '',
       delivery_address: prev.delivery_address || company.address || '',
     }));
-    setSelectedProject(NO_PROJECT_OPTION);
+    setSelectedProject(null);
     if (company.id != null) {
       loadProjectsForCompany(company.id).catch(() => setProjects([]));
     }
-  }, [loadProjectsForCompany]);
+    if (!quotationId && company.id != null) {
+      refreshOrderNumber(company.id, company.name, formData.issue_date);
+    }
+  }, [loadProjectsForCompany, quotationId, formData.issue_date, refreshOrderNumber]);
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
-    setSelectedProject(NO_PROJECT_OPTION);
+    setSelectedProject(null);
     setProjects([]);
     setFormData((prev) => ({
       ...prev,
@@ -287,17 +330,12 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
   }, []);
 
   const handleProjectSelect = useCallback((project: Project) => {
-    if (project.id === NO_PROJECT_ID) {
-      setSelectedProject(NO_PROJECT_OPTION);
-      setFormData((prev) => ({ ...prev, project_id: undefined }));
-      return;
-    }
     setSelectedProject(project);
     setFormData((prev) => ({ ...prev, project_id: project.id }));
   }, []);
 
   const handleProjectClear = useCallback(() => {
-    setSelectedProject(NO_PROJECT_OPTION);
+    setSelectedProject(null);
     setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
 
@@ -441,17 +479,19 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
                       <LuCheck size={14} />
                     </button>
                   </div>
-                  <div className={groupClass}>
-                    <label htmlFor="customer_vat_number" className={labelClass}>Company VAT #</label>
-                    <input
-                      id="customer_vat_number"
-                      type="text"
-                      value={formData.customer_vat_number || ''}
-                      onChange={(e) => handleChange('customer_vat_number', e.target.value)}
-                      className={inputClass}
-                      placeholder="VAT number"
-                    />
-                  </div>
+                  {!!businessVatNumber && (
+                    <div className={groupClass}>
+                      <label htmlFor="customer_vat_number" className={labelClass}>Company VAT #</label>
+                      <input
+                        id="customer_vat_number"
+                        type="text"
+                        value={formData.customer_vat_number || ''}
+                        onChange={(e) => handleChange('customer_vat_number', e.target.value)}
+                        className={inputClass}
+                        placeholder="VAT number"
+                      />
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="flex items-start gap-2 group">
@@ -461,7 +501,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
                         <AppText variant="body" className="font-medium">{formData.customer_name}</AppText>
                         {formData.customer_email && <AppText variant="caption">{formData.customer_email}</AppText>}
                         {formData.customer_address && <AppText variant="caption">{formData.customer_address}</AppText>}
-                        {formData.customer_vat_number && (
+                        {!!businessVatNumber && formData.customer_vat_number && (
                           <AppText variant="caption">VAT: {formData.customer_vat_number}</AppText>
                         )}
                       </>
@@ -494,9 +534,9 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
                   <div className="flex-1">
                     <AppLabledAutocomplete
                       label="Project"
-                      options={projectOptions}
-                      value={selectedProject?.id != null ? String(selectedProject.id) : String(NO_PROJECT_ID)}
-                      displayValue={selectedProject?.name ?? 'No project'}
+                      options={projects}
+                      value={selectedProject?.id != null ? String(selectedProject.id) : ''}
+                      displayValue={selectedProject?.name ?? ''}
                       accessor="name"
                       valueAccessor="id"
                       onSelect={handleProjectSelect}
@@ -516,7 +556,7 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
                 </div>
               ) : (
                 <div>
-                  {selectedProject && selectedProject.id !== NO_PROJECT_ID ? (
+                  {selectedProject ? (
                     <div className="flex items-center gap-2 group">
                       <AppText variant="caption" className="text-indigo-600 dark:text-indigo-400">
                         Project: {selectedProject.name}
@@ -654,23 +694,25 @@ export function QuotationForm({ quotationId, initialCompanyId, initialProjectId,
                   <AppText variant="caption">{formatCurrency(totals.subtotalAfterDiscount, formData.currency)}</AppText>
                 </div>
               )}
-              <div className="flex items-center justify-between gap-3">
-                <label className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 shrink-0">
-                  Tax
-                  <input
-                    id="tax_rate"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={formData.tax_rate || ''}
-                    onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
-                    className="w-14 px-1.5 py-0.5 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-400"
-                    placeholder="0"
-                  />
-                  <span>%</span>
-                </label>
-                <AppText variant="caption">{formatCurrency(totals.taxAmount, formData.currency)}</AppText>
-              </div>
+              {taxEnabled && (
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 shrink-0">
+                    Tax
+                    <input
+                      id="tax_rate"
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={formData.tax_rate || ''}
+                      onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
+                      className="w-14 px-1.5 py-0.5 text-xs border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-400"
+                      placeholder="0"
+                    />
+                    <span>%</span>
+                  </label>
+                  <AppText variant="caption">{formatCurrency(totals.taxAmount, formData.currency)}</AppText>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
                 <AppText variant="body" className="font-semibold">Total</AppText>
                 <AppText variant="body" className="font-semibold">{formatCurrency(totals.total, formData.currency)}</AppText>

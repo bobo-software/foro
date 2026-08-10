@@ -31,6 +31,12 @@ export interface Company {
   notes?: string;
   /** File path for the company logo stored in MinIO */
   logo_url?: string;
+  /** Selected document template id (defaults to 'classic') */
+  document_template?: string;
+  /** Whether to embed the company logo in generated PDFs */
+  show_logo_on_documents?: boolean;
+  /** Whether tax/VAT should be applied on this business's invoices and quotations */
+  tax_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -53,4 +59,7 @@ export interface CreateCompanyDto {
   website?: string;
   notes?: string;
   logo_url?: string;
+  document_template?: string;
+  show_logo_on_documents?: boolean;
+  tax_enabled?: boolean;
 }
