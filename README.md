@@ -141,10 +141,15 @@ MIT
 
 - Build Pack: `Dockerfile`
 - Base Directory: `/`
-- Dockerfile Location: `/dockerfile`
+- Dockerfile Location: `/Dockerfile`
 - Container Port: `80`
-- Build-time variables:
+- Required build-time variables (Vite, inlined at `npm run build`):
+  - `VITE_API_URL` (foro-api origin, e.g. `https://api.example.com`)
+  - `VITE_GOOGLE_MAPS_API_KEY` (optional)
+  - `VITE_WS_URL` (optional)
+- Optional Infisical (if all three are set, the image uses `infisical run` instead of raw `VITE_*`):
   - `INFISICAL_TOKEN=<service-token>`
   - `INFISICAL_ENV=prod`
   - `INFISICAL_DOMAIN=https://infisical.bobosoftware.co.za`
+- Coolify must pass `VITE_*` as **build args** (not only runtime env). The Dockerfile declares matching `ARG`/`ENV` so Vite sees them. Infisical is optional; omitting `INFISICAL_DOMAIN` no longer fails the build.
 - Remove backend-only pre-deploy commands (for example `php artisan migrate`) for this frontend service.
