@@ -146,7 +146,7 @@ MIT
 - Required build-time variables (Vite, inlined at `npm run build`):
   - `VITE_API_URL` (foro-api origin, e.g. `https://api.example.com`)
   - `VITE_GOOGLE_MAPS_API_KEY` (optional)
-  - `VITE_WS_URL` (optional)
+  - `VITE_WS_URL` (optional; leave unset to use `VITE_API_URL` for Socket.IO)
 - Optional Infisical (if all three are set, the image uses `infisical run` instead of raw `VITE_*`):
   - `INFISICAL_TOKEN=<service-token>`
   - `INFISICAL_ENV=prod`
