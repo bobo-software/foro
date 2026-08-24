@@ -1,10 +1,11 @@
 /**
  * Subscription Service
- * CRUD for the business_subscriptions table
+ * Reads business_subscriptions (read-only on the API); all writes go through
+ * the /api/v1/payments/* endpoints, which are the table's only writer.
  */
 
 import { foroApiClient } from '../backend';
-import type { BusinessSubscription, CreateBusinessSubscriptionDto } from '../types/subscription';
+import type { BusinessSubscription } from '../types/subscription';
 
 const BASE = '/api/v1/business-subscriptions';
 
@@ -16,6 +17,7 @@ interface ApiRow {
   provider: string | null;
   planCode: string | null;
   transactionId: string | null;
+  subscriptionCode: string | null;
   subscriptionToken: string | null;
   amount: string | null;
   currency: string | null;
@@ -33,6 +35,7 @@ function fromApi(row: ApiRow): BusinessSubscription {
     provider: row.provider ?? undefined,
     plan_code: row.planCode,
     transaction_id: row.transactionId,
+    subscription_code: row.subscriptionCode,
     subscription_token: row.subscriptionToken,
     amount: row.amount != null ? Number(row.amount) : null,
     currency: row.currency ?? undefined,
@@ -42,21 +45,6 @@ function fromApi(row: ApiRow): BusinessSubscription {
   };
 }
 
-function toApiBody(data: Partial<CreateBusinessSubscriptionDto>): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
-  if (data.business_id !== undefined) body.businessId = data.business_id;
-  if (data.tier !== undefined) body.tier = data.tier;
-  if (data.status !== undefined) body.status = data.status;
-  if (data.provider !== undefined) body.provider = data.provider;
-  if (data.plan_code !== undefined) body.planCode = data.plan_code;
-  if (data.transaction_id !== undefined) body.transactionId = data.transaction_id;
-  if (data.subscription_token !== undefined) body.subscriptionToken = data.subscription_token;
-  if (data.amount !== undefined) body.amount = data.amount;
-  if (data.currency !== undefined) body.currency = data.currency;
-  if (data.current_period_end !== undefined) body.currentPeriodEnd = data.current_period_end;
-  return body;
-}
-
 export class SubscriptionService {
   static async findByBusinessId(businessId: number): Promise<BusinessSubscription | null> {
     const response = await foroApiClient.get<ApiRow[]>(BASE, { businessId, limit: 1 });
@@ -64,19 +52,34 @@ export class SubscriptionService {
     return row ? fromApi(row) : null;
   }
 
-  static async create(data: CreateBusinessSubscriptionDto): Promise<BusinessSubscription> {
-    const response = await foroApiClient.post<ApiRow>(BASE, toApiBody(data));
+  /** Creates or resets the business's row to the Free tier — reached even for a first-time signup, not just downgrades. */
+  static async selectFreeTier(businessId: number): Promise<BusinessSubscription> {
+    const response = await foroApiClient.post<ApiRow>('/api/v1/payments/select-free-tier', { businessId });
     return fromApi(response.data);
   }
 
-  static async update(
+  /** Starts a paid checkout; returns the Paystack authorization URL to redirect the browser to. */
+  static async initiateCheckout(
     businessId: number,
-    data: Partial<CreateBusinessSubscriptionDto>
-  ): Promise<{ rowCount: number }> {
-    const existing = await this.findByBusinessId(businessId);
-    if (!existing?.id) return { rowCount: 0 };
-    const response = await foroApiClient.put<ApiRow>(`${BASE}/${existing.id}`, toApiBody(data));
-    return { rowCount: response.data ? 1 : 0 };
+    tier: Exclude<BusinessSubscription['tier'], 'free'>,
+    customerEmail: string
+  ): Promise<{ authorizationUrl: string; reference: string }> {
+    const response = await foroApiClient.post<{ authorizationUrl: string; reference: string }>(
+      '/api/v1/payments/initiate',
+      { businessId, tier, customerEmail }
+    );
+    return response.data;
+  }
+
+  /** Re-verifies a pending transaction with Paystack — a fallback for when the browser returns before the webhook lands. */
+  static async verifyTransaction(transactionId: string): Promise<BusinessSubscription | null> {
+    const response = await foroApiClient.get<ApiRow | null>(`/api/v1/payments/transaction/${transactionId}`);
+    return response.data ? fromApi(response.data) : null;
+  }
+
+  static async cancel(businessId: number): Promise<BusinessSubscription> {
+    const response = await foroApiClient.post<ApiRow>('/api/v1/payments/subscription/cancel', { businessId });
+    return fromApi(response.data);
   }
 }
 

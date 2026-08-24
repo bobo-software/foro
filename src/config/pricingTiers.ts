@@ -23,13 +23,8 @@ export interface PricingTier {
   badge: string | null;
   limits: PricingTierLimits;
   features: PricingTierFeature[];
-  /**
-   * Paystack plan code. Currently unused — paid checkout has no payment
-   * gateway wired up (the old Skaftin proxy was decommissioned; foro-api has
-   * no payment-provider integration yet). Kept for when that's rebuilt.
-   */
+  /** Paystack plan code — must match the server-side mirror in foro-api's src/config/paystack.ts. */
   planCode?: string;
-  /** Payment provider id the plan belongs to. Currently unused, see `planCode`. */
   providerId?: number;
 }
 

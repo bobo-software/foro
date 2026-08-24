@@ -50,12 +50,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     try {
       let subscription = await SubscriptionService.findByBusinessId(businessId);
       if (!subscription) {
-        subscription = await SubscriptionService.create({
-          business_id: businessId,
-          tier: 'free',
-          status: 'active',
-          provider: 'paystack',
-        });
+        subscription = await SubscriptionService.selectFreeTier(businessId);
       }
       set({ currentSubscription: subscription, loading: false });
     } catch (err) {
@@ -67,11 +62,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   selectFreeTier: async (businessId: number) => {
     set({ loading: true, error: null });
     try {
-      const existing = await SubscriptionService.findByBusinessId(businessId);
-      const payload = { business_id: businessId, tier: 'free' as const, status: 'active' as const, provider: 'paystack' };
-      const currentSubscription = existing
-        ? await SubscriptionService.update(businessId, payload).then(() => ({ ...existing, ...payload }))
-        : await SubscriptionService.create(payload);
+      const currentSubscription = await SubscriptionService.selectFreeTier(businessId);
       set({ currentSubscription, loading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to select the free plan';
@@ -79,39 +70,39 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     }
   },
 
-  startPaidCheckout: async (_businessId: number, _tier: SubscriptionTier, _customerEmail: string) => {
-    // Paid checkout went through Skaftin's Payment API (Paystack/PayFast proxy),
-    // which has been decommissioned. foro-api has no payment-provider
-    // integration yet, so paid plans are unavailable until that's built —
-    // see docs/02-modules/payments-subscriptions.md.
-    set({ error: 'Paid plans are not available right now. Please check back soon.' });
-    return null;
+  startPaidCheckout: async (businessId: number, tier: SubscriptionTier, customerEmail: string) => {
+    if (tier === 'free') return null;
+    set({ error: null });
+    try {
+      const { authorizationUrl } = await SubscriptionService.initiateCheckout(businessId, tier, customerEmail);
+      return authorizationUrl;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start checkout';
+      set({ error: message });
+      return null;
+    }
   },
 
-  // No payment gateway to reconcile a pending transaction against anymore.
-  // Kept as a no-op (rather than removed) so PaymentSuccess.tsx's polling
-  // loop still degrades to its "still processing" timeout state instead of
-  // erroring outright.
-  reconcilePending: async () => {},
+  // Force-refreshes the pending subscription's status against Paystack — a fallback
+  // for when the browser returns to /payment/success before the webhook has landed.
+  reconcilePending: async () => {
+    const { currentSubscription } = get();
+    if (!currentSubscription?.transaction_id || currentSubscription.status !== 'pending') return;
+    try {
+      const subscription = await SubscriptionService.verifyTransaction(currentSubscription.transaction_id);
+      if (subscription) set({ currentSubscription: subscription });
+    } catch {
+      // Swallow — the polling loop in PaymentSuccess.tsx degrades to its timeout state.
+    }
+  },
 
   cancel: async () => {
     const { currentSubscription } = get();
     if (!currentSubscription) return false;
     set({ loading: true, error: null });
     try {
-      const payload = {
-        tier: 'free' as const,
-        status: 'active' as const,
-        plan_code: null,
-        transaction_id: null,
-        subscription_token: null,
-        amount: 0,
-      };
-      await SubscriptionService.update(currentSubscription.business_id, payload);
-      set({
-        currentSubscription: { ...currentSubscription, ...payload },
-        loading: false,
-      });
+      const subscription = await SubscriptionService.cancel(currentSubscription.business_id);
+      set({ currentSubscription: subscription, loading: false });
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to cancel subscription';
