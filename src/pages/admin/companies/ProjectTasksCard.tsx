@@ -286,8 +286,7 @@ export function ProjectTasksCard({
                 autoComplete="off"
               />
               <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
-                Title search is sent to the server (debounced). Adjust the filter shape in code if your Skaftin build
-                expects a different operator than <code className="text-xs">ilike</code>.
+                Title search is sent to the server (debounced) using an <code className="text-xs">ilike</code> filter.
               </p>
             </div>
             {listFiltersActive && (

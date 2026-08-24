@@ -55,7 +55,7 @@ export function BillingSettingsTab() {
       const paymentUrl = await startPaidCheckout(businessId, tier, email);
       if (!paymentUrl) {
         const reason = useSubscriptionStore.getState().error;
-        toast.error(reason ? `Failed to start checkout: ${reason}` : 'Failed to start checkout. Please try again.');
+        toast.error(reason || 'Failed to start checkout. Please try again.');
         return;
       }
       window.location.href = paymentUrl;
@@ -131,6 +131,8 @@ export function BillingSettingsTab() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {PRICING_TIERS.map((tier) => {
             const isCurrent = currentSubscription?.tier === tier.id && currentSubscription?.status === 'active';
+            // Paid plans have no payment gateway wired up right now — only Free is selectable.
+            const isPaidUnavailable = tier.id !== 'free' && !isCurrent;
             return (
               <div
                 key={tier.id}
@@ -147,11 +149,17 @@ export function BillingSettingsTab() {
                 </p>
                 <button
                   type="button"
-                  disabled={isCurrent || pendingTier !== null}
+                  disabled={isCurrent || isPaidUnavailable || pendingTier !== null}
                   onClick={() => handleChangePlan(tier.id)}
                   className="w-full rounded-lg bg-slate-900 dark:bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 dark:hover:bg-indigo-500 disabled:opacity-50 transition"
                 >
-                  {isCurrent ? 'Current plan' : pendingTier === tier.id ? 'Please wait…' : 'Switch'}
+                  {isCurrent
+                    ? 'Current plan'
+                    : pendingTier === tier.id
+                      ? 'Please wait…'
+                      : isPaidUnavailable
+                        ? 'Coming soon'
+                        : 'Switch'}
                 </button>
               </div>
             );

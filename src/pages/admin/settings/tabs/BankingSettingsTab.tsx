@@ -12,7 +12,7 @@ import { bankingDetailsSchema } from '@/validation/schemas';
 function getBankingErrorMessage(err: unknown, fallback: string): string {
   const message = err instanceof Error ? err.message : '';
   if (message.includes('No encryption key / secret found')) {
-    return 'Field encryption is not configured for this project. Ask an admin to set the encryption key in Skaftin settings.';
+    return 'Field encryption is not configured for this project. Ask an admin to set the encryption key.';
   }
   return message || fallback;
 }

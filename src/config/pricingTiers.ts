@@ -23,9 +23,13 @@ export interface PricingTier {
   badge: string | null;
   limits: PricingTierLimits;
   features: PricingTierFeature[];
-  /** Paystack plan code — set once the plan is created/synced in the Skaftin dashboard. Free has none. */
+  /**
+   * Paystack plan code. Currently unused — paid checkout has no payment
+   * gateway wired up (the old Skaftin proxy was decommissioned; foro-api has
+   * no payment-provider integration yet). Kept for when that's rebuilt.
+   */
   planCode?: string;
-  /** Skaftin payment provider id (skaftin_system_payment_providers.id) the plan belongs to. */
+  /** Payment provider id the plan belongs to. Currently unused, see `planCode`. */
   providerId?: number;
 }
 

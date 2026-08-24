@@ -95,7 +95,7 @@ export function ProjectPortalInvitesCard({
       <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Client portal links</h2>
       <p className="text-xs text-slate-500 dark:text-slate-400">
         Read-only project view for customers. Each link uses a random token (stored hashed). Links expire in 14 days by
-        default; revoke anytime. Security follows the same Skaftin credentials as the rest of the app — see portal
+        default; revoke anytime. Security follows the same credentials as the rest of the app — see portal
         contract doc.
       </p>
       <div className="flex flex-wrap items-end gap-2">

@@ -7,9 +7,7 @@
  */
 
 import { StorageService } from '../services/storageService';
-import { SKAFTIN_CONFIG } from '../config/skaftin.config';
 import { logger } from './logger';
-import { TokenManager } from '../services/TokenManager';
 
 export interface LogoData {
   /** Base64-encoded image data (without the data:... prefix) */
@@ -39,17 +37,11 @@ export async function fetchLogoAsBase64(logoFilePath: string): Promise<LogoData 
   if (cached) return cached;
 
   try {
-    // Get presigned download URL
+    // Get presigned download URL — presigned URLs are self-authenticating,
+    // so no auth headers are needed (see StorageService.fetchFileAsObjectUrl).
     const downloadUrl = await StorageService.getFileDownloadUrl(logoFilePath);
 
-    // Fetch the image with auth headers
-    const headers: Record<string, string> = {};
-    const apiKey = SKAFTIN_CONFIG.apiKey;
-    if (apiKey) headers['X-API-Key'] = apiKey;
-    const token = TokenManager.getAccessToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const response = await fetch(downloadUrl, { headers, credentials: 'include' });
+    const response = await fetch(downloadUrl);
     if (!response.ok) return null;
 
     const blob = await response.blob();
