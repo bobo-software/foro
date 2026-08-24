@@ -34,6 +34,7 @@ interface MeResponseData {
   lastName: string | null;
   email: string | null;
   phone: string | null;
+  isSuperAdmin?: boolean;
 }
 
 const useAuthStore = create<AuthState>()(
@@ -116,6 +117,7 @@ const useAuthStore = create<AuthState>()(
               first_name: user.name,
               last_name: user.lastName ?? undefined,
               phone: user.phone,
+              isSuperAdmin: user.isSuperAdmin ?? false,
               accessToken: token || sessionUser?.accessToken || '',
             };
 

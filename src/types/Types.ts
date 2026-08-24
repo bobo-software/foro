@@ -347,6 +347,7 @@ export interface SessionUser {
 
   // Additional database fields
   phone?: string | null;
+  isSuperAdmin?: boolean;
 };
 
 // Login Response Types

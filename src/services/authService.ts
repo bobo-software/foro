@@ -28,6 +28,7 @@ interface ApiUser {
   lastName: string | null;
   email: string | null;
   phone: string | null;
+  isSuperAdmin?: boolean;
 }
 
 interface AuthTokensResponse {
@@ -49,6 +50,7 @@ function mapApiUserToSessionUser(payload: AuthTokensResponse): SessionUser {
     first_name: user.name,
     last_name: user.lastName ?? undefined,
     phone: user.phone,
+    isSuperAdmin: user.isSuperAdmin ?? false,
   };
 }
 

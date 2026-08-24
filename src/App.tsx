@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './components/auth/AuthProvider';
 import { ProtectedRoute } from './components/elements/ProtectedRoute';
+import { RequireSuperAdmin } from './components/elements/RequireSuperAdmin';
 import { SubscriptionGate } from './components/elements/SubscriptionGate';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { RouteLoadingFallback } from './components/error/RouteLoadingFallback';
@@ -66,6 +67,7 @@ const PortalProjectViewPage = lazy(() => import('@pages/portal/PortalProjectView
 const StatementPortalEntryPage = lazy(() => import('@pages/statements/StatementPortalEntryPage').then((m) => ({ default: m.StatementPortalEntryPage })));
 const StatementPortalViewPage = lazy(() => import('@pages/statements/StatementPortalViewPage').then((m) => ({ default: m.StatementPortalViewPage })));
 const StatementPortalInvoiceViewPage = lazy(() => import('@pages/statements/StatementPortalInvoiceViewPage').then((m) => ({ default: m.StatementPortalInvoiceViewPage })));
+const RequestLogsPage = lazy(() => import('@pages/superadmin/RequestLogsPage').then((m) => ({ default: m.RequestLogsPage })));
 
 /**
  * Auth and WebSocket hooks wrapper component
@@ -144,6 +146,14 @@ function App() {
             <Route path="/reset-password/verify" element={<VerifyForgotPasswordOtp />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
+            <Route
+              path="/superadmin/request-logs"
+              element={
+                <RequireSuperAdmin>
+                  <RequestLogsPage />
+                </RequireSuperAdmin>
+              }
+            />
             <Route path="/invite/:token" element={<InviteAccept />} />
             <Route path="/invite/:token/accept" element={<InvitePostAuth />} />
             <Route path="/portal/v/:portalToken" element={<PortalProjectViewPage />} />
