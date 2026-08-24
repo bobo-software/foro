@@ -108,8 +108,23 @@ ALTER TABLE invoices
 ```
 
 - `document_kind`: `'invoice'` (default) or `'credit_note'`.
-- `credited_invoice_id`: set when the credit note applies to a specific invoice; nullable for ad-hoc credits.
+- `credited_invoice_id`: set when the credit note applies to a specific invoice; nullable for ad-hoc credits. Soft-delete (trash) keeps this link; it becomes `NULL` only when the source invoice is **hard-deleted** (`ON DELETE SET NULL`).
 - Amounts (`subtotal`, `tax_amount`, `total`) stay **positive**; the app applies a negative sign in balances and statements for `credit_note`.
+
+## 7b) Sales document trash (`deleted_at`)
+
+Invoices (including credit notes) and quotations are soft-deleted for 3 months, then purged by a daily API cron. See [sales-documents.md](02-modules/sales-documents.md).
+
+```sql
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL;
+
+ALTER TABLE quotations
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL;
+
+CREATE INDEX IF NOT EXISTS idx_invoices_deleted_at ON invoices (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_quotations_deleted_at ON quotations (deleted_at);
+```
 
 ## 8) Stock item types and bill of materials
 

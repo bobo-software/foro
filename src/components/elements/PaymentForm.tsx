@@ -1,17 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { CreatePaymentDto } from '../../types/payment';
 import { PAYMENT_METHODS } from '../../types/payment';
 import type { Company } from '../../types/company';
 import type { Project } from '../../types/project';
+import type { Invoice } from '../../types/invoice';
 import PaymentService from '../../services/paymentService';
 import CompanyService from '../../services/companyService';
 import ProjectService from '../../services/projectService';
+import InvoiceService from '../../services/invoiceService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { logger } from '../../utils/logger';
+import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import AppInputLabeled from '../forms/AppLabledInput';
 import AppLabeledSelectInput from '../forms/AppLabledSelectInput';
-import { SUPPORTED_CURRENCIES } from '../../utils/currency';
+import { SUPPORTED_CURRENCIES, formatCurrency } from '../../utils/currency';
 import { paymentSchema } from '../../validation/schemas';
 
 interface PaymentFormProps {
@@ -27,8 +30,10 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
   const isEditing = paymentId != null;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +66,18 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
     return data;
   }, []);
 
+  const loadInvoicesForCompany = useCallback(async (companyId: number) => {
+    const data = await InvoiceService.findAll({
+      where: { company_id: companyId },
+      orderBy: 'issue_date',
+      orderDirection: 'DESC',
+      limit: 200,
+    });
+    const filtered = data.filter((inv) => !isCreditNoteInvoice(inv));
+    setInvoices(filtered);
+    return filtered;
+  }, []);
+
   // Load existing payment for edit mode
   useEffect(() => {
     if (!paymentId) return;
@@ -74,18 +91,20 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
           customer_name: payment.customer_name ?? '',
           amount: payment.amount,
           currency: payment.currency ?? 'ZAR',
-          date: payment.date ?? '',
+          date: payment.date ? payment.date.split('T')[0] : '',
           payment_method: payment.payment_method ?? 'eft',
           reference: payment.reference ?? '',
           business_id: payment.business_id,
+          invoice_id: payment.invoice_id,
         });
         if (payment.company_id) {
           loadProjectsForCompany(payment.company_id).catch((err: unknown) => logger.error('Failed to load projects for payment company:', err));
+          loadInvoicesForCompany(payment.company_id).catch((err: unknown) => logger.error('Failed to load invoices for payment company:', err));
         }
       })
       .catch(() => setError('Failed to load payment'))
       .finally(() => setLoadingPayment(false));
-  }, [paymentId, loadProjectsForCompany]);
+  }, [paymentId, loadProjectsForCompany, loadInvoicesForCompany]);
 
   // Populate company/project selectors after companies list + formData are ready
   useEffect(() => {
@@ -93,6 +112,7 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
     const companyId = formData.company_id;
     const projectId = formData.project_id;
     if (!companyId) return;
+    const invoiceId = formData.invoice_id;
     const match = companies.find((c) => c.id === companyId);
     if (match && !selectedCompany) {
       setSelectedCompany(match);
@@ -101,8 +121,13 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
         const project = projectList.find((p) => p.id === projectId) ?? null;
         setSelectedProject(project);
       }).catch((err: unknown) => logger.error('Failed to load projects for company:', err));
+      loadInvoicesForCompany(match.id!).then((invoiceList) => {
+        if (!invoiceId) return;
+        const invoice = invoiceList.find((inv) => inv.id === invoiceId) ?? null;
+        setSelectedInvoice(invoice);
+      }).catch((err: unknown) => logger.error('Failed to load invoices for company:', err));
     }
-  }, [companies, formData.company_id, formData.project_id, selectedCompany, loadProjectsForCompany]);
+  }, [companies, formData.company_id, formData.project_id, formData.invoice_id, selectedCompany, loadProjectsForCompany, loadInvoicesForCompany]);
 
   // Populate project selector once projects list is loaded
   useEffect(() => {
@@ -112,6 +137,15 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
     const project = projects.find((p) => p.id === projectId) ?? null;
     if (project) setSelectedProject(project);
   }, [projects, formData.project_id, selectedProject]);
+
+  // Populate invoice selector once invoices list is loaded
+  useEffect(() => {
+    if (invoices.length === 0 || selectedInvoice) return;
+    const invoiceId = formData.invoice_id;
+    if (!invoiceId) return;
+    const invoice = invoices.find((inv) => inv.id === invoiceId) ?? null;
+    if (invoice) setSelectedInvoice(invoice);
+  }, [invoices, formData.invoice_id, selectedInvoice]);
 
   // Handle initial company name (non-edit mode, when company not resolved by id)
   useEffect(() => {
@@ -127,6 +161,7 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
           setSelectedProject(project);
           setFormData((prev) => ({ ...prev, project_id: project?.id }));
         }).catch(() => {});
+        loadInvoicesForCompany(match.id!).catch(() => {});
         return;
       }
     }
@@ -143,11 +178,12 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
           setSelectedProject(project);
           setFormData((prev) => ({ ...prev, project_id: project?.id }));
         }).catch(() => {});
+        loadInvoicesForCompany(match.id!).catch(() => {});
       } else {
         setFormData((prev) => ({ ...prev, customer_name: initialCompanyName }));
       }
     }
-  }, [isEditing, initialCompanyId, initialCompanyName, initialProjectId, companies, selectedCompany, loadProjectsForCompany]);
+  }, [isEditing, initialCompanyId, initialCompanyName, initialProjectId, companies, selectedCompany, loadProjectsForCompany, loadInvoicesForCompany]);
 
   const handleChange = useCallback((field: keyof CreatePaymentDto, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -156,22 +192,27 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
   const handleCompanySelect = useCallback((company: Company) => {
     setSelectedCompany(company);
     setSelectedProject(null);
+    setSelectedInvoice(null);
     setFormData((prev) => ({
       ...prev,
       company_id: company.id,
       project_id: undefined,
+      invoice_id: undefined,
       customer_name: company.name,
     }));
     if (company.id != null) {
       loadProjectsForCompany(company.id).catch(() => setProjects([]));
+      loadInvoicesForCompany(company.id).catch(() => setInvoices([]));
     }
-  }, [loadProjectsForCompany]);
+  }, [loadProjectsForCompany, loadInvoicesForCompany]);
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
     setSelectedProject(null);
+    setSelectedInvoice(null);
     setProjects([]);
-    setFormData((prev) => ({ ...prev, company_id: undefined, project_id: undefined, customer_name: '' }));
+    setInvoices([]);
+    setFormData((prev) => ({ ...prev, company_id: undefined, project_id: undefined, invoice_id: undefined, customer_name: '' }));
   }, []);
 
   const handleProjectSelect = useCallback((project: Project) => {
@@ -182,6 +223,16 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
   const handleProjectClear = useCallback(() => {
     setSelectedProject(null);
     setFormData((prev) => ({ ...prev, project_id: undefined }));
+  }, []);
+
+  const handleInvoiceSelect = useCallback((invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setFormData((prev) => ({ ...prev, invoice_id: invoice.id, amount: invoice.total }));
+  }, []);
+
+  const handleInvoiceClear = useCallback(() => {
+    setSelectedInvoice(null);
+    setFormData((prev) => ({ ...prev, invoice_id: null }));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -219,6 +270,14 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
     }
   };
 
+
+  const invoiceOptions = useMemo(
+    () => invoices.map((inv) => ({
+      ...inv,
+      label: `${inv.invoice_number} — ${formatCurrency(inv.total, inv.currency || 'ZAR')} (${inv.status})`,
+    })),
+    [invoices]
+  );
 
   if (loadingPayment) {
     return (
@@ -278,6 +337,20 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
             onClear={handleProjectClear}
             disabled={!selectedCompany}
             placeholder={selectedCompany ? 'Search project or leave empty…' : 'Select company first'}
+          />
+        </div>
+        <div className="pb-3 mb-4 border-b border-gray-200 dark:border-gray-700">
+          <AppLabledAutocomplete
+            label="Invoice (optional)"
+            options={invoiceOptions}
+            value={selectedInvoice?.id != null ? String(selectedInvoice.id) : ''}
+            displayValue={selectedInvoice?.invoice_number ?? ''}
+            accessor="label"
+            valueAccessor="id"
+            onSelect={handleInvoiceSelect}
+            onClear={handleInvoiceClear}
+            disabled={!selectedCompany}
+            placeholder={selectedCompany ? 'Search invoice or leave empty…' : 'Select company first'}
           />
         </div>
         <div className="grid grid-cols-1 gap-4 mb-4 md:grid-cols-2">

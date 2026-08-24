@@ -50,7 +50,7 @@ export function CompanyInvoicesTab({ company, selectedProjectId, invoices, docsL
     const inv = menuInvoice;
     if (!inv?.id) return;
     const label = isCreditNoteInvoice(inv) ? 'this credit note' : 'this invoice';
-    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    if (!window.confirm(`Move ${label} to trash? You can restore it for 3 months.`)) return;
     closeMenu();
     setDeletingId(inv.id);
     try {

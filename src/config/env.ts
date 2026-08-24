@@ -6,6 +6,7 @@ const envSchema = z.object({
     .string()
     .url('VITE_API_URL must be a valid URL')
     .default('http://localhost:4003'),
+  VITE_WS_URL: z.string().url('VITE_WS_URL must be a valid URL').optional().default(''),
   VITE_GOOGLE_MAPS_API_KEY: z.string().optional().default(''),
 });
 
@@ -14,6 +15,7 @@ export type Env = z.infer<typeof envSchema>;
 function parseEnv(): Env {
   const raw = {
     VITE_API_URL: import.meta.env.VITE_API_URL,
+    VITE_WS_URL: import.meta.env.VITE_WS_URL,
     VITE_GOOGLE_MAPS_API_KEY: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LuArrowLeft } from 'react-icons/lu';
 import toast from 'react-hot-toast';
 import type { CreateInvoiceDto } from '../../types/invoice';
@@ -20,13 +20,6 @@ import AppInputLabeled from '../forms/AppLabledInput';
 import { formatCurrency } from '../../utils/currency';
 import LineItemsEditor, { type LineRow, lineTotal } from '../documents/LineItemsEditor';
 import { computeBaselineQuantities, computeStockAvailability, hasInsufficientStock, formatInsufficientStockMessage } from '../../utils/stockAvailability';
-
-const NO_PROJECT_ID = -1;
-const NO_PROJECT_OPTION: Project = {
-  id: NO_PROJECT_ID,
-  company_id: 0,
-  name: 'No project',
-};
 
 interface InvoiceFormProps {
   invoiceId?: number;
@@ -58,7 +51,7 @@ export function InvoiceForm({
   const companies = useCompanyStore((s) => s.companies);
   const stockItems = useItemStore((s) => s.items);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(NO_PROJECT_OPTION);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [lineRows, setLineRows] = useState<LineRow[]>([]);
   const [baselineQuantities, setBaselineQuantities] = useState<Record<number, number>>({});
   const [globalDiscountPercent, setGlobalDiscountPercent] = useState(0);
@@ -66,6 +59,8 @@ export function InvoiceForm({
   const [initialProjectApplied, setInitialProjectApplied] = useState(false);
 
   const currentBusinessId = useBusinessStore((s) => s.currentBusiness?.id);
+  const taxEnabled = useBusinessStore((s) => s.currentBusiness?.tax_enabled ?? true);
+  const businessVatNumber = useBusinessStore((s) => s.currentBusiness?.vat_number);
   const [billableSummary, setBillableSummary] = useState<{
     loading: boolean;
     totalMinutes: number;
@@ -106,6 +101,30 @@ export function InvoiceForm({
     void fetchItems();
   }, [fetchCompanies, fetchItems]);
 
+  /** Tracks the last auto-computed order_number so later issue_date changes only refresh it if the user hasn't typed a custom value. */
+  const autoOrderNumberRef = useRef<string | null>(null);
+
+  const refreshOrderNumber = useCallback(
+    (companyId: number, companyName: string, issueDate: string, isCreditNote: boolean) => {
+      useInvoiceStore
+        .getState()
+        .peekNextOrderNumber(companyId, companyName, issueDate, isCreditNote)
+        .then((num) => {
+          // Snapshot the ref before scheduling the update: setFormData's updater runs later
+          // (and may run twice under StrictMode), so it must close over an immutable value
+          // rather than read/write the mutable ref itself.
+          const expectedAuto = autoOrderNumberRef.current;
+          setFormData((prev) => {
+            const prevWasAuto = !prev.order_number || prev.order_number === expectedAuto;
+            return prevWasAuto ? { ...prev, order_number: num } : prev;
+          });
+          autoOrderNumberRef.current = num;
+        })
+        .catch((err: unknown) => logger.error('Failed to peek next order number:', err));
+    },
+    []
+  );
+
   const loadProjectsForCompany = useCallback(async (companyId: number) => {
     const projectList = await useProjectStore.getState().fetchProjectsForCompany(companyId);
     setProjects(projectList);
@@ -128,13 +147,17 @@ export function InvoiceForm({
           customer_vat_number: company.vat_number ?? '',
           delivery_address: company.address ?? '',
         }));
-        setSelectedProject(NO_PROJECT_OPTION);
+        setSelectedProject(null);
         setInitialProjectApplied(false);
         loadProjectsForCompany(company.id!);
         setInitialCompanyApplied(true);
+        if (company.id != null) {
+          const isCreditNote = standaloneCreditNote || formData.document_kind === 'credit_note';
+          refreshOrderNumber(company.id, company.name, formData.issue_date, isCreditNote);
+        }
       }
     }
-  }, [creditFromInvoiceId, initialCompanyId, companies, initialCompanyApplied, invoiceId, loadProjectsForCompany]);
+  }, [creditFromInvoiceId, initialCompanyId, companies, initialCompanyApplied, invoiceId, loadProjectsForCompany, refreshOrderNumber]);
 
   useEffect(() => {
     if (creditFromInvoiceId) return;
@@ -231,12 +254,12 @@ export function InvoiceForm({
           const projectList = await useProjectStore.getState().fetchProjectsForCompany(matchedCompany.id);
           if (!cancelled && src.project_id != null) {
             const matchedProject = projectList.find((p) => p.id === src.project_id) ?? null;
-            setSelectedProject(matchedProject ?? NO_PROJECT_OPTION);
+            setSelectedProject(matchedProject);
           } else if (!cancelled) {
-            setSelectedProject(NO_PROJECT_OPTION);
+            setSelectedProject(null);
           }
         } else if (!cancelled) {
-          setSelectedProject(NO_PROJECT_OPTION);
+          setSelectedProject(null);
         }
         const rows: LineRow[] = (items || []).map((item) => ({
           id: `line-new-${item.id ?? Math.random()}`,
@@ -322,13 +345,13 @@ export function InvoiceForm({
             const matchedProject = projectList.find((p) => p.id === invoice.project_id) ?? null;
             setSelectedProject(matchedProject);
           } else {
-            setSelectedProject(NO_PROJECT_OPTION);
+            setSelectedProject(null);
           }
         } else if (invoice.project_id != null) {
           const project = await useProjectStore.getState().findProjectById(invoice.project_id);
           setSelectedProject(project);
         } else {
-          setSelectedProject(NO_PROJECT_OPTION);
+          setSelectedProject(null);
         }
         const rows: LineRow[] = (items || []).map((item) => ({
           id: `line-${item.id ?? Math.random()}`,
@@ -355,18 +378,24 @@ export function InvoiceForm({
     const linesSubtotal = lineRows.reduce((sum, row) => sum + lineTotal(row), 0);
     const discountAmount = (linesSubtotal * globalDiscountPercent) / 100;
     const subtotalAfterDiscount = linesSubtotal - discountAmount;
-    const taxRate = formData.tax_rate ?? 0;
+    const taxRate = taxEnabled ? formData.tax_rate ?? 0 : 0;
     const taxAmount = (subtotalAfterDiscount * taxRate) / 100;
     const total = subtotalAfterDiscount + taxAmount;
     return { linesSubtotal, discountAmount, subtotalAfterDiscount, taxAmount, total };
-  }, [lineRows, globalDiscountPercent, formData.tax_rate]);
+  }, [lineRows, globalDiscountPercent, formData.tax_rate, taxEnabled]);
 
-  const projectOptions = useMemo(() => [NO_PROJECT_OPTION, ...projects], [projects]);
+  // Keep tax_rate at 0 while the business has tax disabled, so a hidden/stale rate
+  // (e.g. loaded from an older invoice, or the default) never resurfaces on save.
+  useEffect(() => {
+    if (!taxEnabled && formData.tax_rate) {
+      setFormData((prev) => ({ ...prev, tax_rate: 0 }));
+    }
+  }, [taxEnabled, formData.tax_rate]);
 
   const billableRollupKey = useMemo(() => {
     const projectId = formData.project_id;
     const sid = selectedProject?.id;
-    if (projectId == null || sid == null || sid === NO_PROJECT_ID || !Number.isFinite(Number(projectId))) {
+    if (projectId == null || sid == null || !Number.isFinite(Number(projectId))) {
       return null;
     }
     const businessId = selectedProject?.business_id ?? currentBusinessId;
@@ -405,7 +434,7 @@ export function InvoiceForm({
   }, [billableRollupKey]);
 
   const handleAppendBillableTimeLine = useCallback(async () => {
-    if (selectedProject?.id == null || selectedProject.id === NO_PROJECT_ID) return;
+    if (selectedProject?.id == null) return;
     const businessId = selectedProject.business_id ?? currentBusinessId;
     if (businessId == null || !Number.isFinite(Number(businessId))) {
       toast.error('Select an active business to roll up billable time.');
@@ -470,8 +499,23 @@ export function InvoiceForm({
   }, [totals.subtotalAfterDiscount, totals.taxAmount, totals.total]);
 
   const handleChange = useCallback((field: keyof CreateInvoiceDto, value: unknown) => {
+    if (field === 'order_number') {
+      autoOrderNumberRef.current = null;
+      setFormData((prev) => ({ ...prev, order_number: value as string }));
+      return;
+    }
+    if (field === 'issue_date' && typeof value === 'string' && value) {
+      const issueDate = new Date(`${value}T00:00:00`);
+      const dueDate = new Date(issueDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+      setFormData((prev) => ({ ...prev, issue_date: value, due_date: dueDate.toISOString().split('T')[0] }));
+      if (!invoiceId && selectedCompany?.id != null) {
+        const isCreditNote = standaloneCreditNote || formData.document_kind === 'credit_note';
+        refreshOrderNumber(selectedCompany.id, selectedCompany.name, value, isCreditNote);
+      }
+      return;
+    }
     setFormData((prev) => ({ ...prev, [field]: value }));
-  }, []);
+  }, [invoiceId, selectedCompany, formData.document_kind, standaloneCreditNote, refreshOrderNumber]);
 
   const handleCompanySelect = useCallback((company: Company) => {
     setSelectedCompany(company);
@@ -485,15 +529,19 @@ export function InvoiceForm({
       customer_vat_number: company.vat_number || '',
       delivery_address: prev.delivery_address || company.address || '',
     }));
-    setSelectedProject(NO_PROJECT_OPTION);
+    setSelectedProject(null);
     if (company.id != null) {
       loadProjectsForCompany(company.id).catch(() => setProjects([]));
     }
-  }, [loadProjectsForCompany]);
+    if (!invoiceId && company.id != null) {
+      const isCreditNote = standaloneCreditNote || formData.document_kind === 'credit_note';
+      refreshOrderNumber(company.id, company.name, formData.issue_date, isCreditNote);
+    }
+  }, [loadProjectsForCompany, invoiceId, formData.issue_date, formData.document_kind, standaloneCreditNote, refreshOrderNumber]);
 
   const handleCompanyClear = useCallback(() => {
     setSelectedCompany(null);
-    setSelectedProject(NO_PROJECT_OPTION);
+    setSelectedProject(null);
     setProjects([]);
     setFormData((prev) => ({
       ...prev,
@@ -508,17 +556,12 @@ export function InvoiceForm({
   }, []);
 
   const handleProjectSelect = useCallback((project: Project) => {
-    if (project.id === NO_PROJECT_ID) {
-      setSelectedProject(NO_PROJECT_OPTION);
-      setFormData((prev) => ({ ...prev, project_id: undefined }));
-      return;
-    }
     setSelectedProject(project);
     setFormData((prev) => ({ ...prev, project_id: project.id }));
   }, []);
 
   const handleProjectClear = useCallback(() => {
-    setSelectedProject(NO_PROJECT_OPTION);
+    setSelectedProject(null);
     setFormData((prev) => ({ ...prev, project_id: undefined }));
   }, []);
 
@@ -664,19 +707,18 @@ export function InvoiceForm({
                 <div className={`${groupClass} mt-2 flex-1`}>
                   <AppLabledAutocomplete
                     label="Project"
-                    options={projectOptions}
-                    value={selectedProject?.id != null ? String(selectedProject.id) : String(NO_PROJECT_ID)}
-                    displayValue={selectedProject?.name ?? 'No project'}
+                    options={projects}
+                    value={selectedProject?.id != null ? String(selectedProject.id) : ''}
+                    displayValue={selectedProject?.name ?? ''}
                     accessor="name"
                     valueAccessor="id"
                     onSelect={handleProjectSelect}
                     onClear={handleProjectClear}
                     disabled={!selectedCompany}
-                    placeholder={selectedCompany ? 'Search project...' : 'No project'}
+                    placeholder={selectedCompany ? 'Search project or leave empty…' : 'Select company first'}
                   />
                   {formData.project_id != null &&
-                    selectedProject?.id != null &&
-                    selectedProject.id !== NO_PROJECT_ID && (
+                    selectedProject?.id != null && (
                       <InvoiceBillableTimeSummary
                         loading={billableSummary.loading}
                         isStale={billableRollupKey != null && billableLoadedKey !== billableRollupKey}
@@ -689,14 +731,16 @@ export function InvoiceForm({
                       />
                     )}
                 </div>
-                <div className="mt-2 flex-1">
-                  <AppInputLabeled
-                    label="Company VAT #"
-                    value={formData.customer_vat_number || ''}
-                    onChange={(e) => handleChange('customer_vat_number', e.target.value)}
-                    placeholder="VAT number"
-                  />
-                </div>
+                {!!businessVatNumber && (
+                  <div className="mt-2 flex-1">
+                    <AppInputLabeled
+                      label="Company VAT #"
+                      value={formData.customer_vat_number || ''}
+                      onChange={(e) => handleChange('customer_vat_number', e.target.value)}
+                      placeholder="VAT number"
+                    />
+                  </div>
+                )}
               </div>
             </div>
             <AppLabeledAreaInput
@@ -738,14 +782,16 @@ export function InvoiceForm({
               value={String(globalDiscountPercent || '')}
               onChange={(e) => setGlobalDiscountPercent(parseFloat(e.target.value) || 0)}
             />
-            <AppInputLabeled
-              label="Tax %"
-              type="number"
-              step={0.01}
-              min={0}
-              value={String(formData.tax_rate || '')}
-              onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
-            />
+            {taxEnabled && (
+              <AppInputLabeled
+                label="Tax %"
+                type="number"
+                step={0.01}
+                min={0}
+                value={String(formData.tax_rate || '')}
+                onChange={(e) => handleChange('tax_rate', parseFloat(e.target.value) || 0)}
+              />
+            )}
           </div>
           <div className="rounded-md bg-gray-50 dark:bg-gray-700/50 p-3 space-y-1 text-sm">
             <div className="flex justify-between text-gray-700 dark:text-gray-300">
@@ -764,10 +810,12 @@ export function InvoiceForm({
                 </div>
               </>
             )}
-            <div className="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Tax ({formData.tax_rate ?? 0}%)</span>
-              <span>{formatCurrency(totals.taxAmount, formData.currency)}</span>
-            </div>
+            {taxEnabled && (
+              <div className="flex justify-between text-gray-600 dark:text-gray-400">
+                <span>Tax ({formData.tax_rate ?? 0}%)</span>
+                <span>{formatCurrency(totals.taxAmount, formData.currency)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-semibold text-base pt-1 border-t border-gray-200 dark:border-gray-600">
               <span>Total</span>
               <span>{formatCurrency(totals.total, formData.currency)}</span>

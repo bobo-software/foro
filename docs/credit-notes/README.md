@@ -25,7 +25,7 @@ For canonical SQL migrations, see [../project-database-schema.md](../project-dat
 **Constraints**
 
 - Do not store negative `total` / `subtotal` for credit notes; use the ledger helper in the app for signed amounts.
-- If the referenced invoice is deleted, `credited_invoice_id` becomes `NULL` (FK behavior).
+- If the referenced invoice is **hard-deleted** (trash purge after 3 months), `credited_invoice_id` becomes `NULL` (FK `ON DELETE SET NULL`). Soft-delete (trash) keeps the link so restore is lossless.
 
 ---
 
@@ -110,7 +110,7 @@ Navigates to `/app/invoices/<newId>` (the new credit note detail).
 
 ## Deletion
 
-Same delete path as invoices ([`InvoiceStore.removeInvoice`](../../src/stores/data/InvoiceStore.ts)). Confirm copy in UI distinguishes credit note vs invoice.
+Same path as invoices ([`InvoiceStore.removeInvoice`](../../src/stores/data/InvoiceStore.ts)): **trash** for 3 months, then the API cron hard-deletes. Confirm copy in the UI distinguishes credit note vs invoice. Restore from [Documents → Trash](../02-modules/sales-documents.md) or the detail page.
 
 ---
 

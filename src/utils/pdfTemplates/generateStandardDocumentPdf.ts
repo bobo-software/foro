@@ -47,14 +47,20 @@ export async function generateStandardDocumentPdf(
 
   const showLogo = business?.show_logo_on_documents && business?.logo_url;
   const logo = showLogo ? await fetchLogoAsBase64(business!.logo_url!) : null;
+  const showVat = business?.tax_enabled ?? true;
+  const showCustomerVat = showVat && !!business?.vat_number;
 
   const headerWithLogo: HeaderData = { ...input.header, logo };
+  const customer: CustomerData = showCustomerVat ? input.customer : { ...input.customer, customerVat: undefined };
+  const totals: TotalsData = showVat
+    ? input.totals
+    : { ...input.totals, vatRate: 0, vatAmount: 0, total: input.totals.subtotal, showVat: false };
 
   let y = renderHeader(doc, headerWithLogo, config);
-  y = renderCustomerSection(doc, input.customer, y, config);
+  y = renderCustomerSection(doc, customer, y, config);
   y = renderDatesRow(doc, input.dates, y, config);
-  y = renderLineItemsTable(doc, input.lineItems, y, input.totals.currency, config);
-  y = renderTotalsSection(doc, input.totals, y, config);
+  y = renderLineItemsTable(doc, input.lineItems, y, totals.currency, config);
+  y = renderTotalsSection(doc, totals, y, config);
 
   if (input.notes) {
     y = renderNotesSection(doc, input.notes, y, config);

@@ -37,6 +37,7 @@ interface ApiInvoiceRow {
   projectId: number | null;
   documentKind: string | null;
   creditedInvoiceId: number | null;
+  deletedAt: string | null;
 }
 
 function normalizeInvoice(row: ApiInvoiceRow): Invoice {
@@ -68,6 +69,7 @@ function normalizeInvoice(row: ApiInvoiceRow): Invoice {
     notes: row.notes ?? undefined,
     created_at: row.createdAt ?? undefined,
     updated_at: row.updatedAt ?? undefined,
+    deleted_at: row.deletedAt ?? null,
   };
 }
 
@@ -107,6 +109,8 @@ export class InvoiceService {
     orderDirection?: 'ASC' | 'DESC';
     limit?: number;
     offset?: number;
+    trashed?: boolean;
+    includeTrashed?: boolean;
   }): Promise<Invoice[]> {
     const where = (params?.where ?? {}) as Record<string, unknown>;
     const response = await foroApiClient.get<ApiInvoiceRow[]>(BASE, {
@@ -116,6 +120,8 @@ export class InvoiceService {
       ...((where.business_id ?? where.businessId) !== undefined && { businessId: where.business_id ?? where.businessId }),
       ...((where.project_id ?? where.projectId) !== undefined && { projectId: where.project_id ?? where.projectId }),
       ...(where.status !== undefined && { status: where.status }),
+      ...(params?.trashed ? { trashed: true } : {}),
+      ...(params?.includeTrashed ? { includeTrashed: true } : {}),
     });
     let rows = (response.data ?? []).map(normalizeInvoice);
     if (params?.orderBy) {
@@ -164,6 +170,11 @@ export class InvoiceService {
   static async delete(id: number): Promise<{ rowCount: number }> {
     await foroApiClient.delete(`${BASE}/${id}`);
     return { rowCount: 1 };
+  }
+
+  static async restore(id: number): Promise<Invoice> {
+    const response = await foroApiClient.post<ApiInvoiceRow>(`${BASE}/${id}/restore`);
+    return normalizeInvoice(response.data);
   }
 
   static async findByStatus(status: string): Promise<Invoice[]> {

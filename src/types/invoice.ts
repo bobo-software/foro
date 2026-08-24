@@ -34,6 +34,8 @@ export interface Invoice {
   notes?: string;
   created_at?: string;
   updated_at?: string;
+  /** Set when the document is in trash (soft-deleted). Hard-deleted after 3 months. */
+  deleted_at?: string | null;
 }
 
 export type InvoiceStatus = 'draft' | 'accepted' | 'sent' | 'paid' | 'overdue' | 'cancelled';

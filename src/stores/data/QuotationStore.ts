@@ -3,6 +3,7 @@ import QuotationService from '../../services/quotationService';
 import QuotationLineService from '../../services/quotationLineService';
 import { useBusinessStore } from './BusinessStore';
 import type { Quotation, QuotationLine, CreateQuotationDto } from '../../types/quotation';
+import { computeOrderNumber } from '../../utils/orderNumber';
 
 /** Line rows for create/update/duplicate (no id / quotation_id) */
 export type QuotationLineInput = Omit<QuotationLine, 'id' | 'quotation_id'> & { item_id?: number };
@@ -13,6 +14,7 @@ interface QuotationState {
   error: string | null;
   fetchQuotations: (params?: { status?: string; projectId?: number }) => Promise<void>;
   removeQuotation: (id: number) => Promise<void>;
+  restoreQuotation: (id: number) => Promise<Quotation>;
   addQuotation: (quotation: Quotation) => void;
   fetchQuotationWithLines: (id: number) => Promise<{ quotation: Quotation | null; lines: QuotationLine[] }>;
   saveQuotationWithLines: (args: {
@@ -22,6 +24,7 @@ interface QuotationState {
   }) => Promise<number | undefined>;
   duplicateQuotationWithLines: (payload: CreateQuotationDto, lines: QuotationLineInput[]) => Promise<number | undefined>;
   getNextQuotationNumber: () => Promise<string>;
+  peekNextOrderNumber: (companyId: number, companyName: string, issueDate: string) => Promise<string>;
   markQuotationConverted: (quotationId: number, invoiceId: number) => Promise<void>;
 }
 
@@ -61,6 +64,12 @@ export const useQuotationStore = create<QuotationState>((set, get) => ({
     }
   },
 
+  restoreQuotation: async (id: number) => {
+    const restored = await QuotationService.restore(id);
+    set({ quotations: [restored, ...get().quotations.filter((q) => q.id !== id)] });
+    return restored;
+  },
+
   addQuotation: (quotation: Quotation) => {
     if (quotation.id != null) set({ quotations: [quotation, ...get().quotations] });
   },
@@ -80,9 +89,7 @@ export const useQuotationStore = create<QuotationState>((set, get) => ({
   saveQuotationWithLines: async ({ quotationId, payload, lines }) => {
     const { items: _drop, ...row } = payload;
     if (quotationId != null) {
-      await QuotationService.update(quotationId, row);
-      await QuotationLineService.deleteByQuotationId(quotationId);
-      if (lines.length) await QuotationLineService.insertMany(quotationId, lines);
+      await QuotationService.updateWithLines(quotationId, row, lines);
       return quotationId;
     }
     const created = await QuotationService.create(row);
@@ -100,6 +107,16 @@ export const useQuotationStore = create<QuotationState>((set, get) => ({
   },
 
   getNextQuotationNumber: () => QuotationService.getNextNumber(),
+
+  peekNextOrderNumber: async (companyId, companyName, issueDate) => {
+    const rows = await QuotationService.findAll({ where: { company_id: companyId }, includeTrashed: true });
+    return computeOrderNumber({
+      type: 'QU',
+      companyName,
+      issueDate,
+      existingOrderNumbers: rows.map((r) => r.order_number ?? ''),
+    });
+  },
 
   markQuotationConverted: async (quotationId: number, invoiceId: number) => {
     try {

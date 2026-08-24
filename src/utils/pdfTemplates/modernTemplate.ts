@@ -305,9 +305,12 @@ export const modernTemplate: PdfTemplateFunctions = {
     doc.text(formatCurrency(data.subtotal, data.currency), rightEdge, totalsY, { align: 'right' });
     totalsY += lh;
 
-    doc.text(`VAT (${data.vatRate}%):`, totalsLabelX, totalsY);
-    doc.text(formatCurrency(data.vatAmount, data.currency), rightEdge, totalsY, { align: 'right' });
-    totalsY += lh + 2;
+    if (data.showVat !== false) {
+      doc.text(`VAT (${data.vatRate}%):`, totalsLabelX, totalsY);
+      doc.text(formatCurrency(data.vatAmount, data.currency), rightEdge, totalsY, { align: 'right' });
+      totalsY += lh;
+    }
+    totalsY += 2;
 
     // Total line
     doc.setDrawColor(...config.primaryColor);

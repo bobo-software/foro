@@ -55,22 +55,22 @@ export function CompanyStatementsTab({ company, projects = [], selectedProjectId
   }, [selectedProjectId]);
 
   const generateStatement = useCallback(async () => {
-    if (!company?.name) return;
+    if (!company?.id) return;
     setStmtLoading(true);
     setStmtGenerated(false);
     try {
       const [invList, payList] = await Promise.all([
         InvoiceService.findAll({
           where: {
-            customer_name: company.name,
+            company_id: company.id,
             ...(stmtScope === 'project' && stmtProjectId != null ? { project_id: stmtProjectId } : {}),
           },
           orderBy: 'issue_date',
           orderDirection: 'ASC',
           limit: 1000,
         }),
-        PaymentService.findByCompany(
-          company.name,
+        PaymentService.findByCompanyId(
+          company.id,
           stmtScope === 'project' && stmtProjectId != null ? { projectId: stmtProjectId } : undefined
         ),
       ]);

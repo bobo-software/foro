@@ -23,9 +23,9 @@ export interface PricingTier {
   badge: string | null;
   limits: PricingTierLimits;
   features: PricingTierFeature[];
-  /** Paystack plan code — set once the plan is created/synced with the payment provider. Free has none. */
+  /** Paystack plan code — set once the plan is created/synced in the Skaftin dashboard. Free has none. */
   planCode?: string;
-  /** Payment provider id the plan belongs to (when billing is configured). */
+  /** Skaftin payment provider id (skaftin_system_payment_providers.id) the plan belongs to. */
   providerId?: number;
 }
 

@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import InvoiceService from '../../services/invoiceService';
 import InvoiceItemService from '../../services/invoiceItemService';
-import QuotationService from '../../services/quotationService';
 import { useBusinessStore } from './BusinessStore';
 import type { Invoice, CreateInvoiceDto, InvoiceItem } from '../../types/invoice';
 import { computeNextDocumentNumber } from '../../utils/documentNumber';
+import { computeOrderNumber } from '../../utils/orderNumber';
 
 export type InvoiceLineInput = Omit<InvoiceItem, 'id' | 'invoice_id'> & { item_id?: number };
 
@@ -14,10 +14,17 @@ interface InvoiceState {
   error: string | null;
   fetchInvoices: (params?: { status?: string; projectId?: number }) => Promise<void>;
   removeInvoice: (id: number) => Promise<void>;
+  restoreInvoice: (id: number) => Promise<Invoice>;
   addInvoice: (invoice: Invoice) => void;
   fetchInvoiceWithItems: (id: number) => Promise<{ invoice: Invoice | null; items: InvoiceItem[] }>;
   peekNextInvoiceNumber: () => Promise<string>;
   peekNextCreditNoteNumber: () => Promise<string>;
+  peekNextOrderNumber: (
+    companyId: number,
+    companyName: string,
+    issueDate: string,
+    isCreditNote: boolean
+  ) => Promise<string>;
   createInvoiceWithLines: (header: CreateInvoiceDto, lines: InvoiceLineInput[]) => Promise<number>;
   saveInvoiceWithLines: (
     invoiceId: number,
@@ -56,15 +63,16 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
   removeInvoice: async (id: number) => {
     try {
       await InvoiceService.delete(id);
-      try {
-        await QuotationService.clearConversionForDeletedInvoice(id);
-      } catch {
-        /* quotations table may lack converted_invoice_id */
-      }
       set({ invoices: get().invoices.filter((inv) => inv.id !== id) });
     } catch (err) {
       throw err;
     }
+  },
+
+  restoreInvoice: async (id: number) => {
+    const restored = await InvoiceService.restore(id);
+    set({ invoices: [restored, ...get().invoices.filter((inv) => inv.id !== id)] });
+    return restored;
   },
 
   addInvoice: (invoice: Invoice) => {
@@ -83,7 +91,7 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const where: Record<string, unknown> = { document_kind: 'invoice' };
     if (businessId != null) where.business_id = businessId;
-    const rows = await InvoiceService.findAll({ where });
+    const rows = await InvoiceService.findAll({ where, includeTrashed: true });
     return computeNextDocumentNumber(rows.map((r) => r.invoice_number ?? ''));
   },
 
@@ -91,8 +99,18 @@ export const useInvoiceStore = create<InvoiceState>((set, get) => ({
     const businessId = useBusinessStore.getState().currentBusiness?.id;
     const where: Record<string, unknown> = { document_kind: 'credit_note' };
     if (businessId != null) where.business_id = businessId;
-    const rows = await InvoiceService.findAll({ where });
+    const rows = await InvoiceService.findAll({ where, includeTrashed: true });
     return computeNextDocumentNumber(rows.map((r) => r.invoice_number ?? ''), 'CN-');
+  },
+
+  peekNextOrderNumber: async (companyId, companyName, issueDate, isCreditNote) => {
+    const rows = await InvoiceService.findAll({ where: { company_id: companyId }, includeTrashed: true });
+    return computeOrderNumber({
+      type: isCreditNote ? 'CN' : 'IN',
+      companyName,
+      issueDate,
+      existingOrderNumbers: rows.map((r) => r.order_number ?? ''),
+    });
   },
 
   createInvoiceWithLines: async (header, lines) => {

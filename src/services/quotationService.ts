@@ -4,8 +4,9 @@
  */
 
 import { foroApiClient } from '../backend';
-import type { Quotation, CreateQuotationDto } from '../types/quotation';
+import type { Quotation, CreateQuotationDto, QuotationLine } from '../types/quotation';
 import InvoiceService from './invoiceService';
+import { toApiLine } from './quotationLineService';
 import { computeNextDocumentNumber } from '../utils/documentNumber';
 
 const BASE = '/api/v1/quotations';
@@ -37,6 +38,7 @@ interface ApiQuotationRow {
   terms: string | null;
   projectId: number | null;
   discountPercent: string | null;
+  deletedAt: string | null;
 }
 
 function normalizeQuotation(row: ApiQuotationRow): Quotation {
@@ -67,6 +69,7 @@ function normalizeQuotation(row: ApiQuotationRow): Quotation {
     converted_invoice_id: row.convertedInvoiceId ?? undefined,
     created_at: row.createdAt ?? undefined,
     updated_at: row.updatedAt ?? undefined,
+    deleted_at: row.deletedAt ?? null,
   };
 }
 
@@ -105,6 +108,8 @@ export class QuotationService {
     orderDirection?: 'ASC' | 'DESC';
     limit?: number;
     offset?: number;
+    trashed?: boolean;
+    includeTrashed?: boolean;
   }): Promise<Quotation[]> {
     const where = (params?.where ?? {}) as Record<string, unknown>;
     // `converted_invoice_id` is not a server-side filter; applied client-side below.
@@ -115,6 +120,8 @@ export class QuotationService {
       ...((where.business_id ?? where.businessId) !== undefined && { businessId: where.business_id ?? where.businessId }),
       ...((where.project_id ?? where.projectId) !== undefined && { projectId: where.project_id ?? where.projectId }),
       ...(where.status !== undefined && { status: where.status }),
+      ...(params?.trashed ? { trashed: true } : {}),
+      ...(params?.includeTrashed ? { includeTrashed: true } : {}),
     });
     let rows = (response.data ?? []).map(normalizeQuotation);
     if ((where.converted_invoice_id ?? where.convertedInvoiceId) !== undefined) {
@@ -158,9 +165,32 @@ export class QuotationService {
     return { rowCount: response.data ? 1 : 0 };
   }
 
+  /**
+   * Saves header fields and the full set of line items in a single request — the backend
+   * replaces the quotation's lines atomically instead of the frontend issuing a GET + PUT +
+   * N DELETEs + N sequential POSTs.
+   */
+  static async updateWithLines(
+    id: number,
+    data: Partial<CreateQuotationDto>,
+    lines: (Omit<QuotationLine, 'id' | 'quotation_id'> & { item_id?: number })[]
+  ): Promise<Quotation> {
+    const { items: _items, ...row } = data;
+    const response = await foroApiClient.put<{ quotation: ApiQuotationRow }>(`${BASE}/${id}/full`, {
+      quotation: toApiBody(row),
+      lines: lines.map(toApiLine),
+    });
+    return normalizeQuotation(response.data.quotation);
+  }
+
   static async delete(id: number): Promise<{ rowCount: number }> {
     await foroApiClient.delete(`${BASE}/${id}`);
     return { rowCount: 1 };
+  }
+
+  static async restore(id: number): Promise<Quotation> {
+    const response = await foroApiClient.post<ApiQuotationRow>(`${BASE}/${id}/restore`);
+    return normalizeQuotation(response.data);
   }
 
   static async count(where?: Record<string, unknown>): Promise<number> {
@@ -169,8 +199,9 @@ export class QuotationService {
   }
 
   /**
-   * If converted_invoice_id points at a missing invoice, clear the link and set status to accepted
-   * so the quote can be edited or converted again.
+   * If converted_invoice_id points at a missing invoice (hard-deleted, not trash — GET /:id still
+   * returns trashed invoices), clear the link and set status to accepted so the quote can be
+   * converted again.
    */
   static async repairStaleConversionLink(quotationId: number, quo: Quotation): Promise<Quotation> {
     if (quo.converted_invoice_id == null) return quo;
@@ -180,26 +211,8 @@ export class QuotationService {
     return { ...quo, status: 'accepted', converted_invoice_id: undefined };
   }
 
-  /**
-   * When an invoice created from a quotation is deleted, clear the link and allow converting again.
-   */
-  static async clearConversionForDeletedInvoice(invoiceId: number): Promise<void> {
-    const linked = await this.findAll({
-      where: { converted_invoice_id: invoiceId },
-      limit: 20,
-      offset: 0,
-    });
-    for (const q of linked) {
-      if (q.id == null) continue;
-      await this.update(q.id, {
-        status: 'accepted',
-        converted_invoice_id: null,
-      });
-    }
-  }
-
   static async getNextNumber(): Promise<string> {
-    const response = await foroApiClient.get<ApiQuotationRow[]>(BASE, { limit: 5000 });
+    const response = await foroApiClient.get<ApiQuotationRow[]>(BASE, { limit: 5000, includeTrashed: true });
     const rows = response.data ?? [];
     return computeNextDocumentNumber(rows.map((r) => String(r.quotationNumber ?? '')));
   }

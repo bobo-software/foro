@@ -66,6 +66,7 @@ vi.mock('../../stores/data/InvoiceStore', () => ({
     getState: () => ({
       peekNextInvoiceNumber: () => Promise.resolve('INV-NEXT'),
       peekNextCreditNoteNumber: () => Promise.resolve('CN-NEXT'),
+      peekNextOrderNumber: () => Promise.resolve('IN-test-20260810'),
       fetchInvoiceWithItems: vi.fn(),
       saveInvoiceWithLines: vi.fn(),
       createInvoiceWithLines: vi.fn(),

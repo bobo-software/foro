@@ -35,6 +35,22 @@ function fromApi(row: ApiQuotationLineRow): QuotationLine {
   };
 }
 
+/** Maps an editor line row to the wire shape the API expects (sans `quotationId`, added by the caller). */
+export function toApiLine(
+  item: Omit<QuotationLine, 'id' | 'quotation_id'> & { item_id?: number }
+): Record<string, unknown> {
+  return {
+    ...(item.item_id != null && { itemId: item.item_id }),
+    ...(item.sku != null && item.sku !== '' && { sku: item.sku }),
+    description: item.description,
+    quantity: item.quantity,
+    unitPrice: Number(item.unit_price),
+    discountPercent: Number(item.discount_percent ?? 0),
+    total: Number(item.total),
+    unitType: item.unit_type ?? 'qty',
+  };
+}
+
 export class QuotationLineService {
   static async findByQuotationId(quotationId: number): Promise<QuotationLine[]> {
     const response = await foroApiClient.get<ApiQuotationLineRow[]>(BASE, { quotationId, limit: 500 });
@@ -46,23 +62,8 @@ export class QuotationLineService {
     items: (Omit<QuotationLine, 'id' | 'quotation_id'> & { item_id?: number })[]
   ): Promise<void> {
     for (const item of items) {
-      await foroApiClient.post(BASE, {
-        quotationId,
-        ...(item.item_id != null && { itemId: item.item_id }),
-        ...(item.sku != null && item.sku !== '' && { sku: item.sku }),
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: Number(item.unit_price),
-        discountPercent: Number(item.discount_percent ?? 0),
-        total: Number(item.total),
-        unitType: item.unit_type ?? 'qty',
-      });
+      await foroApiClient.post(BASE, { quotationId, ...toApiLine(item) });
     }
-  }
-
-  static async deleteByQuotationId(quotationId: number): Promise<void> {
-    const lines = await this.findByQuotationId(quotationId);
-    await Promise.all(lines.map((line) => (line.id ? foroApiClient.delete(`${BASE}/${line.id}`) : Promise.resolve())));
   }
 }
 

@@ -19,6 +19,8 @@ export interface Business {
   document_template?: DocumentTemplateId;
   /** Whether to embed the company logo in generated PDFs */
   show_logo_on_documents?: boolean;
+  /** Whether tax/VAT should be applied on this business's invoices and quotations */
+  tax_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -34,6 +36,7 @@ export interface CreateBusinessDto {
   logo_url?: string;
   document_template?: DocumentTemplateId;
   show_logo_on_documents?: boolean;
+  tax_enabled?: boolean;
 }
 
 export interface UserBusiness {

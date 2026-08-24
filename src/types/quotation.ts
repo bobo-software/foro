@@ -29,6 +29,8 @@ export interface Quotation {
   converted_invoice_id?: number;
   created_at?: string;
   updated_at?: string;
+  /** Set when the document is in trash (soft-deleted). Hard-deleted after 3 months. */
+  deleted_at?: string | null;
 }
 
 export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'converted';

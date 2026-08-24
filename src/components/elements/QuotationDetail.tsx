@@ -13,6 +13,7 @@ import { useInvoiceStore } from '../../stores/data/InvoiceStore';
 import { useProjectStore } from '../../stores/data/ProjectStore';
 import { useBusinessDocumentContextStore } from '../../stores/data/BusinessDocumentContextStore';
 import { formatCurrency } from '../../utils/currency';
+import { formatTrashPurgeDate, isTrashed } from '../../utils/salesTrash';
 
 interface QuotationDetailProps {
   quotationId: number;
@@ -33,6 +34,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
   const [project, setProject] = useState<Project | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const convertInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -84,13 +86,25 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
   }, [quotation]);
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this quotation?')) return;
+    if (!confirm('Move this quotation to trash? You can restore it for 3 months.')) return;
 
     try {
       await useQuotationStore.getState().removeQuotation(quotationId);
       onDelete?.();
     } catch (err: unknown) {
       alert('Failed to delete quotation: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      setRestoring(true);
+      await useQuotationStore.getState().restoreQuotation(quotationId);
+      await loadQuotation();
+    } catch (err: unknown) {
+      alert('Failed to restore quotation: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -261,7 +275,8 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
     );
   }
 
-  const vatRate = Number(quotation.tax_rate) || 0;
+  const taxEnabled = business?.tax_enabled ?? true;
+  const vatRate = taxEnabled ? Number(quotation.tax_rate) || 0 : 0;
   const globalDiscountPercent = Number(quotation.discount_percent) || 0;
   const linesSubtotal = lineItems.length > 0
     ? lineItems.reduce((sum, item) => sum + Number(item.total || 0), 0)
@@ -271,8 +286,10 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
   const vatAmount = (subtotal * vatRate) / 100;
   const total = subtotal + vatAmount;
 
+  const hasNotes = !!quotation.notes;
+
   const isConvertedReadOnly = quotation.status === 'converted';
-  const notesText = quotation.notes?.trim() ?? '';
+  const inTrash = isTrashed(quotation.deleted_at);
 
   const thClass = 'px-2 py-1.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide';
 
@@ -299,40 +316,59 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors">
-            <LuPrinter size={15} aria-hidden />Print / Save PDF
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              quotation.converted_invoice_id != null
-                ? void handleConvertToInvoice()
-                : setConvertModalOpen(true)
-            }
-            disabled={converting || duplicating}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-            <LuFileText size={15} aria-hidden />
-            {quotation.converted_invoice_id != null ? 'View invoice' : 'Convert to invoice'}
-          </button>
-          {isConvertedReadOnly && (
+          {inTrash ? (
             <button
               type="button"
-              onClick={handleDuplicate}
-              disabled={duplicating}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              <LuCopy size={15} aria-hidden />
-              {duplicating ? 'Duplicating…' : 'Duplicate to edit'}
+              onClick={() => void handleRestore()}
+              disabled={restoring}
+              className="inline-flex items-center h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {restoring ? 'Restoring…' : 'Restore'}
             </button>
-          )}
-          {onEdit && !isConvertedReadOnly && (
-            <button onClick={onEdit} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">Edit</button>
-          )}
-          {onDelete && (
-            <button onClick={handleDelete} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">Delete</button>
+          ) : (
+            <>
+              <button type="button" onClick={handlePrint}
+                className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors">
+                <LuPrinter size={15} aria-hidden />Print / Save PDF
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  quotation.converted_invoice_id != null
+                    ? void handleConvertToInvoice()
+                    : setConvertModalOpen(true)
+                }
+                disabled={converting || duplicating}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                <LuFileText size={15} aria-hidden />
+                {quotation.converted_invoice_id != null ? 'View invoice' : 'Convert to invoice'}
+              </button>
+              {isConvertedReadOnly && (
+                <button
+                  type="button"
+                  onClick={handleDuplicate}
+                  disabled={duplicating}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-slate-600 hover:bg-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  <LuCopy size={15} aria-hidden />
+                  {duplicating ? 'Duplicating…' : 'Duplicate to edit'}
+                </button>
+              )}
+              {onEdit && !isConvertedReadOnly && (
+                <button onClick={onEdit} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">Edit</button>
+              )}
+              {onDelete && (
+                <button onClick={handleDelete} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">Delete</button>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {inTrash && quotation.deleted_at && (
+        <div className="print:hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          This quotation is in trash. It will be permanently deleted on {formatTrashPurgeDate(quotation.deleted_at)}.
+        </div>
+      )}
 
       {/* ── Page 1 ── */}
       <div className="quotation-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col gap-0 print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
@@ -379,7 +415,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           <div>
             <p className="mb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bill To</p>
             <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{quotation.customer_name}</p>
-            {quotation.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {quotation.customer_vat_number}</p>}
+            {!!business?.vat_number && quotation.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {quotation.customer_vat_number}</p>}
             {quotation.customer_address && <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-line">{quotation.customer_address}</p>}
             {quotation.customer_email && <p className="text-xs text-gray-500 dark:text-gray-400">{quotation.customer_email}</p>}
           </div>
@@ -451,7 +487,7 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
           )}
         </div>
 
-        {/* ── Banking + Totals + Notes — fill remaining A4 space ── */}
+        {/* ── Banking + Totals — pushed to bottom ── */}
         <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
           <div className="grid grid-cols-2 gap-8 items-start print:break-inside-avoid">
             {/* Banking */}
@@ -492,29 +528,31 @@ export function QuotationDetail({ quotationId, onEdit, onDelete }: QuotationDeta
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal, quotation.currency)}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
-                <span>VAT ({vatRate}%)</span>
-                <span>{formatCurrency(vatAmount, quotation.currency)}</span>
-              </div>
+              {taxEnabled && (
+                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                  <span>VAT ({vatRate}%)</span>
+                  <span>{formatCurrency(vatAmount, quotation.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-700 dark:border-gray-300 text-sm font-bold text-gray-900 dark:text-gray-100">
                 <span>Total</span>
                 <span>{formatCurrency(total, quotation.currency)}</span>
               </div>
             </div>
           </div>
-
-          {notesText ? (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
-              <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
-              <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
-                {notesText}
-              </p>
-            </div>
-          ) : null}
         </div>
 
+        {hasNotes && (
+          <div className="print-doc-notes pt-4 mt-2 border-t border-gray-200 dark:border-gray-700">
+            <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
+            <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
+              {quotation.notes}
+            </p>
+          </div>
+        )}
+
         {/* ── Footer ── */}
-        <div className="pt-6 text-center">
+        <div className="print-doc-footer mt-auto pt-6 text-center">
           <p className="text-xs text-gray-300 dark:text-gray-600">Foro by Bobo Softwares (2026)</p>
         </div>
       </div>

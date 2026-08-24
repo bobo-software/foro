@@ -66,6 +66,7 @@ Use inside a parent that already provides the section heading and card chrome (e
 | [`CompanyQuotationsTab.tsx`](../../../pages/admin/companies/companyPage/tabs/CompanyQuotationsTab.tsx) | Embedded |
 | [`CompanyInvoicesTab.tsx`](../../../pages/admin/companies/companyPage/tabs/CompanyInvoicesTab.tsx) | Embedded |
 | [`CompanyPaymentsTab.tsx`](../../../pages/admin/companies/companyPage/tabs/CompanyPaymentsTab.tsx) | Embedded |
+| [`DocumentsTrashPage.tsx`](../../../pages/admin/DocumentsTrashPage.tsx) | Full card (Documents → Trash) |
 
 Re-exports: [`ComponentsIndex.ts`](../ComponentsIndex.ts) (`AppDataTable`, `AppDataTableColumn`, `AppDataTableProps`).
 

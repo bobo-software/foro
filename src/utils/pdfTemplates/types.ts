@@ -74,6 +74,8 @@ export interface TotalsData {
   total: number;
   currency: string;
   bankingDetails?: string;
+  /** Whether to render the VAT line at all (business has tax disabled). Defaults to true when omitted. */
+  showVat?: boolean;
 }
 
 /** Interface that each template module must implement */

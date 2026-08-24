@@ -405,20 +405,35 @@
     overflow: visible !important;
   }
 
-  /* Page break between page 1 and page 2 */
-  .quotation-print-page + .quotation-print-page,
-  .invoice-print-page + .invoice-print-page {
-    page-break-before: always;
-    break-before: page;
-    margin-top: 0;
-  }
-
-  /* Compact type + spacing for invoice / quotation printouts (Tailwind text-* uses rem) */
+  /*
+   * Block layout in print so mt-auto cannot shove the branding footer onto its
+   * own sheet after a full page of line items. Notes stay in document order
+   * (after totals) instead of starting a forced new page.
+   */
   .invoice-print-page,
   .quotation-print-page {
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
     padding: 0.45cm 0.55cm !important;
     font-size: 7.25pt !important;
     line-height: 1.22 !important;
+  }
+
+  .invoice-print-page .print-doc-footer,
+  .quotation-print-page .print-doc-footer {
+    margin-top: 0.3cm !important;
+    padding-top: 0.15cm !important;
+    break-before: avoid;
+    page-break-before: avoid;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .invoice-print-page .print-doc-notes,
+  .quotation-print-page .print-doc-notes {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .invoice-print-page .text-xs,

@@ -22,16 +22,6 @@ export interface LoginPayload {
   password: string;
 }
 
-interface ForgotPasswordResponse {
-  method: string;
-  destination: string;
-}
-
-interface VerifyForgotPasswordOtpResponse {
-  resetToken: string;
-  expiresInMinutes: number;
-}
-
 interface ApiUser {
   id: number;
   name: string;
@@ -134,23 +124,15 @@ export const authService = {
     void useAuthStore.getState().logout();
   },
 
-  async forgotPassword(email: string): Promise<ForgotPasswordResponse> {
-    const store = useAuthStore.getState();
-    store.setLoading(true);
-    store.clearError();
-
-    try {
-      const response = await foroApiClient.post<ForgotPasswordResponse>(API_CONFIG.endpoints.forgotPassword, {
-        email: email.trim(),
-      });
-      store.setLoading(false);
-      return response.data;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to send reset code';
-      store.setError(message);
-      store.setLoading(false);
-      throw err;
-    }
+  /**
+   * None of the OTP / password-reset flows below exist on foro-api yet
+   * (see foro-api/docs/api.md — only register/login/refresh/logout/me are
+   * shipped). These throw a clear, user-facing error instead of calling a
+   * nonexistent endpoint or leaving the OTP/reset pages crashing on an
+   * undefined method.
+   */
+  async forgotPassword(_email: string): Promise<never> {
+    throw new Error('Password reset is not available yet. Please contact support.');
   },
 
   async verifyOtp(_userId: number, _otp: string): Promise<never> {
@@ -161,53 +143,12 @@ export const authService = {
     throw new Error('OTP verification is not available.');
   },
 
-  async verifyForgotPasswordOtp(
-    email: string,
-    code: string
-  ): Promise<{ reset_token: string; expires_in_minutes: number }> {
-    const store = useAuthStore.getState();
-    store.setLoading(true);
-    store.clearError();
-
-    try {
-      const response = await foroApiClient.post<VerifyForgotPasswordOtpResponse>(
-        API_CONFIG.endpoints.verifyForgotPasswordOtp,
-        {
-          email: email.trim(),
-          otp: code.trim(),
-        }
-      );
-      store.setLoading(false);
-      return {
-        reset_token: response.data.resetToken,
-        expires_in_minutes: response.data.expiresInMinutes,
-      };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Invalid or expired code';
-      store.setError(message);
-      store.setLoading(false);
-      throw err;
-    }
+  async verifyForgotPasswordOtp(_email: string, _code: string): Promise<never> {
+    throw new Error('Password reset is not available yet. Please contact support.');
   },
 
-  async resetPasswordWithToken(email: string, resetToken: string, newPassword: string): Promise<void> {
-    const store = useAuthStore.getState();
-    store.setLoading(true);
-    store.clearError();
-
-    try {
-      await foroApiClient.post<null>(API_CONFIG.endpoints.resetPassword, {
-        email: email.trim(),
-        resetToken,
-        newPassword,
-      });
-      store.setLoading(false);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to reset password';
-      store.setError(message);
-      store.setLoading(false);
-      throw err;
-    }
+  async resetPasswordWithToken(_email: string, _resetToken: string, _newPassword: string): Promise<never> {
+    throw new Error('Password reset is not available yet. Please contact support.');
   },
 
   getUser(): SessionUser | null {

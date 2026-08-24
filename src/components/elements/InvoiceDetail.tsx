@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { LuPrinter } from 'react-icons/lu';
+import { LuPrinter, LuArrowLeft } from 'react-icons/lu';
 import type { Invoice, InvoiceItem } from '../../types/invoice';
 import { ACCOUNT_TYPES } from '../../types/bankingDetails';
 import StorageService from '../../services/storageService';
@@ -9,15 +9,17 @@ import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { useInvoiceStore } from '../../stores/data/InvoiceStore';
 import { useBusinessDocumentContextStore } from '../../stores/data/BusinessDocumentContextStore';
 import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
+import { formatTrashPurgeDate, isTrashed } from '../../utils/salesTrash';
 import InvoiceService from '../../services/invoiceService';
 
 interface InvoiceDetailProps {
   invoiceId: number;
+  fromCompanyId?: string | null;
   onEdit?: () => void;
   onDelete?: () => void;
 }
 
-export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProps) {
+export function InvoiceDetail({ invoiceId, fromCompanyId, onEdit, onDelete }: InvoiceDetailProps) {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [lineItems, setLineItems] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,7 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   const contacts = useBusinessDocumentContextStore((s) => s.contacts);
   const loadDocumentContext = useBusinessDocumentContextStore((s) => s.loadForCurrentBusiness);
   const [creditedInvoiceLabel, setCreditedInvoiceLabel] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     loadInvoice();
@@ -91,8 +94,8 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
     if (
       !confirm(
         isCreditNoteInvoice(invoice)
-          ? 'Are you sure you want to delete this credit note?'
-          : 'Are you sure you want to delete this invoice?',
+          ? 'Move this credit note to trash? You can restore it for 3 months.'
+          : 'Move this invoice to trash? You can restore it for 3 months.',
       )
     )
       return;
@@ -101,6 +104,18 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
       onDelete?.();
     } catch (err: unknown) {
       alert('Failed to delete invoice: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      setRestoring(true);
+      await useInvoiceStore.getState().restoreInvoice(invoiceId);
+      await loadInvoice();
+    } catch (err: unknown) {
+      alert('Failed to restore invoice: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -142,7 +157,8 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
     );
   }
 
-  const vatRate = Number(invoice.tax_rate) || 0;
+  const taxEnabled = business?.tax_enabled ?? true;
+  const vatRate = taxEnabled ? Number(invoice.tax_rate) || 0 : 0;
   const globalDiscountPercent = Number(invoice.discount_percent) || 0;
   const linesSubtotal = lineItems.length > 0
     ? lineItems.reduce((sum, item) => sum + Number(item.total || 0), 0)
@@ -153,11 +169,8 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
   const total = subtotal + vatAmount;
 
   const isCn = isCreditNoteInvoice(invoice);
-  const creditNoteNote = isCn && creditedInvoiceLabel
-    ? `This credit note relates to invoice #${creditedInvoiceLabel}.`
-    : '';
-  const notesBody = invoice.notes?.trim() ?? '';
-  const page1Notes = [creditNoteNote, notesBody].filter(Boolean).join('\n\n');
+  const inTrash = isTrashed(invoice.deleted_at);
+  const hasNotes = !!invoice.notes || (!!creditedInvoiceLabel && isCn);
 
   const creditNoteCreateSearch = new URLSearchParams();
   creditNoteCreateSearch.set('credit_from', String(invoiceId));
@@ -184,29 +197,56 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           </span>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors"
-          >
-            <LuPrinter size={15} aria-hidden />Print / Save PDF
-          </button>
-          {!isCn && (
+          {fromCompanyId && (
             <Link
-              to={`/app/invoices/create?${creditNoteCreateSearch.toString()}`}
-              className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-violet-600 hover:bg-violet-500 transition-colors no-underline"
+              to={`/app/companies/${fromCompanyId}?tab=invoices`}
+              className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors no-underline"
             >
-              Create credit note
+              <LuArrowLeft size={15} aria-hidden />Back to company
             </Link>
           )}
-          {onEdit && (
-            <button onClick={onEdit} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">Edit</button>
-          )}
-          {onDelete && (
-            <button onClick={handleDelete} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">Delete</button>
+          {inTrash ? (
+            <button
+              type="button"
+              onClick={() => void handleRestore()}
+              disabled={restoring}
+              className="inline-flex items-center h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {restoring ? 'Restoring…' : 'Restore'}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition-colors"
+              >
+                <LuPrinter size={15} aria-hidden />Print / Save PDF
+              </button>
+              {!isCn && (
+                <Link
+                  to={`/app/invoices/create?${creditNoteCreateSearch.toString()}`}
+                  className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-violet-600 hover:bg-violet-500 transition-colors no-underline"
+                >
+                  Create credit note
+                </Link>
+              )}
+              {onEdit && (
+                <button onClick={onEdit} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">Edit</button>
+              )}
+              {onDelete && (
+                <button onClick={handleDelete} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">Delete</button>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {inTrash && invoice.deleted_at && (
+        <div className="print:hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          This {isCn ? 'credit note' : 'invoice'} is in trash. It will be permanently deleted on {formatTrashPurgeDate(invoice.deleted_at)}.
+        </div>
+      )}
 
       {/* ── Page 1 ── */}
       <div className="invoice-print-page bg-white dark:bg-gray-800 w-full min-h-[1123px] p-8 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col gap-0 print:shadow-none print:border-none print:rounded-none print:min-h-0 print:p-8 print:bg-white dark:print:bg-white">
@@ -252,7 +292,7 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
           <div>
             <p className="mb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Bill To</p>
             <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{invoice.customer_name}</p>
-            {invoice.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {invoice.customer_vat_number}</p>}
+            {!!business?.vat_number && invoice.customer_vat_number && <p className="text-xs text-gray-500 dark:text-gray-400">VAT: {invoice.customer_vat_number}</p>}
             {invoice.customer_address && <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-line">{invoice.customer_address}</p>}
             {invoice.customer_email && <p className="text-xs text-gray-500 dark:text-gray-400">{invoice.customer_email}</p>}
           </div>
@@ -363,29 +403,37 @@ export function InvoiceDetail({ invoiceId, onEdit, onDelete }: InvoiceDetailProp
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal, invoice.currency)}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
-                <span>VAT ({vatRate}%)</span>
-                <span>{formatCurrency(vatAmount, invoice.currency)}</span>
-              </div>
+              {taxEnabled && (
+                <div className="flex justify-between py-1 border-b border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400">
+                  <span>VAT ({vatRate}%)</span>
+                  <span>{formatCurrency(vatAmount, invoice.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between py-2 mt-1 border-t-2 border-gray-700 dark:border-gray-300 text-sm font-bold text-gray-900 dark:text-gray-100">
                 <span>Total</span>
                 <span>{formatCurrency(total, invoice.currency)}</span>
               </div>
             </div>
           </div>
-
-          {page1Notes ? (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 print:break-inside-avoid">
-              <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
-              <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
-                {page1Notes}
-              </p>
-            </div>
-          ) : null}
         </div>
 
+        {hasNotes && (
+          <div className="print-doc-notes pt-4 mt-2 border-t border-gray-200 dark:border-gray-700">
+            <p className="mb-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Notes</p>
+            <p className="m-0 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">
+              {isCn && creditedInvoiceLabel && (
+                <>
+                  This credit note relates to invoice #{creditedInvoiceLabel}.
+                  {invoice.notes?.trim() ? '\n\n' : ''}
+                </>
+              )}
+              {invoice.notes}
+            </p>
+          </div>
+        )}
+
         {/* ── Footer ── */}
-        <div className="pt-6 text-center">
+        <div className="print-doc-footer mt-auto pt-6 text-center">
           <p className="text-xs text-gray-300 dark:text-gray-600">Foro by Bobo Softwares (2026)</p>
         </div>
       </div>

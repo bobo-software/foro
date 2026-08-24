@@ -119,7 +119,7 @@ class WebSocketService {
     }
 
     this.socket?.disconnect();
-    this.socket = io(API_CONFIG.apiUrl, { auth: { token }, reconnection: true });
+    this.socket = io(API_CONFIG.wsUrl, { auth: { token }, reconnection: true });
 
     this.socket.on('connect', () => {
       this.reconnectAttempts = 0;

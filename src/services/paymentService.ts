@@ -103,8 +103,8 @@ export class PaymentService {
     }
   }
 
-  static async findByCompany(companyName: string, options?: { projectId?: number }): Promise<Payment[]> {
-    const where: Record<string, unknown> = { customer_name: companyName };
+  static async findByCompanyId(companyId: number, options?: { projectId?: number }): Promise<Payment[]> {
+    const where: Record<string, unknown> = { company_id: companyId };
     if (options?.projectId != null) where.project_id = options.projectId;
     return this.findAll({ where, orderBy: 'date', orderDirection: 'DESC' });
   }

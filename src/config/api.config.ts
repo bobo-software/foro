@@ -5,6 +5,9 @@ export const API_CONFIG = {
   // API URL - the foro-api backend instance
   apiUrl: env.VITE_API_URL,
 
+  // WebSocket URL for the Socket.IO realtime layer
+  wsUrl: env.VITE_WS_URL || env.VITE_API_URL,
+
   // Token storage keys (localStorage)
   tokenStorageKey: 'foro_access_token',
   refreshTokenStorageKey: 'foro_refresh_token',
@@ -26,9 +29,6 @@ export const API_CONFIG = {
     refresh: '/api/v1/auth/refresh',
     logout: '/api/v1/auth/logout',
     me: '/api/v1/auth/me',
-    forgotPassword: '/api/v1/auth/forgot-password',
-    verifyForgotPasswordOtp: '/api/v1/auth/verify-forgot-password-otp',
-    resetPassword: '/api/v1/auth/reset-password',
   },
 } as const;
 

@@ -33,6 +33,7 @@ Related columns on the same table:
 |--------|------|---------|
 | `show_logo_on_documents` | `boolean` | When true, PDF generators embed logo via [`pdfLogoHelper`](../../src/utils/pdfLogoHelper.ts) |
 | `document_template` | `varchar` | PDF layout (`classic`, etc.) |
+| `tax_enabled` | `boolean` | Default `true`. When false, the Tax %/VAT input and totals line are hidden on invoice and quotation forms, detail views, and generated PDFs (`InvoiceForm.tsx`, `QuotationForm.tsx`, `InvoiceDetail.tsx`, `QuotationDetail.tsx`, `generateStandardDocumentPdf.ts`). The customer VAT # field is additionally gated on the business having its own `vat_number` set. |
 
 ## Presigned URLs
 
