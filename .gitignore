@@ -37,3 +37,4 @@ client-sdk
 
 # Claude
 .claude/
+.infisical.json

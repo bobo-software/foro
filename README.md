@@ -147,6 +147,7 @@ MIT
   - `VITE_API_URL` (foro-api origin, e.g. `https://api.example.com`)
   - `VITE_GOOGLE_MAPS_API_KEY` (optional)
   - `VITE_WS_URL` (optional; leave unset to use `VITE_API_URL` for Socket.IO)
+  - `VITE_SITE_URL` (optional public origin, e.g. `https://app.example.com`; used for WhatsApp/Open Graph image URLs)
 - Optional Infisical (if all three are set, the image uses `infisical run` instead of raw `VITE_*`):
   - `INFISICAL_TOKEN=<service-token>`
   - `INFISICAL_ENV=prod`
