@@ -3,6 +3,8 @@ import { LuArrowLeft } from 'react-icons/lu';
 
 interface AppPageHeaderProps {
   icon?: React.ReactNode;
+  /** Unstyled leading content (e.g. a company logo). Takes precedence over `icon`. */
+  leading?: React.ReactNode;
   title: string;
   subtitle?: string;
   showButton?: boolean;
@@ -17,6 +19,7 @@ interface AppPageHeaderProps {
 
 const AppPageHeader: React.FC<AppPageHeaderProps> = ({
   icon,
+  leading,
   title,
   subtitle,
   showButton = false,
@@ -43,10 +46,14 @@ const AppPageHeader: React.FC<AppPageHeaderProps> = ({
             <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 shrink-0" />
           </>
         )}
-        {icon && (
-          <div className="p-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-md shrink-0">
-            {icon}
-          </div>
+        {leading ? (
+          <div className="shrink-0">{leading}</div>
+        ) : (
+          icon && (
+            <div className="p-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-md shrink-0">
+              {icon}
+            </div>
+          )
         )}
         <div className="min-w-0">
           <h1 className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight truncate">

@@ -439,7 +439,12 @@ export function CompanyFormPage() {
             is_active: true,
           });
         }
-        toast.success('Company created');
+        const seededPrimaryContact = Boolean(
+          payload.contact_person || payload.email || payload.phone
+        );
+        toast.success(
+          seededPrimaryContact ? 'Company created (primary contact added)' : 'Company created'
+        );
         navigate('/app/companies');
       }
     } catch (err) {

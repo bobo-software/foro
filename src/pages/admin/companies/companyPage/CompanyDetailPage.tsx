@@ -20,6 +20,7 @@ import {
   CompanyContactsTab,
 } from './tabs';
 import { AppPageHeader } from '@/components/ComponentsIndex';
+import { CompanyLogo } from '@/components/elements/CompanyLogo';
 import type { ProjectScope } from './tabs/types';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 
@@ -192,6 +193,7 @@ export function CompanyDetailPage() {
       <AppPageHeader
         title={company.name}
         subtitle="Company details"
+        leading={<CompanyLogo path={company.logo_url} name={company.name} size="md" />}
         showBackButton={true}
         onBackClick={() => navigate(-1)}
       />

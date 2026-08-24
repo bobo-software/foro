@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { RouteLoadingFallback } from './components/error/RouteLoadingFallback';
 import { useAuthSync } from './hooks/useAuthSync';
 import { useTokenRefresh } from './hooks/useTokenRefresh';
+import { usePrintLightMode } from './hooks/usePrintLightMode';
 import { webSocketService } from './backend/services/WebSocketService';
 import useAuthStore from './stores/data/AuthStore';
 import useThemeStore from './stores/state/ThemeStore';
@@ -62,6 +63,9 @@ const InviteAccept = lazy(() => import('@pages/team/InviteAccept').then((m) => (
 const InvitePostAuth = lazy(() => import('@pages/team/InvitePostAuth').then((m) => ({ default: m.InvitePostAuth })));
 const PortalLandingPage = lazy(() => import('@pages/portal/PortalLandingPage').then((m) => ({ default: m.PortalLandingPage })));
 const PortalProjectViewPage = lazy(() => import('@pages/portal/PortalProjectViewPage').then((m) => ({ default: m.PortalProjectViewPage })));
+const StatementPortalEntryPage = lazy(() => import('@pages/statements/StatementPortalEntryPage').then((m) => ({ default: m.StatementPortalEntryPage })));
+const StatementPortalViewPage = lazy(() => import('@pages/statements/StatementPortalViewPage').then((m) => ({ default: m.StatementPortalViewPage })));
+const StatementPortalInvoiceViewPage = lazy(() => import('@pages/statements/StatementPortalInvoiceViewPage').then((m) => ({ default: m.StatementPortalInvoiceViewPage })));
 
 /**
  * Auth and WebSocket hooks wrapper component
@@ -123,6 +127,8 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  usePrintLightMode();
+
   return (
     <ErrorBoundary>
       <AuthProvider verifyOnMount={true}>
@@ -142,6 +148,9 @@ function App() {
             <Route path="/invite/:token/accept" element={<InvitePostAuth />} />
             <Route path="/portal/v/:portalToken" element={<PortalProjectViewPage />} />
             <Route path="/portal" element={<PortalLandingPage />} />
+            <Route path="/statements" element={<StatementPortalEntryPage />} />
+            <Route path="/statements/:companyId" element={<StatementPortalViewPage />} />
+            <Route path="/statements/:companyId/invoices/:invoiceId" element={<StatementPortalInvoiceViewPage />} />
             <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/payment/cancel" element={<PaymentCancel />} />
 

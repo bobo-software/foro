@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LuPlus, LuPencil, LuTrash2, LuStar, LuUser } from 'react-icons/lu';
+import { LuPlus, LuPencil, LuTrash2, LuStar, LuUser, LuUserPlus } from 'react-icons/lu';
 import ContactService from '@/services/contactService';
 import type { Contact, CreateContactDto } from '@/types/contact';
 import type { Company } from '@/types/company';
@@ -36,6 +36,7 @@ export function CompanyContactsTab({ company }: CompanyContactsTabProps) {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [form, setForm] = useState<ContactFormData>(initialFormData);
   const [saving, setSaving] = useState(false);
+  const [addingFromCompany, setAddingFromCompany] = useState(false);
 
   const loadContacts = useCallback(async () => {
     if (!company.id) return;
@@ -82,6 +83,28 @@ export function CompanyContactsTab({ company }: CompanyContactsTabProps) {
     setShowForm(false);
     setEditingContact(null);
     setForm(initialFormData);
+  };
+
+  /** Mirrors foro-api's `primaryContactFromCompany` (used to auto-seed a contact on company creation) for existing companies that don't have one yet. */
+  const handleAddFromCompany = async () => {
+    if (!company.id) return;
+    setAddingFromCompany(true);
+    try {
+      const payload: CreateContactDto = {
+        company_id: company.id,
+        name: company.contact_person?.trim() || company.name,
+        email: company.email?.trim() || undefined,
+        phone: company.phone?.trim() || undefined,
+        is_primary: true,
+      };
+      await ContactService.create(payload);
+      toast.success('Contact added from company details');
+      loadContacts();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add contact');
+    } finally {
+      setAddingFromCompany(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -284,9 +307,20 @@ export function CompanyContactsTab({ company }: CompanyContactsTabProps) {
 
       {/* Contact list */}
       {contacts.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-slate-400 dark:text-slate-500 text-center">
-          No contacts yet. Add one to get started.
-        </p>
+        <div className="px-4 py-6 flex flex-col items-center gap-3 text-center">
+          <p className="text-sm text-slate-400 dark:text-slate-500">No contacts yet. Add one to get started.</p>
+          {!showForm && (
+            <button
+              type="button"
+              onClick={() => void handleAddFromCompany()}
+              disabled={addingFromCompany}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+            >
+              <LuUserPlus size={13} />
+              {addingFromCompany ? 'Adding…' : 'Add contact from company details'}
+            </button>
+          )}
+        </div>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-700">
           {contacts.map((contact) => (

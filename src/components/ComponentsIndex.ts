@@ -5,6 +5,7 @@ export { default as AppSidebar } from './elements/AppSidebar';
 // elements
 export { default as AppProfileComponent } from './elements/AppProfileComponent';
 export { default as AppPageHeader } from './elements/AppPageHeader';
+export { CompanyLogo } from './elements/CompanyLogo';
 export { AppDataTable } from './elements/AppDataTable';
 export type { AppDataTableColumn, AppDataTableProps } from './elements/AppDataTable';
 export { RecentInvoicesTable } from './elements/RecentInvoicesTable';

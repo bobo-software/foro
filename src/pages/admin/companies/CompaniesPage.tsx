@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LuFilter, LuUsers } from 'react-icons/lu';
 import { AppDataTable, type AppDataTableColumn } from '@/components/elements/AppDataTable';
+import { CompanyLogo } from '@/components/elements/CompanyLogo';
 import { useCompanyStore } from '@/stores/data/CompanyStore';
 import { useBusinessStore } from '@/stores/data/BusinessStore';
 import { useAutoRefresh, useProjectId, useSubscriptionLimits } from '@/hooks';
@@ -12,7 +13,12 @@ const companyColumns: AppDataTableColumn<Company>[] = [
     id: 'name',
     header: 'Name',
     cellClassName: 'font-medium text-slate-800 dark:text-slate-100',
-    render: (c) => c.name,
+    render: (c) => (
+      <span className="inline-flex items-center gap-2.5">
+        <CompanyLogo path={c.logo_url} name={c.name} size="sm" />
+        <span>{c.name}</span>
+      </span>
+    ),
   },
   {
     id: 'email',
