@@ -12,6 +12,10 @@ Deleting an invoice, credit note, or quotation from the detail page or company i
 - Document numbers stay reserved while a row is in trash so a new invoice/quotation cannot reuse the same number
 - Converted quotations keep `converted_invoice_id` until hard-delete; restoring the invoice does not break the link
 
+## Payment receipts
+
+Recording a customer payment (`/app/payments/create`) can email a receipt to the company's **primary contact** (the same email that signs into `/statements`). Check **Send receipt** on the form — it is enabled only when that contact has an email. After the payment is saved, the API sends a branded HTML email with a link to `/statements` (OTP sign-in; not a magic token). Mail failure does not undo the payment.
+
 ## API (foro-api)
 
 | Action | HTTP |

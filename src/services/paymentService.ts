@@ -123,6 +123,11 @@ export class PaymentService {
     await foroApiClient.delete(`${BASE}/${id}`);
     return { rowCount: 1 };
   }
+
+  static async sendReceipt(id: number): Promise<{ to: string; sentAt: string }> {
+    const response = await foroApiClient.post<{ to: string; sentAt: string }>(`${BASE}/${id}/send-receipt`);
+    return response.data;
+  }
 }
 
 export default PaymentService;

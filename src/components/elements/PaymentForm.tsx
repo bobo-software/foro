@@ -1,19 +1,23 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import type { CreatePaymentDto } from '../../types/payment';
 import { PAYMENT_METHODS } from '../../types/payment';
 import type { Company } from '../../types/company';
 import type { Project } from '../../types/project';
 import type { Invoice } from '../../types/invoice';
+import type { Contact } from '../../types/contact';
 import PaymentService from '../../services/paymentService';
 import CompanyService from '../../services/companyService';
 import ProjectService from '../../services/projectService';
 import InvoiceService from '../../services/invoiceService';
+import ContactService from '../../services/contactService';
 import { useBusinessStore } from '../../stores/data/BusinessStore';
 import { logger } from '../../utils/logger';
 import { isCreditNoteInvoice } from '../../utils/invoiceLedger';
 import AppLabledAutocomplete from '../forms/AppLabledAutocomplete';
 import AppInputLabeled from '../forms/AppLabledInput';
 import AppLabeledSelectInput from '../forms/AppLabledSelectInput';
+import AppLabeledCheckbox from '../forms/AppLabeledCheckbox';
 import { SUPPORTED_CURRENCIES, formatCurrency } from '../../utils/currency';
 import { paymentSchema } from '../../validation/schemas';
 
@@ -37,6 +41,8 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
   const [loading, setLoading] = useState(false);
   const [loadingPayment, setLoadingPayment] = useState(isEditing);
   const [error, setError] = useState<string | null>(null);
+  const [sendReceipt, setSendReceipt] = useState(false);
+  const [receiptContact, setReceiptContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<CreatePaymentDto>({
     company_id: initialCompanyId,
     project_id: initialProjectId,
@@ -147,6 +153,34 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
     if (invoice) setSelectedInvoice(invoice);
   }, [invoices, formData.invoice_id, selectedInvoice]);
 
+  useEffect(() => {
+    if (isEditing) return;
+    const companyId = selectedCompany?.id;
+    if (companyId == null) {
+      setReceiptContact(null);
+      setSendReceipt(false);
+      return;
+    }
+    let cancelled = false;
+    ContactService.findByCompanyId(companyId)
+      .then((contacts) => {
+        if (cancelled) return;
+        const primary = contacts.find((c) => c.is_primary && Boolean(c.email?.trim())) ?? null;
+        setReceiptContact(primary);
+        setSendReceipt(Boolean(primary));
+      })
+      .catch((err: unknown) => {
+        logger.error('Failed to load contacts for payment receipt:', err);
+        if (!cancelled) {
+          setReceiptContact(null);
+          setSendReceipt(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditing, selectedCompany?.id]);
+
   // Handle initial company name (non-edit mode, when company not resolved by id)
   useEffect(() => {
     if (isEditing || companies.length === 0 || selectedCompany) return;
@@ -256,11 +290,23 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
           ...(businessId != null && { business_id: businessId }),
         });
       } else {
-        await PaymentService.create({
+        const created = await PaymentService.create({
           ...formData,
           amount: Number(formData.amount),
           ...(businessId != null && { business_id: businessId }),
         });
+        if (sendReceipt && created.id != null) {
+          try {
+            const result = await PaymentService.sendReceipt(created.id);
+            toast.success(`Receipt sent to ${result.to}`);
+          } catch (receiptErr) {
+            toast.error(
+              receiptErr instanceof Error
+                ? `Payment saved, but the receipt could not be sent: ${receiptErr.message}`
+                : 'Payment saved, but the receipt could not be sent',
+            );
+          }
+        }
       }
       onSuccess?.();
     } catch (err) {
@@ -390,6 +436,21 @@ export function PaymentForm({ paymentId, initialCompanyId, initialProjectId, ini
             placeholder="e.g. bank transfer, cheque #"
           />
         </div>
+        {!isEditing && (
+          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <AppLabeledCheckbox
+              label="Send receipt"
+              checked={sendReceipt}
+              onChange={setSendReceipt}
+              disabled={!receiptContact}
+              helperText={
+                receiptContact
+                  ? `Email ${receiptContact.name} at ${receiptContact.email}`
+                  : 'Add a primary contact with an email on this company to send a receipt'
+              }
+            />
+          </div>
+        )}
         <div className="flex flex-wrap gap-3">
           <button
             type="submit"
