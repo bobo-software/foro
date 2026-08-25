@@ -14,7 +14,7 @@ Deleting an invoice, credit note, or quotation from the detail page or company i
 
 ## Payment receipts
 
-Recording a customer payment (`/app/payments/create`) can email a receipt to the company's **primary contact** (the same email that signs into `/statements`). Check **Send receipt** on the form — it is enabled only when that contact has an email. After the payment is saved, the API sends a branded HTML email with a link to `/statements` (OTP sign-in; not a magic token). Mail failure does not undo the payment.
+Recording a customer payment (`/app/payments/create`) can email a receipt to the company's **primary contact** (the same email that signs into `/statements`). Check **Send receipt** on the form — it is enabled only when that contact has an email. After the payment is saved, the API sends a branded HTML email (Foro app logo in the header, amount, date/method/reference/invoice, and a **View your statement** button to `/statements` — OTP sign-in, not a magic token). Mail failure does not undo the payment.
 
 ## API (foro-api)
 
